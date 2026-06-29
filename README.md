@@ -4,6 +4,12 @@ Synology Site Deployer is a local Python CLI for deploying containerized Flask s
 
 The tool is generic. Domains, NAS hosts, Docker paths, Cloudflare zones, tunnel names, and ports come from `.env`, CLI options, or validated defaults.
 
+## Developer
+
+Developed by Pedro Veloso.
+
+Contact: `pedro@veloso.dev`
+
 ## What It Does
 
 - Deploys Flask apps to a Synology NAS using Docker Compose.
@@ -30,6 +36,8 @@ The tool is generic. Domains, NAS hosts, Docker paths, Cloudflare zones, tunnel 
 - Docker and Docker Compose on the NAS
 - A Docker root path such as `/volume1/docker`
 - Optional: Cloudflare domain and Cloudflare Tunnel running on the NAS
+
+On Synology, Docker may be available at `/usr/local/bin/docker` instead of the default shell `PATH`. The tool detects this path automatically. If the SSH user can only access Docker through `sudo`, the tool can use `sudo -S` with the configured SSH password.
 
 ## Install For Development
 
@@ -72,6 +80,8 @@ DB_MODE=none
 ```
 
 Use `NAS_SSH_KEY_PATH` when possible. If no key or password is set, the CLI prompts securely.
+
+For Synology systems where Docker requires elevated access, the SSH user should be allowed to run Docker through DSM permissions or `sudo`. The tool does not print the configured SSH password.
 
 ## Cloudflare Setup
 
@@ -205,6 +215,13 @@ docker compose down
 docker compose up -d
 ```
 
+If Docker is only available through Synology's full path or `sudo`, use:
+
+```bash
+/usr/local/bin/docker ps
+sudo /usr/local/bin/docker ps
+```
+
 ## Database Access And Backup
 
 Read database credentials on the NAS:
@@ -268,3 +285,9 @@ git add .
 git commit -m "Clear meaningful commit message"
 git push
 ```
+
+## License
+
+Synology Site Deployer is released under the MIT License.
+
+It is free to use, copy, modify, merge, publish, distribute, sublicense, and sell copies, subject to the license terms. The software is provided without warranties of any kind. See [LICENSE](LICENSE).

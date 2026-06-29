@@ -8,6 +8,10 @@ version = "0.1.0"
 description = "A local CLI for deploying containerized Flask sites to Synology NAS hosts."
 readme = "README.md"
 requires-python = ">=3.11"
+authors = [
+  { name = "Pedro Veloso", email = "pedro@veloso.dev" },
+]
+license = "MIT"
 dependencies = [
   "Jinja2>=3.1",
   "Paramiko>=3.4",
