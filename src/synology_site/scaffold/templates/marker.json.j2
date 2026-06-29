@@ -5,5 +5,21 @@
   "slug": "{{ slug }}",
   "framework": "{{ framework }}",
   "port": {{ port }},
-  "container": "{{ slug }}"
+  "container": "{{ slug }}",
+  "database": {
+    "enabled": {{ "true" if db_enabled else "false" }},
+    "mode": "{{ db_mode }}"{% if db_enabled %},
+    "type": "{{ db_type }}",
+    "container": "{{ db_container }}",
+    "database": "{{ db_name }}",
+    "user": "{{ db_user }}",
+    "volume": "{{ db_volume }}",
+    "network": "{{ db_network }}",
+    "credentials_file": "{{ project_path }}/docs/DATABASE.md"{% endif %}
+  },
+  "cloudflare": {
+    "attempted": {{ "true" if cloudflare_attempted else "false" }},
+    "configured": {{ "true" if cloudflare_configured else "false" }},
+    "manual_required": {{ "true" if cloudflare_manual_required else "false" }}
+  }
 }

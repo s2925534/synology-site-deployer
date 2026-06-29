@@ -1,4 +1,10 @@
+import os
+
 from flask import Flask, jsonify
+{% if db_enabled %}
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
+{% endif %}
 
 app = Flask(__name__)
 
@@ -11,3 +17,27 @@ def index():
 @app.get("/health")
 def health():
     return jsonify(status="ok", service="{{ slug }}", domain="{{ domain }}", framework="flask")
+{% if db_enabled %}
+
+
+@app.get("/db-health")
+def db_health():
+    database_url = os.environ.get("DATABASE_URL")
+    if not database_url:
+        return jsonify(
+            status="error",
+            database="not_connected",
+            message="Database connection failed",
+        ), 503
+    try:
+        engine = create_engine(database_url, pool_pre_ping=True)
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except SQLAlchemyError:
+        return jsonify(
+            status="error",
+            database="not_connected",
+            message="Database connection failed",
+        ), 503
+    return jsonify(status="ok", database="connected", service="{{ slug }}")
+{% endif %}

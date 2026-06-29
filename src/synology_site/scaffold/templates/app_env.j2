@@ -1,3 +1,11 @@
 APP_DOMAIN={{ domain }}
 APP_ENV=production
-DATABASE_ENABLED=false
+DATABASE_ENABLED={{ "true" if db_enabled else "false" }}
+{% if db_enabled %}
+DB_HOST={{ db_container }}
+DB_PORT=3306
+DB_NAME={{ db_name }}
+DB_USER={{ db_user }}
+DB_PASSWORD={{ db_password }}
+DATABASE_URL=mysql+pymysql://{{ db_user }}:{{ db_password }}@{{ db_container }}:3306/{{ db_name }}
+{% endif %}

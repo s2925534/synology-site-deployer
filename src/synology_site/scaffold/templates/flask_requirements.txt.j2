@@ -1,2 +1,6 @@
 Flask
 gunicorn
+{% if db_enabled %}
+SQLAlchemy
+PyMySQL
+{% endif %}

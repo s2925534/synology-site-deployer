@@ -1,3 +1,77 @@
 # {{ domain }}
 
 Framework: {{ framework }}
+Project slug: {{ slug }}
+Project folder: {{ project_path }}
+App container: {{ slug }}
+Database enabled: {{ "true" if db_enabled else "false" }}
+{% if db_enabled %}
+Database container: {{ db_container }}
+{% endif %}
+
+Local URL: {{ local_url }}
+Public URL: {{ public_url }}
+Health endpoint: {{ local_url }}/health
+{% if db_enabled %}
+Database health endpoint: {{ local_url }}/db-health
+{% endif %}
+
+## Useful Docker Commands
+
+View running containers:
+
+```bash
+docker ps
+```
+
+View app logs:
+
+```bash
+docker logs {{ slug }}
+```
+
+Restart project:
+
+```bash
+cd {{ project_path }}
+docker compose restart
+```
+
+Stop project:
+
+```bash
+cd {{ project_path }}
+docker compose down
+```
+
+Start project:
+
+```bash
+cd {{ project_path }}
+docker compose up -d
+```
+
+## Cloudflare
+
+If automatic Cloudflare setup was not used, add a published application route that points to:
+
+```text
+http://{{ local_base_url_host }}:{{ port }}
+```
+
+## Error 1033 Troubleshooting
+
+If you see Cloudflare Error 1033, the tunnel DNS record exists but Cloudflare cannot currently resolve the tunnel connection.
+
+Check the tunnel container on the NAS:
+
+```bash
+sudo docker ps
+sudo docker ps -a
+```
+
+If cloudflared is stopped, start it:
+
+```bash
+sudo docker start cloudflared
+```

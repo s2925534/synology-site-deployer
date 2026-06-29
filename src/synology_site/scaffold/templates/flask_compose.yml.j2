@@ -6,3 +6,41 @@ services:
     restart: {{ restart_policy }}
     ports:
       - "{{ port }}:5000"
+{% if db_enabled %}
+    env_file:
+      - ./app/.env
+    depends_on:
+      {{ db_container }}:
+        condition: service_healthy
+    networks:
+      - {{ db_network }}
+
+  {{ db_container }}:
+    image: {{ db_image }}
+    container_name: {{ db_container }}
+    restart: {{ restart_policy }}
+    environment:
+      MARIADB_ROOT_PASSWORD: {{ db_root_password }}
+      MARIADB_DATABASE: {{ db_name }}
+      MARIADB_USER: {{ db_user }}
+      MARIADB_PASSWORD: {{ db_password }}
+{% if db_publish_port and db_host_port %}
+    ports:
+      - "{{ db_host_port }}:3306"
+{% endif %}
+    volumes:
+      - {{ db_volume }}:/var/lib/mysql
+    networks:
+      - {{ db_network }}
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  {{ db_volume }}:
+
+networks:
+  {{ db_network }}:
+{% endif %}
