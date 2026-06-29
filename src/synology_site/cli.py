@@ -1,0 +1,27 @@
+from __future__ import annotations
+
+import typer
+
+from synology_site.commands import tunnel_fix
+from synology_site.commands.check_nas import app as check_nas_app
+from synology_site.commands.create import app as create_app
+from synology_site.commands.list_sites import app as list_app
+from synology_site.commands.remove import app as remove_app
+from synology_site.commands.start import app as start_app
+from synology_site.commands.stop import app as stop_app
+
+app = typer.Typer(help="Deploy containerized Flask sites to a Synology NAS.")
+
+app.command(name="create")(create_app)
+app.command(name="check-nas")(check_nas_app)
+app.command(name="list")(list_app)
+app.command(name="start")(start_app)
+app.command(name="stop")(stop_app)
+app.command(name="remove")(remove_app)
+app.command(name="cloudflare-instructions")(tunnel_fix.cloudflare_instructions)
+app.command(name="tunnel-fix-autostart")(tunnel_fix.tunnel_fix_autostart)
+app.command(name="set-autostart")(tunnel_fix.set_autostart)
+
+
+def main() -> None:
+    app()

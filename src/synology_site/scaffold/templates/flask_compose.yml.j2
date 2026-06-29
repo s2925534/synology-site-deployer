@@ -1,0 +1,8 @@
+services:
+  {{ slug }}:
+    build:
+      context: ./app
+    container_name: {{ slug }}
+    restart: {{ restart_policy }}
+    ports:
+      - "{{ port }}:5000"
