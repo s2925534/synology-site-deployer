@@ -10,6 +10,7 @@ import requests
 import typer
 
 from synology_site.cloudflare.domain_split import split_domain_for_zone
+from synology_site.cloudflare.manual_instructions import build_manual_instructions
 from synology_site.commands.check_nas import default_ssh_factory
 from synology_site.config import Settings, load_config
 from synology_site.database.naming import database_name, database_user
@@ -233,5 +234,16 @@ def app(
     ok(f"Health URL: {result.health_url}")
     if result.db_health_url:
         ok(f"DB Health URL: {result.db_health_url}")
-    warn("Cloudflare route automation is not configured yet. Use manual tunnel routing.")
+    if not settings.cloudflare_api_ready:
+        warn("Cloudflare API credentials are incomplete. Manual setup is required.")
+        console.rule("Cloudflare")
+        console.print(
+            build_manual_instructions(
+                result.domain,
+                settings.cf_zone_domain,
+                settings.local_base_url_host,
+                result.port,
+                settings.cf_tunnel_name,
+            )
+        )
     next_step(f"Open {result.local_url}")
