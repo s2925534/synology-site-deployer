@@ -5,5 +5,8 @@ import string
 
 
 def generate_password(length: int = 32) -> str:
+    if length < 16:
+        msg = "Password length must be at least 16 characters"
+        raise ValueError(msg)
     alphabet = string.ascii_letters + string.digits
     return "".join(secrets.choice(alphabet) for _ in range(length))

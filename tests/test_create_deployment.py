@@ -67,7 +67,10 @@ class FakeSSH:
         stdout = ""
         if command == "test -e /volume1/docker/demo-example-com":
             exit_code = 0 if self.project_exists else 1
-        elif command == "docker inspect -f '{{.State.Running}}' demo-example-com":
+        elif command in {
+            "docker inspect -f '{{.State.Running}}' demo-example-com",
+            "docker inspect -f '{{.State.Running}}' demo-example-com-db",
+        }:
             stdout = "true\n"
         elif command == "docker ps --format '{{.Ports}}'":
             stdout = "0.0.0.0:5050->5000/tcp\n"
@@ -124,3 +127,30 @@ def test_create_site_refuses_existing_project_without_force() -> None:
             ssh_factory=lambda _settings, _password: fake,
             health_get=lambda _url, timeout: FakeResponse(),
         )
+
+
+def test_create_site_deploys_flask_with_db() -> None:
+    fake = FakeSSH()
+    health_urls: list[str] = []
+
+    def health_get(url: str, timeout: int) -> FakeResponse:
+        del timeout
+        health_urls.append(url)
+        return FakeResponse()
+
+    result = create_site(
+        "demo.example.com",
+        settings=settings(),
+        db_mode="container",
+        ssh_factory=lambda _settings, _password: fake,
+        health_get=health_get,
+    )
+
+    assert result.db_enabled is True
+    assert result.db_health_url == "http://192.0.2.10:5051/db-health"
+    assert "/volume1/docker/demo-example-com/app/.env" in fake.uploads
+    assert "/volume1/docker/demo-example-com/docs/DATABASE.md" in fake.uploads
+    assert "chmod 600 /volume1/docker/demo-example-com/app/.env" in fake.commands
+    assert "chmod 600 /volume1/docker/demo-example-com/docs/DATABASE.md" in fake.commands
+    assert "http://192.0.2.10:5051/health" in health_urls
+    assert "http://192.0.2.10:5051/db-health" in health_urls

@@ -15,6 +15,10 @@ def context(db_enabled: bool = False) -> ScaffoldContext:
         restart_policy="unless-stopped",
         db_enabled=db_enabled,
         db_mode="container" if db_enabled else "none",
+        db_name="demo_example_com",
+        db_user="demo_example_com_user",
+        db_password="user_password_1234567890",
+        db_root_password="root_password_1234567890",
     )
 
 
@@ -64,3 +68,39 @@ def test_marker_json_without_db() -> None:
     assert marker["port"] == 5051
     assert marker["database"] == {"enabled": False, "mode": "none"}
     assert marker["cloudflare"]["manual_required"] is True
+
+
+def test_flask_scaffold_with_db_includes_db_route_and_dependencies() -> None:
+    files = generated_files(db_enabled=True)
+
+    assert "/db-health" in files["app/app.py"]
+    assert "SQLAlchemy" in files["app/requirements.txt"]
+    assert "PyMySQL" in files["app/requirements.txt"]
+    assert "DATABASE_URL" in files["app/.env"]
+    assert "docs/DATABASE.md" in files
+
+
+def test_database_docs_contains_credentials() -> None:
+    files = generated_files(db_enabled=True)
+
+    assert "user_password_1234567890" in files["docs/DATABASE.md"]
+    assert "root_password_1234567890" in files["docs/DATABASE.md"]
+
+
+def test_project_readme_does_not_contain_credentials() -> None:
+    files = generated_files(db_enabled=True)
+
+    assert "user_password_1234567890" not in files["docs/README.md"]
+    assert "root_password_1234567890" not in files["docs/README.md"]
+
+
+def test_marker_json_with_db() -> None:
+    marker = json.loads(generated_files(db_enabled=True)[".synology-site.json"])
+
+    assert marker["database"]["enabled"] is True
+    assert marker["database"]["mode"] == "container"
+    assert marker["database"]["container"] == "demo-example-com-db"
+    assert marker["database"]["database"] == "demo_example_com"
+    assert marker["database"]["user"] == "demo_example_com_user"
+    assert marker["database"]["volume"] == "demo-example-com-db-data"
+    assert marker["database"]["network"] == "demo-example-com-network"

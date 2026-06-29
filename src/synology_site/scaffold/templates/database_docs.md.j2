@@ -1,1 +1,89 @@
 # Database Details for {{ domain }}
+
+## Summary
+
+Domain: {{ domain }}
+Project folder: {{ project_path }}
+App container: {{ slug }}
+Database container: {{ db_container }}
+Database engine: MariaDB
+Database image: {{ db_image }}
+
+## Application Connection Details
+
+The Flask application connects to MariaDB using the Docker internal service name.
+
+Host: {{ db_container }}
+Port: 3306
+Database: {{ db_name }}
+Username: {{ db_user }}
+Password: {{ db_password }}
+
+DATABASE_URL:
+
+mysql+pymysql://{{ db_user }}:{{ db_password }}@{{ db_container }}:3306/{{ db_name }}
+
+## Root Database Access
+
+Root username: root
+Root password: {{ db_root_password }}
+
+Use this only for maintenance. The application should use the normal database user.
+
+## Docker Resources
+
+Docker network: {{ db_network }}
+Docker volume: {{ db_volume }}
+
+## Useful Commands
+
+View running containers:
+
+docker ps
+
+View app logs:
+
+docker logs {{ slug }}
+
+View database logs:
+
+docker logs {{ db_container }}
+
+Open MariaDB shell as root:
+
+docker exec -it {{ db_container }} mariadb -uroot -p
+
+Open MariaDB shell as app user:
+
+docker exec -it {{ db_container }} mariadb -u{{ db_user }} -p {{ db_name }}
+
+Restart project:
+
+cd {{ project_path }}
+docker compose restart
+
+Stop project:
+
+cd {{ project_path }}
+docker compose down
+
+Start project:
+
+cd {{ project_path }}
+docker compose up -d
+
+Backup database:
+
+docker exec {{ db_container }} mariadb-dump -uroot -p {{ db_name }} > {{ db_name }}_backup.sql
+
+## Important Notes
+
+The MariaDB port is not published to the local network by default.
+
+The database is only reachable by containers inside the Docker network.
+
+The database data is stored in the Docker volume:
+
+{{ db_volume }}
+
+Do not delete the volume unless you intend to delete the database data.

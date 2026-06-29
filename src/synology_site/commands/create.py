@@ -12,13 +12,15 @@ import typer
 from synology_site.cloudflare.domain_split import split_domain_for_zone
 from synology_site.commands.check_nas import default_ssh_factory
 from synology_site.config import Settings, load_config
+from synology_site.database.naming import database_name, database_user
+from synology_site.database.passwords import generate_password
 from synology_site.docker_remote import (
     detect_compose_command,
     ensure_remote_directory,
     require_docker,
 )
 from synology_site.errors import SynologySiteError
-from synology_site.naming import domain_to_slug
+from synology_site.naming import db_container_name, domain_to_slug
 from synology_site.output import console, next_step, ok, warn
 from synology_site.port_allocator import find_available_port
 from synology_site.scaffold import FRAMEWORKS
@@ -37,6 +39,8 @@ class CreateResult:
     health_url: str
     uploaded_files: tuple[str, ...]
     compose_command: str
+    db_enabled: bool = False
+    db_health_url: str | None = None
 
 
 SSHFactory = Callable[[Settings, str | None], SSHClient]
@@ -57,8 +61,8 @@ def create_site(
     health_get: HealthGetter = requests.get,
     prompted_password: str | None = None,
 ) -> CreateResult:
-    if db_mode != "none":
-        raise SynologySiteError("Database deployment is not implemented in this phase")
+    if db_mode not in {"none", "container"}:
+        raise SynologySiteError("Only DB mode none or container is supported")
     domain = validate_domain(domain)
     scaffold = FRAMEWORKS.get(framework)
     if scaffold is None:
@@ -84,6 +88,9 @@ def create_site(
             requested=port,
         )
         resolved_local_url = local_url.format(port=selected_port)
+        db_enabled = db_mode == "container"
+        db_password = generate_password(settings.db_password_length) if db_enabled else None
+        db_root_password = generate_password(settings.db_password_length) if db_enabled else None
         context = ScaffoldContext(
             domain=domain,
             slug=slug,
@@ -92,6 +99,16 @@ def create_site(
             project_path=project_path,
             local_base_url_host=settings.local_base_url_host,
             restart_policy=settings.restart_policy,
+            db_enabled=db_enabled,
+            db_mode=db_mode,
+            db_type=settings.db_type,
+            db_image=settings.db_image,
+            db_name=database_name(domain),
+            db_user=database_user(domain),
+            db_password=db_password,
+            db_root_password=db_root_password,
+            db_publish_port=settings.db_publish_port,
+            db_host_port=settings.db_host_port,
         )
         files = scaffold.generate(context)
         if dry_run:
@@ -104,13 +121,19 @@ def create_site(
                 health_url=f"{resolved_local_url}/health",
                 uploaded_files=tuple(file.path for file in files),
                 compose_command=compose,
+                db_enabled=context.db_enabled,
+                db_health_url=f"{resolved_local_url}/db-health" if context.db_enabled else None,
             )
 
         _prepare_remote_project(ssh, project_path, force=force)
         _upload_files(ssh, project_path, files)
         _start_compose(ssh, project_path, compose)
         _confirm_container(ssh, slug)
+        if context.db_enabled:
+            _confirm_container(ssh, db_container_name(domain))
         _confirm_health(health_get, f"{resolved_local_url}/health")
+        if context.db_enabled:
+            _confirm_health(health_get, f"{resolved_local_url}/db-health")
     return CreateResult(
         domain=domain,
         slug=slug,
@@ -120,6 +143,8 @@ def create_site(
         health_url=f"{resolved_local_url}/health",
         uploaded_files=tuple(file.path for file in files),
         compose_command=compose,
+        db_enabled=context.db_enabled,
+        db_health_url=f"{resolved_local_url}/db-health" if context.db_enabled else None,
     )
 
 
@@ -134,7 +159,10 @@ def _prepare_remote_project(ssh: SSHClient, project_path: str, *, force: bool) -
 
 def _upload_files(ssh: SSHClient, project_path: str, files: list[GeneratedFile]) -> None:
     for file in files:
-        ssh.upload_text(f"{project_path}/{file.path}", file.content)
+        remote_path = f"{project_path}/{file.path}"
+        ssh.upload_text(remote_path, file.content)
+        if file.secret:
+            ssh.run(f"chmod 600 {shlex.quote(remote_path)}", check=True)
 
 
 def _start_compose(ssh: SSHClient, project_path: str, compose: str) -> None:
@@ -203,5 +231,7 @@ def app(
     ok(f"Project folder: {result.project_path}")
     ok(f"Local URL: {result.local_url}")
     ok(f"Health URL: {result.health_url}")
+    if result.db_health_url:
+        ok(f"DB Health URL: {result.db_health_url}")
     warn("Cloudflare route automation is not configured yet. Use manual tunnel routing.")
     next_step(f"Open {result.local_url}")
