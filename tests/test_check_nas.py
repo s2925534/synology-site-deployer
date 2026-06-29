@@ -103,11 +103,14 @@ def test_run_check_nas_uses_docker_compose_fallback() -> None:
 
 
 def test_run_check_nas_fails_when_docker_missing() -> None:
+    container_manager_path = "/var/packages/ContainerManager/target/usr/bin/docker"
     fake = FakeSSH(
         {
             "command -v docker": 1,
             "test -x /usr/local/bin/docker": 1,
-            "test -x /var/packages/ContainerManager/target/usr/bin/docker": 1,
+            f"test -x {container_manager_path}": 1,
+            "sudo -S -p '' /usr/local/bin/docker ps --format '{{.Names}}'": 1,
+            f"sudo -S -p '' {container_manager_path} ps --format '{{{{.Names}}}}'": 1,
         }
     )
 

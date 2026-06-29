@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import shlex
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -85,6 +87,9 @@ class SSHClient:
         client = self._require_client()
         try:
             _stdin, stdout_stream, stderr_stream = client.exec_command(command, timeout=timeout)
+            if self.password and "sudo -S" in command:
+                _stdin.write(f"{self.password}\n")
+                _stdin.flush()
             exit_code = stdout_stream.channel.recv_exit_status()
             stdout = stdout_stream.read().decode("utf-8", errors="replace")
             stderr = stderr_stream.read().decode("utf-8", errors="replace")
@@ -108,9 +113,15 @@ class SSHClient:
         try:
             with client.open_sftp() as sftp, sftp.file(remote_path, "w") as remote_file:
                 remote_file.write(content)
-        except Exception as exc:  # noqa: BLE001
-            msg = f"Failed to upload remote file: {remote_path}"
-            raise SynologySiteError(msg) from exc
+        except Exception:  # noqa: BLE001
+            try:
+                encoded = base64.b64encode(content.encode("utf-8")).decode("ascii")
+                quoted_path = shlex.quote(remote_path)
+                quoted_payload = shlex.quote(encoded)
+                self.run(f"printf %s {quoted_payload} | base64 -d > {quoted_path}", check=True)
+            except Exception as fallback_exc:  # noqa: BLE001
+                msg = f"Failed to upload remote file: {remote_path}"
+                raise SynologySiteError(msg) from fallback_exc
 
     def close(self) -> None:
         if self._client is not None:

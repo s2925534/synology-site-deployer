@@ -9,7 +9,12 @@ from synology_site.ssh_client import SSHClient
 def docker_command(ssh: SSHClient) -> str:
     result = ssh.run("command -v docker")
     if result.ok and result.stdout.strip():
-        return "docker"
+        docker = "docker"
+        if _docker_daemon_accessible(ssh, docker):
+            return docker
+        sudo_docker = f"sudo -S -p '' {docker}"
+        if _docker_daemon_accessible(ssh, sudo_docker):
+            return sudo_docker
 
     for path in [
         "/usr/local/bin/docker",
@@ -17,9 +22,18 @@ def docker_command(ssh: SSHClient) -> str:
     ]:
         fallback = ssh.run(f"test -x {shlex.quote(path)}")
         if fallback.ok:
-            return path
+            if _docker_daemon_accessible(ssh, path):
+                return path
+            sudo_path = f"sudo -S -p '' {path}"
+            if _docker_daemon_accessible(ssh, sudo_path):
+                return sudo_path
 
     raise SynologySiteError("Docker is not available on the NAS")
+
+
+def _docker_daemon_accessible(ssh: SSHClient, docker: str) -> bool:
+    result = ssh.run(f"{docker} ps --format '{{{{.Names}}}}'")
+    return result.ok
 
 
 def require_docker(ssh: SSHClient) -> str:

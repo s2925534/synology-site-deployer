@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shlex
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from getpass import getpass
@@ -189,14 +190,23 @@ def _confirm_container(ssh: SSHClient, slug: str, docker: str = "docker") -> Non
 
 
 def _confirm_health(health_get: HealthGetter, url: str) -> None:
-    try:
-        response = health_get(url, timeout=20)
-    except requests.RequestException as exc:
-        msg = f"Health check failed: {url}"
-        raise SynologySiteError(msg) from exc
-    if response.status_code != 200:
-        msg = f"Health check returned HTTP {response.status_code}: {url}"
+    last_error: Exception | None = None
+    last_status: int | None = None
+    for attempt in range(1, 16):
+        try:
+            response = health_get(url, timeout=10)
+            last_status = response.status_code
+            if response.status_code == 200:
+                return
+        except requests.RequestException as exc:
+            last_error = exc
+        if attempt < 15:
+            time.sleep(2)
+    if last_status is not None:
+        msg = f"Health check returned HTTP {last_status}: {url}"
         raise SynologySiteError(msg)
+    msg = f"Health check failed: {url}"
+    raise SynologySiteError(msg) from last_error
 
 
 def app(
