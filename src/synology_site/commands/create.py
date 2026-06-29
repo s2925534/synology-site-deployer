@@ -9,6 +9,7 @@ from typing import Any
 import requests
 import typer
 
+from synology_site.cloudflare.api import configure_cloudflare_route
 from synology_site.cloudflare.domain_split import split_domain_for_zone
 from synology_site.cloudflare.manual_instructions import build_manual_instructions
 from synology_site.commands.check_nas import default_ssh_factory
@@ -234,7 +235,28 @@ def app(
     ok(f"Health URL: {result.health_url}")
     if result.db_health_url:
         ok(f"DB Health URL: {result.db_health_url}")
-    if not settings.cloudflare_api_ready:
+    if settings.cloudflare_api_ready:
+        try:
+            configure_cloudflare_route(
+                settings,
+                hostname=result.domain,
+                service_url=result.local_url,
+            )
+            ok(f"Cloudflare route configured: {result.domain} -> {result.local_url}")
+        except SynologySiteError as exc:
+            warn(str(exc))
+            if strict_cloudflare:
+                raise typer.Exit(1) from exc
+            console.print(
+                build_manual_instructions(
+                    result.domain,
+                    settings.cf_zone_domain,
+                    settings.local_base_url_host,
+                    result.port,
+                    settings.cf_tunnel_name,
+                )
+            )
+    else:
         warn("Cloudflare API credentials are incomplete. Manual setup is required.")
         console.rule("Cloudflare")
         console.print(
