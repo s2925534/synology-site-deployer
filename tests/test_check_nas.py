@@ -62,6 +62,10 @@ class FakeSSH:
         self.commands.append(command)
         exit_code = self.failures.get(command, 0)
         stdout = ""
+        if command == "command -v docker":
+            stdout = "docker\n"
+        elif command.startswith("test -x "):
+            exit_code = self.failures.get(command, 1)
         if command == "docker ps --format '{{.Names}}\\t{{.Image}}\\t{{.Status}}'":
             stdout = "demo\tpython:3.11\tUp 2 minutes\n"
         result = RemoteCommandResult(command, exit_code, stdout, "failed\n" if exit_code else "")
@@ -99,7 +103,13 @@ def test_run_check_nas_uses_docker_compose_fallback() -> None:
 
 
 def test_run_check_nas_fails_when_docker_missing() -> None:
-    fake = FakeSSH({"command -v docker": 1})
+    fake = FakeSSH(
+        {
+            "command -v docker": 1,
+            "test -x /usr/local/bin/docker": 1,
+            "test -x /var/packages/ContainerManager/target/usr/bin/docker": 1,
+        }
+    )
 
     with pytest.raises(SynologySiteError, match="Docker is not available"):
         run_check_nas(settings(), ssh_factory=lambda _settings, _password: fake)

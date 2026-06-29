@@ -58,7 +58,11 @@ class FakeSSH:
     ) -> RemoteCommandResult:
         del check, timeout
         self.commands.append(command)
-        stdout = self.output if command.startswith("docker ps -a") else ""
+        stdout = ""
+        if command == "command -v docker":
+            stdout = "docker\n"
+        elif command.startswith("docker ps -a"):
+            stdout = self.output
         return RemoteCommandResult(command, 0, stdout, "")
 
 

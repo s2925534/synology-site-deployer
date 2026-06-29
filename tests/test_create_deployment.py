@@ -65,7 +65,9 @@ class FakeSSH:
         self.commands.append(command)
         exit_code = 0
         stdout = ""
-        if command == "test -e /volume1/docker/demo-example-com":
+        if command == "command -v docker":
+            stdout = "docker\n"
+        elif command == "test -e /volume1/docker/demo-example-com":
             exit_code = 0 if self.project_exists else 1
         elif command in {
             "docker inspect -f '{{.State.Running}}' demo-example-com",

@@ -18,6 +18,7 @@ from synology_site.database.naming import database_name, database_user
 from synology_site.database.passwords import generate_password
 from synology_site.docker_remote import (
     detect_compose_command,
+    docker_command,
     ensure_remote_directory,
     require_docker,
 )
@@ -130,9 +131,10 @@ def create_site(
         _prepare_remote_project(ssh, project_path, force=force)
         _upload_files(ssh, project_path, files)
         _start_compose(ssh, project_path, compose)
-        _confirm_container(ssh, slug)
+        docker = docker_command(ssh)
+        _confirm_container(ssh, slug, docker)
         if context.db_enabled:
-            _confirm_container(ssh, db_container_name(domain))
+            _confirm_container(ssh, db_container_name(domain), docker)
         _confirm_health(health_get, f"{resolved_local_url}/health")
         if context.db_enabled:
             _confirm_health(health_get, f"{resolved_local_url}/db-health")
@@ -179,8 +181,8 @@ def _start_compose(ssh: SSHClient, project_path: str, compose: str) -> None:
     raise SynologySiteError("Docker Compose failed to start the project")
 
 
-def _confirm_container(ssh: SSHClient, slug: str) -> None:
-    result = ssh.run(f"docker inspect -f '{{{{.State.Running}}}}' {shlex.quote(slug)}")
+def _confirm_container(ssh: SSHClient, slug: str, docker: str = "docker") -> None:
+    result = ssh.run(f"{docker} inspect -f '{{{{.State.Running}}}}' {shlex.quote(slug)}")
     if not result.ok or result.stdout.strip().lower() != "true":
         msg = f"Container is not running: {slug}"
         raise SynologySiteError(msg)

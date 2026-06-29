@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 
+from synology_site.docker_remote import docker_command
 from synology_site.errors import SynologySiteError
 from synology_site.ssh_client import SSHClient
 
@@ -26,8 +27,9 @@ def parse_used_ports(*outputs: str) -> set[int]:
 
 def collect_used_ports(ssh: SSHClient) -> set[int]:
     outputs: list[str] = []
+    docker = docker_command(ssh)
     for command in [
-        "docker ps --format '{{.Ports}}'",
+        f"{docker} ps --format '{{{{.Ports}}}}'",
         "ss -ltn",
         "netstat -ltn",
     ]:

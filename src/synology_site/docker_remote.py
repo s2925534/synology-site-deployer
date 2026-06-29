@@ -6,16 +6,31 @@ from synology_site.errors import SynologySiteError
 from synology_site.ssh_client import SSHClient
 
 
-def require_docker(ssh: SSHClient) -> None:
+def docker_command(ssh: SSHClient) -> str:
     result = ssh.run("command -v docker")
-    if not result.ok:
-        raise SynologySiteError("Docker is not available on the NAS")
+    if result.ok and result.stdout.strip():
+        return "docker"
+
+    for path in [
+        "/usr/local/bin/docker",
+        "/var/packages/ContainerManager/target/usr/bin/docker",
+    ]:
+        fallback = ssh.run(f"test -x {shlex.quote(path)}")
+        if fallback.ok:
+            return path
+
+    raise SynologySiteError("Docker is not available on the NAS")
+
+
+def require_docker(ssh: SSHClient) -> str:
+    return docker_command(ssh)
 
 
 def detect_compose_command(ssh: SSHClient) -> str:
-    result = ssh.run("docker compose version")
+    docker = docker_command(ssh)
+    result = ssh.run(f"{docker} compose version")
     if result.ok:
-        return "docker compose"
+        return f"{docker} compose"
     fallback = ssh.run("docker-compose version")
     if fallback.ok:
         return "docker-compose"
@@ -31,8 +46,13 @@ def ensure_remote_directory(ssh: SSHClient, path: str) -> None:
 
 
 def list_containers(ssh: SSHClient) -> str:
-    return ssh.run("docker ps --format '{{.Names}}\\t{{.Image}}\\t{{.Status}}'", check=True).stdout
+    docker = docker_command(ssh)
+    return ssh.run(
+        f"{docker} ps --format '{{{{.Names}}}}\\t{{{{.Image}}}}\\t{{{{.Status}}}}'",
+        check=True,
+    ).stdout
 
 
 def list_published_ports(ssh: SSHClient) -> str:
-    return ssh.run("docker ps --format '{{.Ports}}'", check=True).stdout
+    docker = docker_command(ssh)
+    return ssh.run(f"{docker} ps --format '{{{{.Ports}}}}'", check=True).stdout

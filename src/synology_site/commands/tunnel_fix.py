@@ -12,6 +12,7 @@ from rich.prompt import Confirm
 from synology_site.cloudflare.manual_instructions import build_manual_instructions
 from synology_site.commands.check_nas import default_ssh_factory
 from synology_site.config import Settings, load_config
+from synology_site.docker_remote import docker_command
 from synology_site.errors import SynologySiteError
 from synology_site.naming import db_container_name, domain_to_slug
 from synology_site.output import console, ok, warn
@@ -68,8 +69,9 @@ def run_tunnel_fix_autostart(
     rename_random: bool = False,
 ) -> list[CloudflaredContainer]:
     with ssh_factory(settings, prompted_password) as ssh:
+        docker = docker_command(ssh)
         result = ssh.run(
-            "docker ps -a --filter ancestor=cloudflare/cloudflared "
+            f"{docker} ps -a --filter ancestor=cloudflare/cloudflared "
             "--format '{{.Names}}\\t{{.Image}}\\t{{.Status}}'",
             check=True,
         )
@@ -81,13 +83,13 @@ def run_tunnel_fix_autostart(
         selected = next((item for item in containers if item.name == "cloudflared"), containers[0])
         target_name = selected.name
         if selected.name != "cloudflared" and rename_random:
-            ssh.run(f"docker stop {shlex.quote(selected.name)}", check=False)
-            ssh.run(f"docker rename {shlex.quote(selected.name)} cloudflared", check=True)
+            ssh.run(f"{docker} stop {shlex.quote(selected.name)}", check=False)
+            ssh.run(f"{docker} rename {shlex.quote(selected.name)} cloudflared", check=True)
             target_name = "cloudflared"
 
-        ssh.run(f"docker update --restart unless-stopped {shlex.quote(target_name)}", check=True)
+        ssh.run(f"{docker} update --restart unless-stopped {shlex.quote(target_name)}", check=True)
         if not selected.running or target_name == "cloudflared":
-            ssh.run(f"docker start {shlex.quote(target_name)}", check=False)
+            ssh.run(f"{docker} start {shlex.quote(target_name)}", check=False)
         return containers
 
 
@@ -124,6 +126,7 @@ def set_autostart(domain: str) -> None:
         project_path = f"{settings.nas_docker_root.rstrip('/')}/{slug}"
         containers = [slug]
         with default_ssh_factory(settings, prompted_password) as ssh:
+            docker = docker_command(ssh)
             marker = ssh.run(f"cat {shlex.quote(project_path)}/.synology-site.json")
             if marker.ok:
                 data = json.loads(marker.stdout)
@@ -131,7 +134,7 @@ def set_autostart(domain: str) -> None:
                     containers.append(db_container_name(domain))
             for container in containers:
                 quoted_container = shlex.quote(container)
-                ssh.run(f"docker update --restart unless-stopped {quoted_container}", check=True)
+                ssh.run(f"{docker} update --restart unless-stopped {quoted_container}", check=True)
     except (SynologySiteError, json.JSONDecodeError) as exc:
         console.print(f"[ERROR] {exc}")
         raise typer.Exit(1) from exc
