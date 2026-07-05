@@ -119,9 +119,11 @@ def bootstrap_supabase(
             "POSTGRES_PASSWORD": postgres_password,
             # Default (5432) commonly collides with a NAS's own native
             # services (e.g. Synology packages that run their own local
-            # Postgres). Nothing needs this published on the host anyway --
-            # apps on the supabase_default network reach Postgres via
-            # supabase-db/supabase-pooler's container names, not this port.
+            # Postgres). Not just the host-published port -- also sets
+            # Postgres's actual internal listening port via PGPORT (this repo's
+            # docker-compose.yml threads the same var through both), so other
+            # containers on supabase_default must also connect on this port,
+            # not Postgres's usual 5432.
             "POSTGRES_PORT": str(postgres_port),
             "JWT_SECRET": jwt_secret,
             "ANON_KEY": anon_key,
