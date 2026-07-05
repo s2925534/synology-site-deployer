@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import base64
+import os
 import shlex
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -122,6 +124,61 @@ class SSHClient:
             except Exception as fallback_exc:  # noqa: BLE001
                 msg = f"Failed to upload remote file: {remote_path}"
                 raise SynologySiteError(msg) from fallback_exc
+
+    def upload_directory(
+        self,
+        local_root: Path,
+        remote_root: str,
+        *,
+        ignore: Callable[[Path], bool] | None = None,
+    ) -> list[str]:
+        """Recursively uploads local_root's contents under remote_root over SFTP.
+
+        Directories matched by `ignore` are pruned before descending into
+        them (not just filtered after listing), so a large ignored tree
+        (e.g. node_modules) doesn't get walked at all. Returns the uploaded
+        files' paths relative to local_root.
+        """
+        client = self._require_client()
+        uploaded: list[str] = []
+        made_dirs: set[str] = set()
+        try:
+            sftp = client.open_sftp()
+        except Exception as exc:  # noqa: BLE001
+            msg = "Failed to open SFTP session for directory upload"
+            raise SynologySiteError(msg) from exc
+        try:
+            for dirpath, dirnames, filenames in os.walk(local_root):
+                rel_dir = Path(dirpath).relative_to(local_root)
+                dirnames[:] = [
+                    d for d in dirnames if not (ignore and ignore(rel_dir / d))
+                ]
+                for filename in sorted(filenames):
+                    rel_path = rel_dir / filename
+                    if ignore and ignore(rel_path):
+                        continue
+                    local_path = Path(dirpath) / filename
+                    remote_path = f"{remote_root}/{rel_path.as_posix()}"
+                    remote_dir = str(Path(remote_path).parent.as_posix())
+                    if remote_dir not in made_dirs:
+                        self._sftp_mkdirs(sftp, remote_dir)
+                        made_dirs.add(remote_dir)
+                    sftp.put(str(local_path), remote_path)
+                    uploaded.append(rel_path.as_posix())
+        finally:
+            sftp.close()
+        return uploaded
+
+    def _sftp_mkdirs(self, sftp: Any, remote_dir: str) -> None:
+        if not remote_dir or remote_dir == ".":
+            return
+        current = ""
+        for part in remote_dir.strip("/").split("/"):
+            current += f"/{part}"
+            try:
+                sftp.stat(current)
+            except FileNotFoundError:
+                sftp.mkdir(current)
 
     def close(self) -> None:
         if self._client is not None:
