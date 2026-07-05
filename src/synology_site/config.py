@@ -36,6 +36,7 @@ class Settings:
     db_host_port: int | None
     allow_overwrite: bool
     dry_run: bool
+    default_site_domain: str | None = None
 
     @property
     def cloudflare_api_ready(self) -> bool:
@@ -136,4 +137,5 @@ def load_config(path: str | Path = ".env") -> Settings:
         db_host_port=int(db_host_port) if db_host_port else None,
         allow_overwrite=_bool(values, "ALLOW_OVERWRITE", False),
         dry_run=_bool(values, "DRY_RUN", False),
+        default_site_domain=_optional(values.get("DEFAULT_SITE_DOMAIN")),
     )

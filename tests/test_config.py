@@ -64,3 +64,15 @@ def test_load_config_requires_core_values(tmp_path: Path) -> None:
 
     with pytest.raises(SynologySiteError, match="NAS_USER"):
         load_config(env_path)
+
+
+def test_load_config_default_site_domain_defaults_to_none(tmp_path: Path) -> None:
+    settings = load_config(write_env(tmp_path))
+
+    assert settings.default_site_domain is None
+
+
+def test_load_config_reads_default_site_domain(tmp_path: Path) -> None:
+    settings = load_config(write_env(tmp_path, "DEFAULT_SITE_DOMAIN=veloso.dev"))
+
+    assert settings.default_site_domain == "veloso.dev"
