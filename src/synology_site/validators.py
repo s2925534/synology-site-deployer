@@ -7,6 +7,18 @@ from synology_site.errors import SynologySiteError
 _DOMAIN_RE = re.compile(r"^[a-z0-9.-]+$", re.IGNORECASE)
 
 
+def apply_default_site_domain(name: str, default_site_domain: str | None) -> str:
+    """Expand a bare subdomain label (no dots) into a full domain.
+
+    e.g. "app" + "veloso.dev" -> "app.veloso.dev". Names that already look
+    like a full domain (contain a dot) are left untouched.
+    """
+    candidate = name.strip()
+    if default_site_domain and "." not in candidate:
+        return f"{candidate}.{default_site_domain}"
+    return candidate
+
+
 def validate_domain(domain: str) -> str:
     normalized = domain.strip().lower()
     if not normalized:

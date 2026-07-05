@@ -1,6 +1,6 @@
 # Synology Site Deployer
 
-Synology Site Deployer is a local Python CLI for deploying containerized Flask sites to a Synology NAS over SSH. It creates a project folder, uploads a generated Flask application, writes Docker Compose files, optionally adds a MariaDB container, starts the project, checks health endpoints, and helps configure Cloudflare Tunnel routes.
+Synology Site Deployer is a local Python CLI for deploying containerized apps to a Synology NAS over SSH. `create` scaffolds and deploys a new Flask app from scratch (optionally with a MariaDB container); `deploy` uploads and starts an existing project's own Compose file for any framework — it doesn't generate app code, so it isn't limited to Flask. `bootstrap-supabase` stands up Supabase's self-hosted stack. `cloudflare-route` wires a Cloudflare Tunnel route to a fixed port directly. All of them can configure Cloudflare Tunnel routes + DNS via the Cloudflare API when credentials are present.
 
 The tool is generic. Domains, NAS hosts, Docker paths, Cloudflare zones, tunnel names, and ports come from `.env`, CLI options, or validated defaults.
 
@@ -12,20 +12,18 @@ Contact: `pedro@veloso.dev`
 
 ## What It Does
 
-- Deploys Flask apps to a Synology NAS using Docker Compose.
-- Optionally creates a MariaDB 11 container with a private Docker network and persistent volume.
-- Generates a non-secret project README on the NAS.
-- Generates `docs/DATABASE.md` on the NAS when DB mode is enabled.
-- Finds a free local NAS port.
-- Checks `/health` and `/db-health`.
-- Prints manual Cloudflare Tunnel setup instructions if API credentials are missing.
-- Optionally creates or updates a Cloudflare tunnel route and proxied DNS record when API credentials are complete.
+- `create`: scaffolds and deploys a new Flask app to a Synology NAS using Docker Compose, optionally with a MariaDB 11 container (private network + persistent volume), a non-secret project README, `docs/DATABASE.md`, and `/health`/`/db-health` checks.
+- `deploy`: uploads an existing project's own Compose file (+ optional `.env`) and starts it — any framework, since it doesn't generate app code. `docker compose pull` with a `--build` fallback. Works with a fixed reverse-proxy port (Traefik, etc., no port allocation/Cloudflare/health-check) or a standalone published port (same behavior as `create`).
+- `bootstrap-supabase`: clones and starts Supabase's self-hosted stack, regenerating every security-critical secret properly (including correctly HS256-signed `ANON_KEY`/`SERVICE_ROLE_KEY` JWTs, not random strings), and can upload a Traefik-label override alongside it.
+- `cloudflare-route`: points one hostname at a fixed port via the Cloudflare API directly, no NAS/SSH interaction — for reverse-proxy setups where many hostnames share one port.
+- Finds a free local NAS port when one is needed.
+- Prints manual Cloudflare Tunnel setup instructions if API credentials are missing; otherwise creates/updates the tunnel ingress rule and proxied DNS record automatically.
 
 ## What It Does Not Do
 
-- It does not expose Synology DSM, SSH, or MariaDB to the public internet.
+- It does not expose Synology DSM, SSH, or MariaDB/Postgres to the public internet.
 - It does not require the Synology DSM database package.
-- It does not deploy frameworks other than Flask in version 1.
+- It does not generate application code for frameworks other than Flask (`create`) — but `deploy` can start any already-built project regardless of framework.
 - It does not commit `.env`, tokens, generated passwords, or database credentials.
 
 ## Requirements
@@ -74,12 +72,15 @@ NAS_DOCKER_ROOT=/volume1/docker
 LOCAL_BASE_URL_HOST=192.168.1.100
 DEFAULT_START_PORT=5050
 DEFAULT_END_PORT=5999
+DEFAULT_SITE_DOMAIN=example.com
 CF_ZONE_DOMAIN=example.com
 CF_TUNNEL_NAME=my-nas-tunnel
 DB_MODE=none
 ```
 
 Use `NAS_SSH_KEY_PATH` when possible. If no key or password is set, the CLI prompts securely.
+
+`DEFAULT_SITE_DOMAIN` lets you pass a bare subdomain label to `create`/`deploy` instead of a full domain: a domain argument with no dot in it (e.g. `app`) is expanded to `<name>.DEFAULT_SITE_DOMAIN` (e.g. `app.example.com`). Anything that already contains a dot (e.g. `demo.example.com`) is used as-is. Leave it empty to always require a full domain.
 
 For Synology systems where Docker requires elevated access, the SSH user should be allowed to run Docker through DSM permissions or `sudo`. The tool does not print the configured SSH password.
 
@@ -140,6 +141,85 @@ This adds:
 - `/db-health`
 
 MariaDB port `3306` is not published by default. Do not expose MariaDB to the public internet.
+
+## Deploy An Existing Project (Any Framework)
+
+`create` only scaffolds new Flask apps. `deploy` is the counterpart for a project that already has its own Dockerfile and Compose file — a Next.js app, a Node API, or anything else with a CI pipeline that builds and pushes an image. It does not generate any application code; it uploads your Compose file (and optional `.env`), then pulls/builds and starts it on the NAS.
+
+```bash
+synology-site deploy app.example.com --compose-file ./infra/web/docker-compose.web.yml --env-file ./infra/web/.env
+```
+
+This uploads the Compose file and `.env` (permission `600`) to `/volume1/docker/app-example-com`, then runs `docker compose pull` followed by `docker compose up -d` (falling back to `--build` if the pull fails, e.g. before an image has ever been published, or if you use `--no-pull --build` to always build locally).
+
+If the service in your Compose file is fronted by a reverse proxy already running on the NAS (Traefik, Nginx Proxy Manager) and doesn't publish a host port — as with ResiLinked's `infra/web/docker-compose.web.yml`, which joins the shared `supabase_default` network and routes by Traefik `Host()` label — omit `--port`. Cloudflare automation and the health check are both skipped, since routing is handled by the existing proxy/tunnel setup rather than a per-app port.
+
+If the service does publish its own host port, pass `--port` to get the same behavior as `create`: port availability is checked on the NAS, and the Cloudflare tunnel route is configured automatically (or manual instructions are printed) exactly as described above.
+
+```bash
+synology-site deploy app.example.com \
+  --compose-file ./docker-compose.yml \
+  --port 5060 \
+  --container-name my-app \
+  --health-path /health
+```
+
+Options:
+
+- `--compose-file PATH` (required) — local Compose file to upload
+- `--env-file PATH` — local `.env` to upload alongside it (uploaded as `.env`, `chmod 600`)
+- `--remote-compose-name NAME` — filename to use on the NAS (default `docker-compose.yml`)
+- `--port N` — enables port allocation, health checks, and Cloudflare routing (omit for reverse-proxy-fronted services)
+- `--container-name NAME` — verify this container is running after startup
+- `--pull/--no-pull`, `--build/--no-build` — default is `--pull` (build only as a pull-failure fallback)
+- `--health-path PATH` — requires `--port`
+- `--force`, `--dry-run`, `--strict-cloudflare` — same meaning as on `create`
+
+Sites deployed this way show up in `synology-site list` and work with `start`/`stop`/`remove`/`set-autostart` like any other site.
+
+## Automatic Cloudflare Route For A Fixed Port
+
+`create`/`deploy --port` each allocate a fresh, unique port per app — the right model for standalone services. It's the wrong model for a reverse-proxy setup: Traefik (or Nginx Proxy Manager) binds one fixed port (typically 80) and routes many hostnames to it internally by `Host()` header, so several hostnames all need to point at that *same* port, not a freshly allocated one.
+
+`cloudflare-route` configures the Cloudflare Tunnel ingress rule + proxied DNS record for one hostname directly, with no NAS/SSH interaction at all — just the Cloudflare API:
+
+```bash
+synology-site cloudflare-route app.example.com --port 80
+synology-site cloudflare-route api.example.com --port 80
+synology-site cloudflare-route studio.example.com --port 80
+```
+
+Each call routes that hostname to `http://LOCAL_BASE_URL_HOST:80` (i.e. Traefik), leaving the others untouched. Use `--service-host` to point at a different host than `LOCAL_BASE_URL_HOST`. Requires the same Cloudflare API credentials as `create`/`deploy`.
+
+## Bootstrapping Self-Hosted Supabase
+
+`bootstrap-supabase` automates standing up [Supabase's self-hosted stack](https://supabase.com/docs/guides/self-hosting/docker) (Postgres, Auth, Storage, Realtime, Kong, Studio) on the NAS:
+
+```bash
+synology-site bootstrap-supabase
+```
+
+This clones Supabase's own `docker/` folder (not vendored here — they maintain it) into `NAS_DOCKER_ROOT/supabase`, then regenerates the security-critical values in its `.env` rather than leaving Supabase's insecure example defaults in place:
+
+- `POSTGRES_PASSWORD`, `DASHBOARD_PASSWORD`, `SECRET_KEY_BASE`, `VAULT_ENC_KEY` — random values
+- `JWT_SECRET` — random value
+- `ANON_KEY`/`SERVICE_ROLE_KEY` — **properly signed HS256 JWTs** carrying the `anon`/`service_role` claims Kong/GoTrue/PostgREST check, signed with the generated `JWT_SECRET` (not random strings — Supabase auth silently breaks otherwise)
+
+Everything else in Supabase's `.env.example` (SMTP, analytics, pooler settings, etc.) is left as shipped. The final `.env` — with every secret above in plaintext — is written locally to `secrets/supabase.env` (never uploaded anywhere but the NAS and never printed to the terminal); keep it safe and never commit it. Then `docker compose up -d` brings the stack up on the `supabase_default` network that a reverse proxy and any apps needing Postgres/Auth/Storage are expected to join.
+
+Two gotchas it works around, discovered deploying this for real on a Synology DS1525+:
+
+- Git doesn't track empty directories, and Supabase's `docker/volumes/storage` and `docker/volumes/db/data` are empty in their repo (unlike sibling volume dirs, which hold real config/SQL files) — the clone silently omits them, so Docker's bind mount fails on first `up -d` unless something `mkdir -p`s them first.
+- `POSTGRES_PORT` defaults to Supabase's own `5432`, which commonly collides with a NAS's own native services (e.g. a Synology package's bundled Postgres already bound to `127.0.0.1:5432`). Nothing needs this published on the host anyway — everything reaches Postgres via the `supabase_default` Docker network by container name — so it defaults to `5433` instead.
+
+Options:
+
+- `--project-dir-name NAME` (default `supabase`) — NAS folder name under `NAS_DOCKER_ROOT`
+- `--dashboard-username NAME` (default `supabase`) — Studio dashboard login
+- `--postgres-port N` (default `5433`) — host-published Postgres port; override if `5433` is also taken
+- `--traefik-override PATH` — a local `docker-compose.override.yml` adding Traefik labels to Supabase's `kong`/`studio` services, uploaded into the project directory before startup. **Note:** Supabase's own `.env` sets `COMPOSE_FILE=docker-compose.yml`, which disables Compose's normal override auto-discovery — when this option is given, the command passes `-f docker-compose.yml -f docker-compose.override.yml` explicitly to `up -d` rather than relying on it.
+- `--force` — tear down (`docker compose down` + `sudo rm -rf`, since Postgres writes its data directory as a container UID the SSH user can't otherwise remove) and recreate an existing install
+- `--dry-run`
 
 ## Manual Cloudflare Route
 
@@ -253,7 +333,7 @@ curl http://LOCAL_BASE_URL_HOST:PORT/health
 
 ## Future Framework Roadmap
 
-The scaffold registry currently contains Flask only:
+`create`'s scaffold registry (code generation from templates) currently contains Flask only:
 
 ```python
 FRAMEWORKS = {
@@ -261,7 +341,7 @@ FRAMEWORKS = {
 }
 ```
 
-Future versions can add Laravel, Lumen, Slim, Symfony, Node.js, React, Vue, or other generators.
+Future versions can add Laravel, Lumen, Slim, Symfony, Node.js, React, Vue, or other generators here. This doesn't limit what can be *deployed*, though — `deploy` already starts any project with its own Dockerfile/Compose file regardless of framework, since it uploads an existing Compose file rather than generating one.
 
 ## Testing
 

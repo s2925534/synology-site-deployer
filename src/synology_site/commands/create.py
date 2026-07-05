@@ -30,7 +30,7 @@ from synology_site.port_allocator import find_available_port
 from synology_site.scaffold import FRAMEWORKS
 from synology_site.scaffold.base import GeneratedFile, ScaffoldContext
 from synology_site.ssh_client import SSHClient
-from synology_site.validators import validate_domain
+from synology_site.validators import apply_default_site_domain, validate_domain
 
 
 @dataclass(frozen=True)
@@ -222,6 +222,7 @@ def app(
     selected_db_mode = "container" if with_db else db_mode
     try:
         settings = load_config()
+        domain = apply_default_site_domain(domain, settings.default_site_domain)
         prompted_password = None
         if not settings.nas_ssh_key_path and not settings.nas_ssh_password:
             prompted_password = getpass("NAS SSH password: ")
