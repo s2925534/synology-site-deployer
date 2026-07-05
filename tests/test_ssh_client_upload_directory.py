@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
@@ -85,3 +87,64 @@ def test_upload_directory_creates_nested_remote_dirs(tmp_path: Path) -> None:
 
     assert "/volume1/docker/proj/repo/apps/web" in fake.sftp.dirs
     assert "/volume1/docker/proj/repo/packages/core" in fake.sftp.dirs
+
+
+class FakeChannel:
+    def __init__(self, exit_code: int = 0) -> None:
+        self.exit_code = exit_code
+
+    def recv_exit_status(self) -> int:
+        return self.exit_code
+
+
+class FakeStream(BytesIO):
+    def __init__(self, text: str = "", exit_code: int = 0) -> None:
+        super().__init__(text.encode())
+        self.channel = FakeChannel(exit_code)
+
+
+class NoSFTPFakeSSH:
+    """Simulates a server with no SFTP subsystem -- open_sftp() always fails."""
+
+    def __init__(self) -> None:
+        self.commands: list[str] = []
+
+    def set_missing_host_key_policy(self, _policy: object) -> None:
+        pass
+
+    def connect(self, **_kwargs: Any) -> None:
+        pass
+
+    def open_sftp(self) -> None:
+        raise Exception("Channel closed.")  # noqa: TRY002
+
+    def exec_command(
+        self, command: str, timeout: int | None = None
+    ) -> tuple[None, FakeStream, FakeStream]:
+        del timeout
+        self.commands.append(command)
+        return None, FakeStream("", 0), FakeStream("", 0)
+
+    def close(self) -> None:
+        pass
+
+
+def test_upload_directory_falls_back_to_shell_when_sftp_unavailable(tmp_path: Path) -> None:
+    (tmp_path / "apps").mkdir()
+    (tmp_path / "apps" / "index.ts").write_bytes(b"entry\xff\x00binary-safe\n")
+    fake = NoSFTPFakeSSH()
+    client = SSHClient("nas.local", 22, "deploy", client_factory=lambda: fake)
+    client.connect()
+
+    uploaded = client.upload_directory(
+        tmp_path, "/volume1/docker/proj/repo", ignore=lambda p: False
+    )
+
+    assert uploaded == ["apps/index.ts"]
+    mkdir_cmd = next(c for c in fake.commands if c.startswith("mkdir -p"))
+    assert "/volume1/docker/proj/repo/apps" in mkdir_cmd
+    write_cmd = next(c for c in fake.commands if "base64 -d" in c)
+    assert "/volume1/docker/proj/repo/apps/index.ts" in write_cmd
+    # the payload embedded in the command must decode back to the original bytes
+    payload = write_cmd.split("printf %s ", 1)[1].split(" | base64", 1)[0].strip("'")
+    assert base64.b64decode(payload) == b"entry\xff\x00binary-safe\n"
