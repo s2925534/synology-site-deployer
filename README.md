@@ -226,7 +226,7 @@ Everything else in Supabase's `.env.example` (SMTP, analytics, pooler settings, 
 Two gotchas it works around, discovered deploying this for real on a Synology DS1525+:
 
 - Git doesn't track empty directories, and Supabase's `docker/volumes/storage` and `docker/volumes/db/data` are empty in their repo (unlike sibling volume dirs, which hold real config/SQL files) — the clone silently omits them, so Docker's bind mount fails on first `up -d` unless something `mkdir -p`s them first.
-- `POSTGRES_PORT` defaults to Supabase's own `5432`, which commonly collides with a NAS's own native services (e.g. a Synology package's bundled Postgres already bound to `127.0.0.1:5432`). Nothing needs this published on the host anyway — everything reaches Postgres via the `supabase_default` Docker network by container name — so it defaults to `5433` instead.
+- `POSTGRES_PORT` defaults to Supabase's own `5432`, which commonly collides with a NAS's own native services (e.g. a Synology package's bundled Postgres already bound to `127.0.0.1:5432`) — so it defaults to `5433` instead. **This isn't just the host-published port** — it also sets Postgres's actual internal listening port via `PGPORT` (Supabase's own `docker-compose.yml` threads the same variable through both), so anything else on the `supabase_default` network connecting to Postgres by container name must use this same port, not the Postgres-default `5432`.
 
 Options:
 
