@@ -28,6 +28,7 @@ from synology_site.naming import domain_to_slug
 from synology_site.output import console, next_step, ok, warn
 from synology_site.port_allocator import find_available_port
 from synology_site.ssh_client import SSHClient
+from synology_site.upload_filter import build_ignore_matcher, load_dockerignore_patterns
 from synology_site.validators import apply_default_site_domain, validate_domain
 
 # Deploys a project that already has its own Dockerfile/Compose file (e.g. a
@@ -60,6 +61,7 @@ def deploy_existing_project(
     settings: Settings,
     env_file: Path | None = None,
     remote_compose_name: str = "docker-compose.yml",
+    source_dir: Path | None = None,
     port: int | None = None,
     container_name: str | None = None,
     pull: bool = True,
@@ -79,9 +81,29 @@ def deploy_existing_project(
         msg = f"Compose file not found: {compose_file}"
         raise SynologySiteError(msg)
 
+    compose_rel_to_source: Path | None = None
+    if source_dir is not None:
+        if not source_dir.is_dir():
+            msg = f"Source directory not found: {source_dir}"
+            raise SynologySiteError(msg)
+        try:
+            compose_rel_to_source = compose_file.resolve().relative_to(source_dir.resolve())
+        except ValueError as exc:
+            msg = "--compose-file must be inside --source-dir"
+            raise SynologySiteError(msg) from exc
+        # Uploading source implies building it -- there's nothing to pull
+        # that this upload would produce.
+        build = True
+        pull = False
+
     slug = domain_to_slug(domain)
     project_path = f"{settings.nas_docker_root.rstrip('/')}/{slug}"
-    uploaded = [remote_compose_name] + ([".env"] if env_file is not None else [])
+    remote_compose_path = (
+        f"repo/{compose_rel_to_source.as_posix()}"
+        if source_dir is not None
+        else remote_compose_name
+    )
+    uploaded = [remote_compose_path] + ([".env"] if env_file is not None else [])
 
     with ssh_factory(settings, prompted_password) as ssh:
         require_docker(ssh)
@@ -105,7 +127,7 @@ def deploy_existing_project(
                 slug=slug,
                 project_path=project_path,
                 compose_command=compose,
-                compose_file=remote_compose_name,
+                compose_file=remote_compose_path,
                 uploaded_files=tuple(uploaded),
                 port=selected_port,
                 local_url=resolved_local_url,
@@ -114,17 +136,32 @@ def deploy_existing_project(
             )
 
         _prepare_remote_project(ssh, project_path, force=force)
-        ssh.upload_text(
-            f"{project_path}/{remote_compose_name}",
-            compose_file.read_text(encoding="utf-8"),
-        )
+        if source_dir is not None:
+            # .env is force-excluded from the bulk source upload regardless
+            # of .dockerignore -- it would otherwise land with default SFTP
+            # permissions instead of the chmod 600 the explicit --env-file
+            # upload below gets, and could contain unrelated local secrets.
+            patterns = [*load_dockerignore_patterns(source_dir / ".dockerignore"), ".env"]
+            ignore = build_ignore_matcher(patterns)
+            uploaded_source = ssh.upload_directory(
+                source_dir, f"{project_path}/repo", ignore=ignore
+            )
+            uploaded = [f"repo/{p}" for p in uploaded_source]
+            env_dir = f"{project_path}/repo/{compose_rel_to_source.parent.as_posix()}"
+        else:
+            ssh.upload_text(
+                f"{project_path}/{remote_compose_name}",
+                compose_file.read_text(encoding="utf-8"),
+            )
+            env_dir = project_path
+
         if env_file is not None:
-            remote_env_path = f"{project_path}/.env"
+            remote_env_path = f"{env_dir}/.env"
             ssh.upload_text(remote_env_path, env_file.read_text(encoding="utf-8"))
             ssh.run(f"chmod 600 {shlex.quote(remote_env_path)}", check=True)
-        _write_marker(ssh, project_path, domain, slug, selected_port, remote_compose_name)
+        _write_marker(ssh, project_path, domain, slug, selected_port, remote_compose_path)
 
-        _start_compose(ssh, project_path, compose, remote_compose_name, pull=pull, build=build)
+        _start_compose(ssh, project_path, compose, remote_compose_path, pull=pull, build=build)
         if container_name:
             docker = docker_command(ssh)
             _confirm_container(ssh, container_name, docker)
@@ -136,7 +173,7 @@ def deploy_existing_project(
         slug=slug,
         project_path=project_path,
         compose_command=compose,
-        compose_file=remote_compose_name,
+        compose_file=remote_compose_path,
         uploaded_files=tuple(uploaded),
         port=selected_port,
         local_url=resolved_local_url,
@@ -248,6 +285,16 @@ def app(
         None, "--env-file", exists=True, dir_okay=False
     ),
     remote_compose_name: str = typer.Option("docker-compose.yml", "--remote-compose-name"),
+    source_dir: Path | None = typer.Option(  # noqa: B008
+        None,
+        "--source-dir",
+        exists=True,
+        file_okay=False,
+        help="Upload this whole local directory (respecting its .dockerignore, plus .env "
+        "always excluded) instead of just --compose-file, and build on the NAS -- for a "
+        "Compose file whose build context needs more than itself (e.g. a monorepo). "
+        "--compose-file must be inside this directory. Implies --build --no-pull.",
+    ),
     port: int | None = typer.Option(
         None, "--port", help="Publish/route a host port for this service (omit for "
         "reverse-proxy-fronted deployments, e.g. behind Traefik)"
@@ -274,6 +321,7 @@ def app(
             settings=settings,
             env_file=env_file,
             remote_compose_name=remote_compose_name,
+            source_dir=source_dir,
             port=port,
             container_name=container_name,
             pull=pull,

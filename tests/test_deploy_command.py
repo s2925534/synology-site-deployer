@@ -87,6 +87,19 @@ class FakeSSH:
     def upload_text(self, remote_path: str, content: str) -> None:
         self.uploads[remote_path] = content
 
+    def upload_directory(self, local_root: Path, remote_root: str, *, ignore=None) -> list[str]:
+        uploaded = []
+        for path in sorted(local_root.rglob("*")):
+            if path.is_dir():
+                continue
+            rel = path.relative_to(local_root)
+            if ignore and ignore(rel):
+                continue
+            remote_path = f"{remote_root}/{rel.as_posix()}"
+            self.uploads[remote_path] = path.read_text(encoding="utf-8")
+            uploaded.append(rel.as_posix())
+        return uploaded
+
 
 def _compose_file(tmp_path: Path) -> Path:
     compose = tmp_path / "docker-compose.web.yml"
@@ -232,4 +245,104 @@ def test_deploy_missing_compose_file_raises(tmp_path: Path) -> None:
             ssh_factory=lambda _settings, _password: (_ for _ in ()).throw(
                 AssertionError("ssh should not be used")
             ),
+        )
+
+
+def _monorepo(tmp_path: Path) -> tuple[Path, Path]:
+    (tmp_path / "infra" / "web").mkdir(parents=True)
+    compose = tmp_path / "infra" / "web" / "docker-compose.web.yml"
+    compose.write_text("services:\n  web:\n    build:\n      context: ../..\n")
+    (tmp_path / "apps" / "web" / "node_modules").mkdir(parents=True)
+    (tmp_path / "apps" / "web" / "node_modules" / "dep.js").write_text("skip me\n")
+    (tmp_path / "apps" / "web" / "index.ts").write_text("entry\n")
+    (tmp_path / ".dockerignore").write_text("node_modules\n**/node_modules\n")
+    return tmp_path, compose
+
+
+def test_deploy_with_source_dir_uploads_tree_and_builds(tmp_path: Path) -> None:
+    fake = FakeSSH()
+    source_dir, compose = _monorepo(tmp_path)
+
+    result = deploy_existing_project(
+        "app.example.com",
+        compose_file=compose,
+        source_dir=source_dir,
+        settings=settings(),
+        ssh_factory=lambda _settings, _password: fake,
+    )
+
+    assert result.compose_file == "repo/infra/web/docker-compose.web.yml"
+    assert "/volume1/docker/app-example-com/repo/apps/web/index.ts" in fake.uploads
+    assert not any("node_modules" in p for p in fake.uploads)
+    assert (
+        "cd /volume1/docker/app-example-com && docker compose "
+        "-f repo/infra/web/docker-compose.web.yml up -d --build" in fake.commands
+    )
+    assert not any(c.endswith("pull") for c in fake.commands)
+
+
+def test_deploy_with_source_dir_uploads_env_file_alongside_compose(tmp_path: Path) -> None:
+    fake = FakeSSH()
+    source_dir, compose = _monorepo(tmp_path)
+    env_file = tmp_path / "web.env"
+    env_file.write_text("NEXT_PUBLIC_API_URL=https://api.example.com\n")
+
+    deploy_existing_project(
+        "app.example.com",
+        compose_file=compose,
+        source_dir=source_dir,
+        env_file=env_file,
+        settings=settings(),
+        ssh_factory=lambda _settings, _password: fake,
+    )
+
+    remote_env = "/volume1/docker/app-example-com/repo/infra/web/.env"
+    assert fake.uploads[remote_env] == "NEXT_PUBLIC_API_URL=https://api.example.com\n"
+    assert f"chmod 600 {remote_env}" in fake.commands
+
+
+def test_deploy_with_source_dir_excludes_env_from_bulk_upload(tmp_path: Path) -> None:
+    fake = FakeSSH()
+    source_dir, compose = _monorepo(tmp_path)
+    (source_dir / "infra" / "web" / ".env").write_text("SHOULD_NOT_UPLOAD=1\n")
+
+    deploy_existing_project(
+        "app.example.com",
+        compose_file=compose,
+        source_dir=source_dir,
+        settings=settings(),
+        ssh_factory=lambda _settings, _password: fake,
+    )
+
+    assert "/volume1/docker/app-example-com/repo/infra/web/.env" not in fake.uploads
+
+
+def test_deploy_source_dir_requires_compose_file_inside_it(tmp_path: Path) -> None:
+    fake = FakeSSH()
+    source_dir, _compose = _monorepo(tmp_path)
+    outside_compose = tmp_path.parent / "outside.yml"
+    outside_compose.write_text("services: {}\n")
+
+    with pytest.raises(SynologySiteError, match="inside --source-dir"):
+        deploy_existing_project(
+            "app.example.com",
+            compose_file=outside_compose,
+            source_dir=source_dir,
+            settings=settings(),
+            ssh_factory=lambda _settings, _password: fake,
+        )
+    outside_compose.unlink()
+
+
+def test_deploy_source_dir_missing_directory_raises(tmp_path: Path) -> None:
+    fake = FakeSSH()
+    _source_dir, compose = _monorepo(tmp_path)
+
+    with pytest.raises(SynologySiteError, match="Source directory not found"):
+        deploy_existing_project(
+            "app.example.com",
+            compose_file=compose,
+            source_dir=tmp_path / "missing-dir",
+            settings=settings(),
+            ssh_factory=lambda _settings, _password: fake,
         )

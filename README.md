@@ -169,6 +169,7 @@ Options:
 - `--compose-file PATH` (required) — local Compose file to upload
 - `--env-file PATH` — local `.env` to upload alongside it (uploaded as `.env`, `chmod 600`)
 - `--remote-compose-name NAME` — filename to use on the NAS (default `docker-compose.yml`)
+- `--source-dir PATH` — upload this whole local directory instead of just `--compose-file`, and build on the NAS. See "Building From Full Source" below.
 - `--port N` — enables port allocation, health checks, and Cloudflare routing (omit for reverse-proxy-fronted services)
 - `--container-name NAME` — verify this container is running after startup
 - `--pull/--no-pull`, `--build/--no-build` — default is `--pull` (build only as a pull-failure fallback)
@@ -176,6 +177,21 @@ Options:
 - `--force`, `--dry-run`, `--strict-cloudflare` — same meaning as on `create`
 
 Sites deployed this way show up in `synology-site list` and work with `start`/`stop`/`remove`/`set-autostart` like any other site.
+
+### Building From Full Source (`--source-dir`)
+
+`--compose-file`/`--pull`/`--build` alone assume the Compose file's own `build.context` is self-contained (or that you're pulling a prebuilt image). That's not true for a monorepo where the build context needs sibling packages — e.g. `context: ../..` in a compose file that lives under `infra/`. For that case, `--source-dir` uploads the *whole* local directory tree (not just the one Compose file) and builds directly on the NAS, with the Compose file staying at the same path relative to the uploaded root that it has locally — so a relative `context: ../..` resolves the same way it would on your machine.
+
+```bash
+synology-site deploy app.example.com \
+  --compose-file ./infra/web/docker-compose.web.yml \
+  --source-dir . \
+  --env-file ./infra/web/.env
+```
+
+`--compose-file` must be inside `--source-dir`. The upload respects `--source-dir`'s own `.dockerignore` (bare names like `node_modules`, `.git`, `*.md` — not full gitignore-style precedence/negation, just the common case), pruning ignored directories before walking into them rather than filtering after — so a large `node_modules` never gets traversed at all. `.env` is **always** excluded from this bulk upload regardless of `.dockerignore`, even if one happens to exist in the tree being uploaded — it would otherwise land with default SFTP permissions instead of the `chmod 600` the separate `--env-file` upload gets, and could contain unrelated local secrets. Passing `--source-dir` implies `--build --no-pull` (there's nothing to pull that this upload would produce).
+
+This exists specifically because a registry-based deploy (CI builds → GHCR → `deploy --pull`) isn't always available — e.g. the images are on a private registry the NAS has no credentials for. `--source-dir` builds the exact same Dockerfile locally on the NAS instead, no registry access needed at all.
 
 ## Automatic Cloudflare Route For A Fixed Port
 
