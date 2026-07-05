@@ -116,14 +116,7 @@ class SSHClient:
             with client.open_sftp() as sftp, sftp.file(remote_path, "w") as remote_file:
                 remote_file.write(content)
         except Exception:  # noqa: BLE001
-            try:
-                encoded = base64.b64encode(content.encode("utf-8")).decode("ascii")
-                quoted_path = shlex.quote(remote_path)
-                quoted_payload = shlex.quote(encoded)
-                self.run(f"printf %s {quoted_payload} | base64 -d > {quoted_path}", check=True)
-            except Exception as fallback_exc:  # noqa: BLE001
-                msg = f"Failed to upload remote file: {remote_path}"
-                raise SynologySiteError(msg) from fallback_exc
+            self._upload_bytes_via_stdin(remote_path, content.encode("utf-8"))
 
     def upload_directory(
         self,
@@ -181,12 +174,37 @@ class SSHClient:
         return uploaded
 
     def _shell_upload_file(self, local_path: Path, remote_path: str) -> None:
+        self._upload_bytes_via_stdin(remote_path, local_path.read_bytes())
+
+    def _upload_bytes_via_stdin(self, remote_path: str, content: bytes) -> None:
+        """Writes content to remote_path via `base64 -d`, streamed over stdin.
+
+        Unlike embedding the base64 payload directly in the command line
+        (fine for small files, but a ~125KB file already overflows some
+        shells'/channels' argument-length limits), this has no size limit
+        tied to command-line length -- content streams through the
+        channel's stdin instead of argv.
+        """
+        client = self._require_client()
         quoted_dir = shlex.quote(str(Path(remote_path).parent.as_posix()))
         self.run(f"mkdir -p {quoted_dir}", check=True)
-        encoded = base64.b64encode(local_path.read_bytes()).decode("ascii")
         quoted_path = shlex.quote(remote_path)
-        quoted_payload = shlex.quote(encoded)
-        self.run(f"printf %s {quoted_payload} | base64 -d > {quoted_path}", check=True)
+        try:
+            stdin, stdout, stderr = client.exec_command(f"base64 -d > {quoted_path}")
+            encoded = base64.b64encode(content)
+            chunk_size = 32768
+            for i in range(0, len(encoded), chunk_size):
+                stdin.write(encoded[i : i + chunk_size])
+            stdin.flush()
+            stdin.channel.shutdown_write()
+            exit_code = stdout.channel.recv_exit_status()
+        except Exception as exc:  # noqa: BLE001
+            msg = f"Failed to upload remote file via stdin: {remote_path}"
+            raise SynologySiteError(msg) from exc
+        if exit_code != 0:
+            err = stderr.read().decode("utf-8", errors="replace")
+            msg = f"Failed to upload remote file via stdin: {remote_path}: {err}"
+            raise SynologySiteError(msg)
 
     def _sftp_mkdirs(self, sftp: Any, remote_dir: str) -> None:
         if not remote_dir or remote_dir == ".":
