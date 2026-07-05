@@ -103,11 +103,30 @@ class FakeStream(BytesIO):
         self.channel = FakeChannel(exit_code)
 
 
+class FakeStdin:
+    """Records bytes written before shutdown_write, like a real channel's stdin."""
+
+    def __init__(self, on_shutdown: Any) -> None:
+        self._buffer = bytearray()
+        self._on_shutdown = on_shutdown
+        self.channel = self
+
+    def write(self, data: bytes) -> None:
+        self._buffer.extend(data)
+
+    def flush(self) -> None:
+        pass
+
+    def shutdown_write(self) -> None:
+        self._on_shutdown(bytes(self._buffer))
+
+
 class NoSFTPFakeSSH:
     """Simulates a server with no SFTP subsystem -- open_sftp() always fails."""
 
     def __init__(self) -> None:
         self.commands: list[str] = []
+        self.decoded_uploads: dict[str, bytes] = {}
 
     def set_missing_host_key_policy(self, _policy: object) -> None:
         pass
@@ -120,9 +139,16 @@ class NoSFTPFakeSSH:
 
     def exec_command(
         self, command: str, timeout: int | None = None
-    ) -> tuple[None, FakeStream, FakeStream]:
+    ) -> tuple[Any, FakeStream, FakeStream]:
         del timeout
         self.commands.append(command)
+        if command.startswith("base64 -d > "):
+            path = command[len("base64 -d > ") :].strip("'")
+
+            def on_shutdown(encoded: bytes, path: str = path) -> None:
+                self.decoded_uploads[path] = base64.b64decode(encoded)
+
+            return FakeStdin(on_shutdown), FakeStream("", 0), FakeStream("", 0)
         return None, FakeStream("", 0), FakeStream("", 0)
 
     def close(self) -> None:
@@ -143,8 +169,16 @@ def test_upload_directory_falls_back_to_shell_when_sftp_unavailable(tmp_path: Pa
     assert uploaded == ["apps/index.ts"]
     mkdir_cmd = next(c for c in fake.commands if c.startswith("mkdir -p"))
     assert "/volume1/docker/proj/repo/apps" in mkdir_cmd
-    write_cmd = next(c for c in fake.commands if "base64 -d" in c)
-    assert "/volume1/docker/proj/repo/apps/index.ts" in write_cmd
-    # the payload embedded in the command must decode back to the original bytes
-    payload = write_cmd.split("printf %s ", 1)[1].split(" | base64", 1)[0].strip("'")
-    assert base64.b64decode(payload) == b"entry\xff\x00binary-safe\n"
+    remote_path = "/volume1/docker/proj/repo/apps/index.ts"
+    assert fake.decoded_uploads[remote_path] == b"entry\xff\x00binary-safe\n"
+
+
+def test_upload_directory_handles_large_file_via_chunked_stdin(tmp_path: Path) -> None:
+    (tmp_path / "big.bin").write_bytes(b"x" * 200_000)
+    fake = NoSFTPFakeSSH()
+    client = SSHClient("nas.local", 22, "deploy", client_factory=lambda: fake)
+    client.connect()
+
+    client.upload_directory(tmp_path, "/volume1/docker/proj/repo", ignore=lambda p: False)
+
+    assert fake.decoded_uploads["/volume1/docker/proj/repo/big.bin"] == b"x" * 200_000
