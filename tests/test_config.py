@@ -119,7 +119,7 @@ def test_resolve_cloudflare_explicit_workspace_override(tmp_path: Path) -> None:
     settings = load_config(write_env(tmp_path), secrets_dir=tmp_path / "secrets")
 
     assert settings.resolve_cloudflare("app.example.com", workspace="acmeco").name == "acmeco"
-    with pytest.raises(SynologySiteError, match="Unknown Cloudflare workspace"):
+    with pytest.raises(SynologySiteError, match="Unknown workspace"):
         settings.resolve_cloudflare("app.example.com", workspace="does-not-exist")
 
 
@@ -129,4 +129,95 @@ def test_discover_cloudflare_accounts_requires_zone_domain(tmp_path: Path) -> No
     (workspace_dir / "cloudflare.env").write_text("CF_API_TOKEN=token", encoding="utf-8")
 
     with pytest.raises(SynologySiteError, match="CF_ZONE_DOMAIN"):
+        load_config(write_env(tmp_path), secrets_dir=tmp_path / "secrets")
+
+
+def write_nas_target(tmp_path: Path, name: str, **overrides: str) -> None:
+    workspace_dir = tmp_path / "secrets" / name
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    lines = [f"{key}={value}" for key, value in overrides.items()]
+    (workspace_dir / "nas.env").write_text("\n".join(lines), encoding="utf-8")
+
+
+def test_load_config_default_nas_target_matches_root_env(tmp_path: Path) -> None:
+    settings = load_config(write_env(tmp_path), secrets_dir=tmp_path / "secrets")
+
+    target = settings.default_nas_target
+    assert target.name == "default"
+    assert target.host == "192.0.2.10"
+    assert target.docker_root == "/volume1/docker"
+    assert target.system_type == "synology"
+
+
+def test_load_config_discovers_extra_nas_target_and_inherits_unset_fields(tmp_path: Path) -> None:
+    write_nas_target(tmp_path, "clienta", NAS_HOST="203.0.113.5", NAS_USER="clienta-deploy")
+
+    settings = load_config(write_env(tmp_path), secrets_dir=tmp_path / "secrets")
+
+    assert [target.name for target in settings.nas_targets] == ["clienta"]
+    target = settings.nas_targets[0]
+    assert target.host == "203.0.113.5"
+    assert target.user == "clienta-deploy"
+    # Not overridden -- inherited from the root .env's default target.
+    assert target.docker_root == "/volume1/docker"
+    assert target.local_base_url_host == "192.0.2.10"
+
+
+def test_resolve_target_falls_back_to_default_when_workspace_has_no_nas_override(
+    tmp_path: Path,
+) -> None:
+    write_workspace(tmp_path, "acmeco", zone_domain="acmeco.dev")
+
+    settings = load_config(write_env(tmp_path), secrets_dir=tmp_path / "secrets")
+
+    # "acmeco" is a known (Cloudflare-only) workspace but has no nas.env of its own.
+    target = settings.resolve_target(workspace="acmeco")
+    assert target.name == "default"
+    assert target.host == "192.0.2.10"
+
+
+def test_resolve_target_explicit_workspace_override(tmp_path: Path) -> None:
+    write_nas_target(tmp_path, "clienta", NAS_HOST="203.0.113.5")
+
+    settings = load_config(write_env(tmp_path), secrets_dir=tmp_path / "secrets")
+
+    assert settings.resolve_target(workspace="clienta").host == "203.0.113.5"
+    assert settings.resolve_target().host == "192.0.2.10"
+
+
+def test_nas_only_workspace_is_valid_for_cloudflare_resolution_too(tmp_path: Path) -> None:
+    """A workspace that only overrides the NAS target (no cloudflare.env) must not be rejected
+    as an "unknown Cloudflare workspace" -- it should just fall back to the default account."""
+    write_nas_target(tmp_path, "clienta", NAS_HOST="203.0.113.5")
+
+    settings = load_config(write_env(tmp_path), secrets_dir=tmp_path / "secrets")
+
+    account = settings.resolve_cloudflare("app.example.com", workspace="clienta")
+    assert account.name == "default"
+
+
+def test_cloudflare_only_workspace_is_valid_for_target_resolution_too(tmp_path: Path) -> None:
+    """The reverse of the above: a Cloudflare-only workspace must not be rejected when resolving
+    the NAS target, even though it has no nas.env of its own."""
+    write_workspace(tmp_path, "acmeco", zone_domain="acmeco.dev")
+
+    settings = load_config(write_env(tmp_path), secrets_dir=tmp_path / "secrets")
+
+    target = settings.resolve_target(workspace="acmeco")
+    assert target.name == "default"
+
+
+def test_validate_workspace_rejects_name_unknown_to_both_accounts_and_targets(
+    tmp_path: Path,
+) -> None:
+    settings = load_config(write_env(tmp_path), secrets_dir=tmp_path / "secrets")
+
+    with pytest.raises(SynologySiteError, match="Unknown workspace"):
+        settings.validate_workspace("does-not-exist")
+
+
+def test_discover_nas_targets_rejects_invalid_system_type(tmp_path: Path) -> None:
+    write_nas_target(tmp_path, "broken", SYSTEM_TYPE="windows")
+
+    with pytest.raises(SynologySiteError, match="SYSTEM_TYPE"):
         load_config(write_env(tmp_path), secrets_dir=tmp_path / "secrets")

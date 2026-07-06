@@ -4,7 +4,7 @@ import json
 import shlex
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from getpass import getpass
 from pathlib import Path
 from typing import Any
@@ -70,6 +70,7 @@ def deploy_existing_project(
     force: bool = False,
     dry_run: bool = False,
     strict_cloudflare: bool = False,
+    workspace: str | None = None,
     ssh_factory: SSHFactory = default_ssh_factory,
     health_get: HealthGetter = requests.get,
     prompted_password: str | None = None,
@@ -96,8 +97,18 @@ def deploy_existing_project(
         build = True
         pull = False
 
+    target = settings.resolve_target(workspace=workspace)
+    connection_settings = replace(
+        settings,
+        nas_host=target.host,
+        nas_port=target.port,
+        nas_user=target.user,
+        nas_ssh_key_path=target.ssh_key_path,
+        nas_ssh_password=target.ssh_password,
+    )
+
     slug = domain_to_slug(domain)
-    project_path = f"{settings.nas_docker_root.rstrip('/')}/{slug}"
+    project_path = f"{target.docker_root.rstrip('/')}/{slug}"
     remote_compose_path = (
         f"repo/{compose_rel_to_source.as_posix()}"
         if source_dir is not None
@@ -105,21 +116,21 @@ def deploy_existing_project(
     )
     uploaded = [remote_compose_path] + ([".env"] if env_file is not None else [])
 
-    with ssh_factory(settings, prompted_password) as ssh:
+    with ssh_factory(connection_settings, prompted_password) as ssh:
         require_docker(ssh)
         compose = detect_compose_command(ssh)
-        ensure_remote_directory(ssh, settings.nas_docker_root)
+        ensure_remote_directory(ssh, target.docker_root)
 
         selected_port = None
         resolved_local_url = None
         if port is not None:
             selected_port = find_available_port(
                 ssh,
-                start=settings.default_start_port,
-                end=settings.default_end_port,
+                start=target.default_start_port,
+                end=target.default_end_port,
                 requested=port,
             )
-            resolved_local_url = f"http://{settings.local_base_url_host}:{selected_port}"
+            resolved_local_url = f"http://{target.local_base_url_host}:{selected_port}"
 
         if dry_run:
             return DeployResult(
@@ -309,14 +320,18 @@ def app(
     force: bool = typer.Option(False, "--force"),
     strict_cloudflare: bool = typer.Option(False, "--strict-cloudflare"),
     workspace: str | None = typer.Option(
-        None, "--workspace", help="Force a specific Cloudflare workspace (see secrets/<name>/)"
+        None,
+        "--workspace",
+        help="Force a specific workspace (Cloudflare account and/or NAS target, "
+        "see secrets/<name>/)",
     ),
 ) -> None:
     try:
         settings = load_config()
         domain = apply_default_site_domain(domain, settings.default_site_domain)
+        target = settings.resolve_target(workspace=workspace)
         prompted_password = None
-        if not settings.nas_ssh_key_path and not settings.nas_ssh_password:
+        if not target.ssh_key_path and not target.ssh_password:
             prompted_password = getpass("NAS SSH password: ")
         result = deploy_existing_project(
             domain,
@@ -333,6 +348,7 @@ def app(
             force=force or settings.allow_overwrite,
             dry_run=dry_run or settings.dry_run,
             strict_cloudflare=strict_cloudflare,
+            workspace=workspace,
             prompted_password=prompted_password,
         )
     except SynologySiteError as exc:

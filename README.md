@@ -12,10 +12,12 @@ Contact: `pedro@veloso.dev`
 
 ## What It Does
 
-- `create`: scaffolds and deploys a new Flask or Laravel app (`--framework`) to a Synology NAS using Docker Compose, optionally with a MariaDB 11 container (private network + persistent volume), a non-secret project README, `docs/DATABASE.md`, and `/health`/`/db-health` checks. `--frontend` is reserved for planned Vue/React/Angular/Inertia/Livewire support (not implemented yet).
+- `create`: scaffolds and deploys a new Flask or Laravel app (`--framework`) to a Synology NAS using Docker Compose, optionally with a MariaDB 11 container (private network + persistent volume), a non-secret project README, `docs/DATABASE.md`, and `/health`/`/db-health` checks. `--frontend` pairs a Vue/React/Angular/Inertia/Livewire frontend with the Laravel backend (see "Backend + Frontend Roadmap").
 - `deploy`: uploads an existing project's own Compose file (+ optional `.env`) and starts it — any framework, since it doesn't generate app code. `docker compose pull` with a `--build` fallback. Works with a fixed reverse-proxy port (Traefik, etc., no port allocation/Cloudflare/health-check) or a standalone published port (same behavior as `create`).
 - `bootstrap-supabase`: clones and starts Supabase's self-hosted stack, regenerating every security-critical secret properly (including correctly HS256-signed `ANON_KEY`/`SERVICE_ROLE_KEY` JWTs, not random strings), and can upload a Traefik-label override alongside it.
 - `cloudflare-route`: points one hostname at a fixed port via the Cloudflare API directly, no NAS/SSH interaction — for reverse-proxy setups where many hostnames share one port.
+- `workspaces`: lists configured Cloudflare accounts/NAS targets and flags copy-paste credential mistakes (e.g. a `CF_TUNNEL_ID` accidentally reused across workspaces).
+- `list --all-targets`: aggregates sites across every configured NAS target instead of just the default one.
 - Finds a free local NAS port when one is needed.
 - Prints manual Cloudflare Tunnel setup instructions if API credentials are missing; otherwise creates/updates the tunnel ingress rule and proxied DNS record automatically.
 
@@ -23,7 +25,7 @@ Contact: `pedro@veloso.dev`
 
 - It does not expose Synology DSM, SSH, or MariaDB/Postgres to the public internet.
 - It does not require the Synology DSM database package.
-- It does not generate application code for frameworks other than Flask (`create`) — but `deploy` can start any already-built project regardless of framework.
+- It does not generate application code for frameworks other than Flask/Laravel (`create`) — but `deploy` can start any already-built project regardless of framework.
 - It does not commit `.env`, tokens, generated passwords, or database credentials.
 
 ## Requirements
@@ -106,21 +108,22 @@ CF_TUNNEL_ID=
 
 If they are missing, the CLI prints manual instructions.
 
-## Multiple Cloudflare Accounts / Domains (Workspaces)
+## Workspaces (Multiple Cloudflare Accounts, Multiple NAS Targets)
 
-The NAS stays the same, but the domain, tunnel, or even the Cloudflare *account* used for a
-given site can differ. The root `.env`'s `CF_*` block above is the **default workspace**. Any
-additional Cloudflare account is a folder under `secrets/`, named after the workspace, holding
-its own `cloudflare.env` with the same keys:
+The domain, tunnel, Cloudflare *account*, or even the physical **NAS** used for a given site can
+all differ per site. The root `.env`'s `CF_*`/`NAS_*` blocks are the **default workspace**. Any
+additional workspace is a folder under `secrets/`, named after the workspace, holding *either or
+both* of two optional files:
 
 ```text
 secrets/
   acmeco/
-    cloudflare.env
+    cloudflare.env   # different Cloudflare account/domain/tunnel
+    nas.env          # different physical NAS (optional)
 ```
 
 ```env
-# secrets/acmeco/cloudflare.env
+# secrets/acmeco/cloudflare.env -- same keys as the root .env's CF_* block
 CF_API_TOKEN=
 CF_ACCOUNT_ID=
 CF_ZONE_ID=
@@ -129,18 +132,63 @@ CF_TUNNEL_ID=
 CF_TUNNEL_NAME=acmeco-tunnel
 ```
 
-`secrets/` is already gitignored in full, so workspaces are added or removed just by adding or
-removing a folder — there's no separate manifest to keep in sync. There's no limit to how many
-workspace folders can exist.
+```env
+# secrets/acmeco/nas.env -- only needed if this workspace deploys to a *different* NAS.
+# Any field left out (NAS_USER, NAS_DOCKER_ROOT, ...) inherits the root .env's value, so a
+# workspace that only changes the host doesn't need to repeat everything else.
+NAS_HOST=203.0.113.5
+NAS_SSH_KEY_PATH=/Users/you/.ssh/acmeco_nas_ed25519
+SYSTEM_TYPE=synology
+```
+
+Most workspaces only need `cloudflare.env` (same NAS, different Cloudflare account/domain — this
+was the original use case). A workspace can also define only `nas.env` (same Cloudflare account,
+different physical NAS) or both. `secrets/` is already gitignored in full, so workspaces are
+added or removed just by adding or removing a folder — there's no separate manifest to keep in
+sync, and no limit to how many can exist.
 
 When `create`/`deploy`/`cloudflare-route`/`cloudflare-instructions` run, the domain is matched
-against every known workspace's `CF_ZONE_DOMAIN` (longest match wins), falling back to the
-default workspace if nothing matches. Pass `--workspace <name>` to force a specific workspace
-instead of relying on domain matching (errors if the name doesn't exist).
+against every known workspace's `CF_ZONE_DOMAIN` (longest match wins) to pick the Cloudflare
+account, falling back to the default workspace if nothing matches. The **NAS target** is looked
+up by that same resolved workspace name — there's no equivalent "domain suffix" signal for which
+physical NAS to use, so a workspace without its own `nas.env` just keeps using the default NAS.
+Pass `--workspace <name>` to force a specific workspace (both its Cloudflare account and its NAS
+target, whichever it defines) instead of relying on domain matching:
 
 ```bash
 synology-site create app.acmeco.dev --workspace acmeco
 ```
+
+`SYSTEM_TYPE` (`synology` default, or `generic-linux`) is stored per NAS target for a
+non-Synology Docker-over-SSH host (a VPS, a Raspberry Pi, ...). In practice the tool's only
+Synology-specific behavior is two extra docker-binary fallback paths tried *after* plain
+`docker`/`sudo docker` fail, which are harmless no-ops on any other Linux host — so
+`generic-linux` doesn't currently change any behavior. It's there so a future genuinely
+Synology-only feature (e.g. DSM Task Scheduler-based autostart) has somewhere to branch on
+without a breaking config change later.
+
+### Inspecting Workspaces
+
+```bash
+synology-site workspaces
+```
+
+Lists every known workspace and what it overrides (Cloudflare account, NAS target, or both), and
+runs a "doctor" check for copy-paste credential mistakes — specifically the same `CF_TUNNEL_ID`
+or `CF_API_TOKEN` accidentally reused across two workspaces that were meant to be independent
+(a tunnel belongs to exactly one Cloudflare account, so a shared `CF_TUNNEL_ID` is essentially
+always a mistake). Sharing the same NAS or `CF_ACCOUNT_ID` across workspaces is *not* flagged —
+that's the normal, supported multi-account/same-NAS setup.
+
+### Listing Sites Across Every NAS
+
+```bash
+synology-site list --all-targets
+```
+
+`list` normally shows sites on one NAS target (the default, or `--workspace <name>` for a
+specific one). `--all-targets` fans out over every configured target and aggregates the results;
+a target that's unreachable is reported inline rather than aborting the whole listing.
 
 ## Deploy Flask
 
@@ -355,6 +403,8 @@ synology-site tunnel-fix-autostart
 ```bash
 synology-site check-nas
 synology-site list
+synology-site list --all-targets
+synology-site workspaces
 synology-site start demo.example.com
 synology-site stop demo.example.com
 synology-site set-autostart demo.example.com
@@ -435,13 +485,39 @@ personal/low-traffic use) or `fpm-nginx` (production-grade PHP-FPM + nginx, two 
 see "Deploy Laravel" above). `create` recommends `fpm-nginx` whenever it deploys Laravel without
 it.
 
-`create` also accepts `--frontend`, for pairing a frontend framework with either backend. Only
-`none` (the current default, no-op) is implemented. These values are recognized by the CLI and
-documented, but rejected with a clear "planned" error until built:
+`create` also accepts `--frontend`, for pairing a frontend framework with the Laravel backend
+(Flask has no frontend integration story, and `--frontend` other than `none` is rejected for it).
+`none` is the default (no-op, works with either backend). All other values are implemented:
 
-- `inertia-vue` / `inertia-react` — Laravel's official SPA-without-a-separate-API glue (single container).
-- `livewire` — PHP-driven reactivity, no separate JS framework or build step (single container).
-- `vue` / `react` / `angular` — fully decoupled SPA talking to a Laravel API (two containers per site; the only realistic path for Angular, since it has no Inertia adapter).
+- `livewire` — PHP-driven reactivity via `composer require livewire/livewire`, no separate JS
+  framework or build step, single container. Works with either `--php-server`.
+- `inertia-vue` / `inertia-react` — installed via Laravel Breeze's official installer
+  (`composer require laravel/breeze --dev && php artisan breeze:install vue|react
+  --no-interaction`), built into the image (`npm ci && npm run build`), single container. Works
+  with either `--php-server`.
+- `vue` / `react` / `angular` — a fully decoupled SPA: an independently-scaffolded frontend (Vite
+  for vue/react, Angular CLI for angular) built in its own Docker stage, plus a Laravel API
+  backend (Breeze's `api` stack, Sanctum-ready). Both are served through **one** nginx container
+  on the site's usual published port — nginx serves the SPA's static build and proxies
+  `/api`, `/health`, `/db-health` to PHP-FPM — so this needs no new Cloudflare route, DNS record,
+  or second hostname. **Requires `--php-server fpm-nginx`** (artisan's dev server has no
+  static/proxy split); `create` rejects the combination otherwise. This is also the only path to
+  Angular, since Angular has no Inertia adapter.
+
+```bash
+synology-site create demo.example.com --framework laravel --frontend livewire
+synology-site create demo.example.com --framework laravel --frontend inertia-vue
+synology-site create demo.example.com --framework laravel --frontend vue --php-server fpm-nginx
+```
+
+**Caveat:** the Composer/Breeze/Vite/Angular CLI commands baked into these Dockerfiles are
+authored from documented, current usage but have not been exercised against a live
+`docker compose up -d --build` (this environment has no outbound access to Packagist/npm
+registries reliably enough to verify a full multi-stage build). If a specific version's exact
+non-interactive flags have moved on, the failure mode is a loud build error in that `RUN` step,
+not a silently broken site — the fix is a one-line adjustment to the relevant `app/Dockerfile`
+line. Treat the first deploy of any of `livewire`/`inertia-vue`/`inertia-react`/`vue`/`react`/
+`angular` as a smoke test.
 
 See `docs/laravel-scaffold-options.md` for the full design rationale and phased rollout plan.
 This doesn't limit what can be *deployed*, though — `deploy` already starts any project with its

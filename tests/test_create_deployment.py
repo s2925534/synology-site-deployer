@@ -5,6 +5,7 @@ import pytest
 from synology_site.commands.create import create_site
 from synology_site.config import Settings
 from synology_site.errors import SynologySiteError
+from synology_site.nas.target import NasTarget
 from synology_site.ssh_client import RemoteCommandResult
 
 
@@ -120,15 +121,31 @@ def test_create_site_dry_run_skips_remote_writes_and_start() -> None:
     assert not any("up -d --build" in command for command in fake.commands)
 
 
-def test_create_site_rejects_planned_frontend_before_touching_ssh() -> None:
+def test_create_site_rejects_frontend_for_non_laravel_framework_before_touching_ssh() -> None:
     def boom(_settings: object, _password: object) -> object:
         raise AssertionError("SSH should not be attempted for a rejected --frontend value")
 
-    with pytest.raises(SynologySiteError, match="planned but not implemented"):
+    with pytest.raises(SynologySiteError, match="only applicable to --framework laravel"):
         create_site(
             "demo.example.com",
             settings=settings(),
+            framework="flask",
             frontend="vue",
+            ssh_factory=boom,
+        )
+
+
+def test_create_site_rejects_decoupled_spa_frontend_without_fpm_nginx() -> None:
+    def boom(_settings: object, _password: object) -> object:
+        raise AssertionError("SSH should not be attempted for a rejected frontend/php-server combo")
+
+    with pytest.raises(SynologySiteError, match="requires --php-server fpm-nginx"):
+        create_site(
+            "demo.example.com",
+            settings=settings(),
+            framework="laravel",
+            frontend="vue",
+            php_server="artisan",
             ssh_factory=boom,
         )
 
@@ -160,6 +177,67 @@ def test_create_site_deploys_laravel_without_db() -> None:
     assert "composer create-project" in fake.uploads[
         "/volume1/docker/demo-example-com/app/Dockerfile"
     ]
+
+
+def test_create_site_deploys_laravel_with_livewire_single_container() -> None:
+    fake = FakeSSH()
+
+    result = create_site(
+        "demo.example.com",
+        settings=settings(),
+        framework="laravel",
+        frontend="livewire",
+        ssh_factory=lambda _settings, _password: fake,
+        health_get=lambda _url, timeout: FakeResponse(),
+    )
+
+    assert result.port == 5051
+    dockerfile = fake.uploads["/volume1/docker/demo-example-com/app/Dockerfile"]
+    assert "livewire/livewire" in dockerfile
+    assert "/volume1/docker/demo-example-com/app/nginx.conf" not in fake.uploads
+
+
+def test_create_site_deploys_laravel_inertia_vue_single_container() -> None:
+    fake = FakeSSH()
+
+    result = create_site(
+        "demo.example.com",
+        settings=settings(),
+        framework="laravel",
+        frontend="inertia-vue",
+        ssh_factory=lambda _settings, _password: fake,
+        health_get=lambda _url, timeout: FakeResponse(),
+    )
+
+    assert result.port == 5051
+    dockerfile = fake.uploads["/volume1/docker/demo-example-com/app/Dockerfile"]
+    assert "laravel/breeze" in dockerfile
+    assert "breeze:install vue" in dockerfile
+    assert "npm run build" in dockerfile
+
+
+def test_create_site_deploys_laravel_decoupled_spa_vue_requires_fpm_nginx() -> None:
+    fake = FakeSSH()
+
+    result = create_site(
+        "demo.example.com",
+        settings=settings(),
+        framework="laravel",
+        frontend="vue",
+        php_server="fpm-nginx",
+        ssh_factory=lambda _settings, _password: fake,
+        health_get=lambda _url, timeout: FakeResponse(),
+    )
+
+    assert result.port == 5051
+    dockerfile = fake.uploads["/volume1/docker/demo-example-com/app/Dockerfile"]
+    assert "breeze:install api" in dockerfile
+    assert "FROM node:20-alpine AS frontend-build" in dockerfile
+    nginx_conf = fake.uploads["/volume1/docker/demo-example-com/app/nginx.conf"]
+    assert "location ~ ^/(api|health|db-health)" in nginx_conf
+    assert (
+        "docker inspect -f '{{.State.Running}}' demo-example-com-web" in fake.commands
+    )
 
 
 def test_create_site_deploys_laravel_fpm_nginx_confirms_both_containers() -> None:
@@ -205,6 +283,64 @@ def test_create_site_rejects_unknown_php_server() -> None:
             php_server="bogus",
             ssh_factory=lambda _settings, _password: FakeSSH(),
         )
+
+
+def test_create_site_uses_resolved_nas_target_for_ssh_connection() -> None:
+    """A workspace's own nas.env target must actually drive the SSH connection --
+    not just be resolvable in config while create_site quietly keeps using the default NAS."""
+    from dataclasses import replace
+
+    fake = FakeSSH()
+    captured_settings: list[Settings] = []
+
+    def capturing_ssh_factory(passed_settings: Settings, _password: object) -> FakeSSH:
+        captured_settings.append(passed_settings)
+        return fake
+
+    clienta_target = NasTarget(
+        name="clienta",
+        host="203.0.113.5",
+        port=2222,
+        user="clienta-deploy",
+        ssh_key_path=None,
+        ssh_password="clienta-secret",
+        docker_root="/volume1/docker",
+        local_base_url_host="192.0.2.10",
+        default_start_port=5050,
+        default_end_port=5999,
+    )
+    multi_nas_settings = replace(settings(), nas_targets=(clienta_target,))
+
+    create_site(
+        "demo.example.com",
+        settings=multi_nas_settings,
+        workspace="clienta",
+        ssh_factory=capturing_ssh_factory,
+        health_get=lambda _url, timeout: FakeResponse(),
+    )
+
+    assert captured_settings[0].nas_host == "203.0.113.5"
+    assert captured_settings[0].nas_port == 2222
+    assert captured_settings[0].nas_user == "clienta-deploy"
+    assert captured_settings[0].nas_ssh_password == "clienta-secret"
+
+
+def test_create_site_without_workspace_keeps_using_default_nas_target() -> None:
+    fake = FakeSSH()
+    captured_settings: list[Settings] = []
+
+    def capturing_ssh_factory(passed_settings: Settings, _password: object) -> FakeSSH:
+        captured_settings.append(passed_settings)
+        return fake
+
+    create_site(
+        "demo.example.com",
+        settings=settings(),
+        ssh_factory=capturing_ssh_factory,
+        health_get=lambda _url, timeout: FakeResponse(),
+    )
+
+    assert captured_settings[0].nas_host == "192.0.2.10"
 
 
 def test_create_site_refuses_existing_project_without_force() -> None:

@@ -13,6 +13,12 @@ from synology_site.cloudflare.workspace import (
     resolve_cloudflare_account,
 )
 from synology_site.errors import SynologySiteError
+from synology_site.nas.target import (
+    DEFAULT_TARGET_NAME,
+    NasTarget,
+    discover_nas_targets,
+    resolve_nas_target,
+)
 
 
 @dataclass(frozen=True)
@@ -44,6 +50,7 @@ class Settings:
     dry_run: bool
     default_site_domain: str | None = None
     cloudflare_accounts: tuple[CloudflareAccount, ...] = ()
+    nas_targets: tuple[NasTarget, ...] = ()
 
     @property
     def default_cloudflare_account(self) -> CloudflareAccount:
@@ -57,11 +64,48 @@ class Settings:
             tunnel_name=self.cf_tunnel_name,
         )
 
+    @property
+    def default_nas_target(self) -> NasTarget:
+        return NasTarget(
+            name=DEFAULT_TARGET_NAME,
+            host=self.nas_host,
+            port=self.nas_port,
+            user=self.nas_user,
+            ssh_key_path=self.nas_ssh_key_path,
+            ssh_password=self.nas_ssh_password,
+            docker_root=self.nas_docker_root,
+            local_base_url_host=self.local_base_url_host,
+            default_start_port=self.default_start_port,
+            default_end_port=self.default_end_port,
+        )
+
+    @property
+    def known_workspace_names(self) -> set[str]:
+        return (
+            {DEFAULT_WORKSPACE_NAME}
+            | {account.name for account in self.cloudflare_accounts}
+            | {target.name for target in self.nas_targets}
+        )
+
+    def validate_workspace(self, workspace: str | None) -> None:
+        if workspace is not None and workspace not in self.known_workspace_names:
+            msg = f"Unknown workspace: {workspace}"
+            raise SynologySiteError(msg)
+
     def resolve_cloudflare(self, domain: str, *, workspace: str | None = None) -> CloudflareAccount:
+        self.validate_workspace(workspace)
         return resolve_cloudflare_account(
             domain,
             self.default_cloudflare_account,
             self.cloudflare_accounts,
+            workspace=workspace,
+        )
+
+    def resolve_target(self, *, workspace: str | None = None) -> NasTarget:
+        self.validate_workspace(workspace)
+        return resolve_nas_target(
+            self.default_nas_target,
+            self.nas_targets,
             workspace=workspace,
         )
 
@@ -126,14 +170,35 @@ def load_config(path: str | Path = ".env", secrets_dir: str | Path = "secrets") 
         raise SynologySiteError(msg)
 
     db_host_port = _optional(values.get("DB_HOST_PORT"))
+
+    nas_host = _required(values, "NAS_HOST")
+    nas_port = _int(values, "NAS_PORT", 22)
+    nas_user = _required(values, "NAS_USER")
+    nas_docker_root = _required(values, "NAS_DOCKER_ROOT")
+    nas_ssh_key_path = _optional(values.get("NAS_SSH_KEY_PATH"))
+    nas_ssh_password = _optional(values.get("NAS_SSH_PASSWORD"))
+    local_base_url_host = _required(values, "LOCAL_BASE_URL_HOST")
+    default_nas_target = NasTarget(
+        name=DEFAULT_TARGET_NAME,
+        host=nas_host,
+        port=nas_port,
+        user=nas_user,
+        ssh_key_path=nas_ssh_key_path,
+        ssh_password=nas_ssh_password,
+        docker_root=nas_docker_root,
+        local_base_url_host=local_base_url_host,
+        default_start_port=start_port,
+        default_end_port=end_port,
+    )
+
     return Settings(
-        nas_host=_required(values, "NAS_HOST"),
-        nas_port=_int(values, "NAS_PORT", 22),
-        nas_user=_required(values, "NAS_USER"),
-        nas_docker_root=_required(values, "NAS_DOCKER_ROOT"),
-        nas_ssh_key_path=_optional(values.get("NAS_SSH_KEY_PATH")),
-        nas_ssh_password=_optional(values.get("NAS_SSH_PASSWORD")),
-        local_base_url_host=_required(values, "LOCAL_BASE_URL_HOST"),
+        nas_host=nas_host,
+        nas_port=nas_port,
+        nas_user=nas_user,
+        nas_docker_root=nas_docker_root,
+        nas_ssh_key_path=nas_ssh_key_path,
+        nas_ssh_password=nas_ssh_password,
+        local_base_url_host=local_base_url_host,
         default_start_port=start_port,
         default_end_port=end_port,
         default_framework=values.get("DEFAULT_FRAMEWORK", "flask").strip().lower(),
@@ -154,4 +219,5 @@ def load_config(path: str | Path = ".env", secrets_dir: str | Path = "secrets") 
         dry_run=_bool(values, "DRY_RUN", False),
         default_site_domain=_optional(values.get("DEFAULT_SITE_DOMAIN")),
         cloudflare_accounts=discover_cloudflare_accounts(secrets_dir),
+        nas_targets=discover_nas_targets(secrets_dir, default=default_nas_target),
     )
