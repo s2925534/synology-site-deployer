@@ -245,10 +245,15 @@ Redis has no password and isn't published to a host port — same "internal-only
 Docker network isolation" posture as MariaDB. Add `--with-queue` for a queue worker container
 (`php artisan queue:work`, sharing the app's own build/image, just with a different command) —
 requires `--with-redis`, since a worker only makes sense against a real queue backend, not the
-default `sync` driver which already runs jobs inline with no worker needed.
+default `sync` driver which already runs jobs inline with no worker needed. Add
+`--with-scheduler` for a container looping `php artisan schedule:run` every minute — Laravel has
+no built-in scheduler daemon, so this replaces the system cron entry Laravel's own docs assume.
+Unlike `--with-queue`, `--with-scheduler` doesn't require `--with-db`/`--with-redis` (a fresh
+Laravel install has no scheduled tasks registered by default, so it's harmless until you add
+your own in `routes/console.php`).
 
 ```bash
-synology-site create demo.example.com --framework laravel --with-redis --with-queue
+synology-site create demo.example.com --framework laravel --with-redis --with-queue --with-scheduler
 ```
 
 `--php-server` picks how the app is actually served:

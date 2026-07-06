@@ -76,6 +76,7 @@ class FakeSSH:
             "docker inspect -f '{{.State.Running}}' demo-example-com-web",
             "docker inspect -f '{{.State.Running}}' demo-example-com-redis",
             "docker inspect -f '{{.State.Running}}' demo-example-com-queue",
+            "docker inspect -f '{{.State.Running}}' demo-example-com-scheduler",
         }:
             stdout = "true\n"
         elif command == "docker ps --format '{{.Ports}}'":
@@ -212,6 +213,35 @@ def test_create_site_deploys_laravel_with_queue_worker() -> None:
     )
 
     assert "docker inspect -f '{{.State.Running}}' demo-example-com-queue" in fake.commands
+
+
+def test_create_site_deploys_laravel_with_scheduler() -> None:
+    fake = FakeSSH()
+
+    create_site(
+        "demo.example.com",
+        settings=settings(),
+        framework="laravel",
+        scheduler_enabled=True,
+        ssh_factory=lambda _settings, _password: fake,
+        health_get=lambda _url, timeout: FakeResponse(),
+    )
+
+    assert "docker inspect -f '{{.State.Running}}' demo-example-com-scheduler" in fake.commands
+
+
+def test_create_site_rejects_scheduler_for_non_laravel_framework_before_touching_ssh() -> None:
+    def boom(_settings: object, _password: object) -> object:
+        raise AssertionError("SSH should not be attempted for a rejected --with-scheduler combo")
+
+    with pytest.raises(SynologySiteError, match="only applicable to --framework laravel"):
+        create_site(
+            "demo.example.com",
+            settings=settings(),
+            framework="flask",
+            scheduler_enabled=True,
+            ssh_factory=boom,
+        )
 
 
 def test_create_site_rejects_queue_without_redis() -> None:

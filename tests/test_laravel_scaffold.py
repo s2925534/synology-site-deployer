@@ -13,6 +13,7 @@ def context(
     frontend: str = "none",
     redis_enabled: bool = False,
     queue_enabled: bool = False,
+    scheduler_enabled: bool = False,
 ) -> ScaffoldContext:
     return ScaffoldContext(
         domain="demo.example.com",
@@ -32,6 +33,7 @@ def context(
         frontend=frontend,
         redis_enabled=redis_enabled,
         queue_enabled=queue_enabled,
+        scheduler_enabled=scheduler_enabled,
     )
 
 
@@ -41,11 +43,14 @@ def generated_files(
     frontend: str = "none",
     redis_enabled: bool = False,
     queue_enabled: bool = False,
+    scheduler_enabled: bool = False,
 ) -> dict[str, str]:
     return {
         item.path: item.content
         for item in LaravelScaffold().generate(
-            context(db_enabled, php_server, frontend, redis_enabled, queue_enabled)
+            context(
+                db_enabled, php_server, frontend, redis_enabled, queue_enabled, scheduler_enabled
+            )
         )
     }
 
@@ -353,3 +358,62 @@ def test_queue_worker_container_name_included_in_container_names() -> None:
     )
 
     assert names == ["demo-example-com", "demo-example-com-queue"]
+
+
+def test_scheduler_disabled_by_default() -> None:
+    compose = yaml.safe_load(generated_files()["docker-compose.yml"])
+
+    assert "demo-example-com-scheduler" not in compose["services"]
+
+
+def test_scheduler_works_standalone_without_db_or_redis() -> None:
+    compose = yaml.safe_load(generated_files(scheduler_enabled=True)["docker-compose.yml"])
+
+    scheduler_service = compose["services"]["demo-example-com-scheduler"]
+    assert scheduler_service["command"] == [
+        "sh",
+        "-c",
+        "while true; do php artisan schedule:run --verbose --no-interaction; sleep 60; done",
+    ]
+    assert "depends_on" not in scheduler_service
+
+
+def test_scheduler_depends_on_db_and_redis_when_both_enabled() -> None:
+    compose = yaml.safe_load(
+        generated_files(db_enabled=True, redis_enabled=True, scheduler_enabled=True)[
+            "docker-compose.yml"
+        ]
+    )
+
+    depends_on = compose["services"]["demo-example-com-scheduler"]["depends_on"]
+    assert depends_on["demo-example-com-db"]["condition"] == "service_healthy"
+    assert depends_on["demo-example-com-redis"]["condition"] == "service_healthy"
+
+
+def test_scheduler_with_fpm_nginx_uses_php_fpm_target() -> None:
+    compose = yaml.safe_load(
+        generated_files(php_server="fpm-nginx", scheduler_enabled=True)["docker-compose.yml"]
+    )
+
+    assert compose["services"]["demo-example-com-scheduler"]["build"]["target"] == "php-fpm"
+
+
+def test_scheduler_container_name_included_in_container_names() -> None:
+    names = LaravelScaffold().container_names(context(scheduler_enabled=True))
+
+    assert names == ["demo-example-com", "demo-example-com-scheduler"]
+
+
+def test_scheduler_and_queue_coexist() -> None:
+    compose = yaml.safe_load(
+        generated_files(redis_enabled=True, queue_enabled=True, scheduler_enabled=True)[
+            "docker-compose.yml"
+        ]
+    )
+
+    assert {
+        "demo-example-com",
+        "demo-example-com-redis",
+        "demo-example-com-queue",
+        "demo-example-com-scheduler",
+    } == set(compose["services"])
