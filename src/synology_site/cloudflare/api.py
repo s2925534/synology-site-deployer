@@ -5,7 +5,7 @@ from typing import Any
 
 import requests
 
-from synology_site.config import Settings
+from synology_site.cloudflare.workspace import CloudflareAccount
 from synology_site.errors import SynologySiteError
 
 CLOUDFLARE_API_BASE = "https://api.cloudflare.com/client/v4"
@@ -21,16 +21,16 @@ class CloudflareRouteResult:
 
 
 class CloudflareAPI:
-    def __init__(self, settings: Settings, session: Any = requests) -> None:
-        if not settings.cloudflare_api_ready:
+    def __init__(self, account: CloudflareAccount, session: Any = requests) -> None:
+        if not account.ready:
             raise SynologySiteError("Cloudflare API credentials are incomplete")
-        self.settings = settings
+        self.account = account
         self.session = session
 
     @property
     def headers(self) -> dict[str, str]:
         return {
-            "Authorization": f"Bearer {self.settings.cf_api_token}",
+            "Authorization": f"Bearer {self.account.api_token}",
             "Content-Type": "application/json",
         }
 
@@ -47,8 +47,8 @@ class CloudflareAPI:
 
     def _update_tunnel_ingress(self, hostname: str, service_url: str) -> None:
         endpoint = (
-            f"{CLOUDFLARE_API_BASE}/accounts/{self.settings.cf_account_id}"
-            f"/cfd_tunnel/{self.settings.cf_tunnel_id}/configurations"
+            f"{CLOUDFLARE_API_BASE}/accounts/{self.account.account_id}"
+            f"/cfd_tunnel/{self.account.tunnel_id}/configurations"
         )
         current = self._request("GET", endpoint)
         config = current.get("result", {}).get("config") or {}
@@ -65,8 +65,8 @@ class CloudflareAPI:
         self._request("PUT", endpoint, json={"config": {"ingress": ingress}})
 
     def _ensure_dns_record(self, hostname: str) -> str | None:
-        target = f"{self.settings.cf_tunnel_id}.cfargotunnel.com"
-        list_endpoint = f"{CLOUDFLARE_API_BASE}/zones/{self.settings.cf_zone_id}/dns_records"
+        target = f"{self.account.tunnel_id}.cfargotunnel.com"
+        list_endpoint = f"{CLOUDFLARE_API_BASE}/zones/{self.account.zone_id}/dns_records"
         current = self._request(
             "GET",
             list_endpoint,
@@ -107,10 +107,10 @@ class CloudflareAPI:
 
 
 def configure_cloudflare_route(
-    settings: Settings,
+    account: CloudflareAccount,
     *,
     hostname: str,
     service_url: str,
     session: Any = requests,
 ) -> CloudflareRouteResult:
-    return CloudflareAPI(settings, session=session).configure_tunnel_route(hostname, service_url)
+    return CloudflareAPI(account, session=session).configure_tunnel_route(hostname, service_url)

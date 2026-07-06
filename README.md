@@ -1,6 +1,6 @@
 # Synology Site Deployer
 
-Synology Site Deployer is a local Python CLI for deploying containerized apps to a Synology NAS over SSH. `create` scaffolds and deploys a new Flask app from scratch (optionally with a MariaDB container); `deploy` uploads and starts an existing project's own Compose file for any framework — it doesn't generate app code, so it isn't limited to Flask. `bootstrap-supabase` stands up Supabase's self-hosted stack. `cloudflare-route` wires a Cloudflare Tunnel route to a fixed port directly. All of them can configure Cloudflare Tunnel routes + DNS via the Cloudflare API when credentials are present.
+Synology Site Deployer is a local Python CLI for deploying containerized apps to a Synology NAS over SSH. `create` scaffolds and deploys a new Flask or Laravel app from scratch (optionally with a MariaDB container); `deploy` uploads and starts an existing project's own Compose file for any framework — it doesn't generate app code, so it isn't limited to what `create` supports. `bootstrap-supabase` stands up Supabase's self-hosted stack. `cloudflare-route` wires a Cloudflare Tunnel route to a fixed port directly. All of them can configure Cloudflare Tunnel routes + DNS via the Cloudflare API when credentials are present, across multiple Cloudflare accounts/domains via workspaces (see below).
 
 The tool is generic. Domains, NAS hosts, Docker paths, Cloudflare zones, tunnel names, and ports come from `.env`, CLI options, or validated defaults.
 
@@ -12,7 +12,7 @@ Contact: `pedro@veloso.dev`
 
 ## What It Does
 
-- `create`: scaffolds and deploys a new Flask app to a Synology NAS using Docker Compose, optionally with a MariaDB 11 container (private network + persistent volume), a non-secret project README, `docs/DATABASE.md`, and `/health`/`/db-health` checks.
+- `create`: scaffolds and deploys a new Flask or Laravel app (`--framework`) to a Synology NAS using Docker Compose, optionally with a MariaDB 11 container (private network + persistent volume), a non-secret project README, `docs/DATABASE.md`, and `/health`/`/db-health` checks. `--frontend` is reserved for planned Vue/React/Angular/Inertia/Livewire support (not implemented yet).
 - `deploy`: uploads an existing project's own Compose file (+ optional `.env`) and starts it — any framework, since it doesn't generate app code. `docker compose pull` with a `--build` fallback. Works with a fixed reverse-proxy port (Traefik, etc., no port allocation/Cloudflare/health-check) or a standalone published port (same behavior as `create`).
 - `bootstrap-supabase`: clones and starts Supabase's self-hosted stack, regenerating every security-critical secret properly (including correctly HS256-signed `ANON_KEY`/`SERVICE_ROLE_KEY` JWTs, not random strings), and can upload a Traefik-label override alongside it.
 - `cloudflare-route`: points one hostname at a fixed port via the Cloudflare API directly, no NAS/SSH interaction — for reverse-proxy setups where many hostnames share one port.
@@ -106,6 +106,42 @@ CF_TUNNEL_ID=
 
 If they are missing, the CLI prints manual instructions.
 
+## Multiple Cloudflare Accounts / Domains (Workspaces)
+
+The NAS stays the same, but the domain, tunnel, or even the Cloudflare *account* used for a
+given site can differ. The root `.env`'s `CF_*` block above is the **default workspace**. Any
+additional Cloudflare account is a folder under `secrets/`, named after the workspace, holding
+its own `cloudflare.env` with the same keys:
+
+```text
+secrets/
+  acmeco/
+    cloudflare.env
+```
+
+```env
+# secrets/acmeco/cloudflare.env
+CF_API_TOKEN=
+CF_ACCOUNT_ID=
+CF_ZONE_ID=
+CF_ZONE_DOMAIN=acmeco.dev
+CF_TUNNEL_ID=
+CF_TUNNEL_NAME=acmeco-tunnel
+```
+
+`secrets/` is already gitignored in full, so workspaces are added or removed just by adding or
+removing a folder — there's no separate manifest to keep in sync. There's no limit to how many
+workspace folders can exist.
+
+When `create`/`deploy`/`cloudflare-route`/`cloudflare-instructions` run, the domain is matched
+against every known workspace's `CF_ZONE_DOMAIN` (longest match wins), falling back to the
+default workspace if nothing matches. Pass `--workspace <name>` to force a specific workspace
+instead of relying on domain matching (errors if the name doesn't exist).
+
+```bash
+synology-site create app.acmeco.dev --workspace acmeco
+```
+
 ## Deploy Flask
 
 ```bash
@@ -142,9 +178,41 @@ This adds:
 
 MariaDB port `3306` is not published by default. Do not expose MariaDB to the public internet.
 
+## Deploy Laravel
+
+```bash
+synology-site create demo.example.com --framework laravel
+```
+
+Unlike Flask's scaffold, this doesn't hand-template Laravel's file tree. The generated
+`app/Dockerfile` runs the real `composer create-project laravel/laravel` installer at image-build
+time, so the NAS needs network access to Packagist during the first `docker compose up -d
+--build`. `create` only uploads the Dockerfile, Compose file, `app/.env`, docs, and marker file.
+Add `--with-db` for the same MariaDB container topology as Flask, wired into Laravel's `.env`
+(`DB_CONNECTION=mysql`); without it, Laravel falls back to its own default `sqlite` connection
+(never actually queried, since nothing beyond `/health` runs by default).
+
+`--php-server` picks how the app is actually served:
+
+- `artisan` (default) — `php artisan serve`, a single process in one container. Simplest, matches
+  Flask's one-container-per-site model, fine for personal/low-traffic use. **Not meant for
+  production traffic** — Laravel's own docs say so. If you deploy Laravel without
+  `--php-server fpm-nginx`, `create` prints a warning recommending it.
+- `fpm-nginx` — **the production-recommended option.** PHP-FPM + nginx in two containers
+  (`{slug}` running PHP-FPM, `{slug}-web` running nginx and publishing the port), built from the
+  same Dockerfile via two build targets (`--target php-fpm` / `--target nginx`). nginx serves
+  static assets directly and proxies everything else to PHP-FPM over the container network.
+  `create` waits for both containers to report running before considering the deploy successful.
+
+```bash
+synology-site create demo.example.com --framework laravel --php-server fpm-nginx --with-db
+```
+
+Use this form for any NAS deployment meant to serve real production traffic.
+
 ## Deploy An Existing Project (Any Framework)
 
-`create` only scaffolds new Flask apps. `deploy` is the counterpart for a project that already has its own Dockerfile and Compose file — a Next.js app, a Node API, or anything else with a CI pipeline that builds and pushes an image. It does not generate any application code; it uploads your Compose file (and optional `.env`), then pulls/builds and starts it on the NAS.
+`create` scaffolds new Flask or Laravel apps (`--framework flask|laravel`). `deploy` is the counterpart for a project that already has its own Dockerfile and Compose file — a Next.js app, a Node API, or anything else with a CI pipeline that builds and pushes an image. It does not generate any application code; it uploads your Compose file (and optional `.env`), then pulls/builds and starts it on the NAS.
 
 ```bash
 synology-site deploy app.example.com --compose-file ./infra/web/docker-compose.web.yml --env-file ./infra/web/.env
@@ -347,17 +415,38 @@ docker ps
 curl http://LOCAL_BASE_URL_HOST:PORT/health
 ```
 
-## Future Framework Roadmap
+## Backend + Frontend Roadmap
 
-`create`'s scaffold registry (code generation from templates) currently contains Flask only:
+`create`'s scaffold registry (code generation from templates) now contains two backends:
 
 ```python
 FRAMEWORKS = {
     "flask": FlaskScaffold(),
+    "laravel": LaravelScaffold(),
 }
 ```
 
-Future versions can add Laravel, Lumen, Slim, Symfony, Node.js, React, Vue, or other generators here. This doesn't limit what can be *deployed*, though — `deploy` already starts any project with its own Dockerfile/Compose file regardless of framework, since it uploads an existing Compose file rather than generating one.
+`--framework laravel` doesn't hand-template Laravel's file tree the way Flask's scaffold does —
+that would drift from real `laravel/laravel` releases. Instead, the generated `app/Dockerfile`
+runs the real installer at image-build time (`composer create-project laravel/laravel`), and
+`create` only uploads the wrapper files (Dockerfile, Compose file, `.env`, docs, marker).
+`--php-server` picks the serving model: `artisan` (default, single process, fine for
+personal/low-traffic use) or `fpm-nginx` (production-grade PHP-FPM + nginx, two containers —
+see "Deploy Laravel" above). `create` recommends `fpm-nginx` whenever it deploys Laravel without
+it.
+
+`create` also accepts `--frontend`, for pairing a frontend framework with either backend. Only
+`none` (the current default, no-op) is implemented. These values are recognized by the CLI and
+documented, but rejected with a clear "planned" error until built:
+
+- `inertia-vue` / `inertia-react` — Laravel's official SPA-without-a-separate-API glue (single container).
+- `livewire` — PHP-driven reactivity, no separate JS framework or build step (single container).
+- `vue` / `react` / `angular` — fully decoupled SPA talking to a Laravel API (two containers per site; the only realistic path for Angular, since it has no Inertia adapter).
+
+See `docs/laravel-scaffold-options.md` for the full design rationale and phased rollout plan.
+This doesn't limit what can be *deployed*, though — `deploy` already starts any project with its
+own Dockerfile/Compose file regardless of framework, since it uploads an existing Compose file
+rather than generating one.
 
 ## Testing
 

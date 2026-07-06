@@ -308,6 +308,9 @@ def app(
     dry_run: bool = typer.Option(False, "--dry-run"),
     force: bool = typer.Option(False, "--force"),
     strict_cloudflare: bool = typer.Option(False, "--strict-cloudflare"),
+    workspace: str | None = typer.Option(
+        None, "--workspace", help="Force a specific Cloudflare workspace (see secrets/<name>/)"
+    ),
 ) -> None:
     try:
         settings = load_config()
@@ -350,37 +353,39 @@ def app(
             "expected to be reachable through an existing reverse proxy/tunnel route "
             "(e.g. Traefik) already configured on the NAS."
         )
-    elif settings.cloudflare_api_ready:
-        try:
-            configure_cloudflare_route(
-                settings,
-                hostname=result.domain,
-                service_url=result.local_url,
-            )
-            ok(f"Cloudflare route configured: {result.domain} -> {result.local_url}")
-        except SynologySiteError as exc:
-            warn(str(exc))
-            if strict_cloudflare:
-                raise typer.Exit(1) from exc
+    else:
+        account = settings.resolve_cloudflare(result.domain, workspace=workspace)
+        if account.ready:
+            try:
+                configure_cloudflare_route(
+                    account,
+                    hostname=result.domain,
+                    service_url=result.local_url,
+                )
+                ok(f"Cloudflare route configured: {result.domain} -> {result.local_url}")
+            except SynologySiteError as exc:
+                warn(str(exc))
+                if strict_cloudflare:
+                    raise typer.Exit(1) from exc
+                console.print(
+                    build_manual_instructions(
+                        result.domain,
+                        account.zone_domain,
+                        settings.local_base_url_host,
+                        result.port,
+                        account.tunnel_name,
+                    )
+                )
+        else:
+            warn("Cloudflare API credentials are incomplete. Manual setup is required.")
+            console.rule("Cloudflare")
             console.print(
                 build_manual_instructions(
                     result.domain,
-                    settings.cf_zone_domain,
+                    account.zone_domain,
                     settings.local_base_url_host,
                     result.port,
-                    settings.cf_tunnel_name,
+                    account.tunnel_name,
                 )
             )
-    else:
-        warn("Cloudflare API credentials are incomplete. Manual setup is required.")
-        console.rule("Cloudflare")
-        console.print(
-            build_manual_instructions(
-                result.domain,
-                settings.cf_zone_domain,
-                settings.local_base_url_host,
-                result.port,
-                settings.cf_tunnel_name,
-            )
-        )
     next_step(f"Open {result.local_url or 'the domain via your existing reverse proxy route'}")

@@ -29,13 +29,13 @@ def write_env(tmp_path: Path, extra: str = "") -> Path:
 
 
 def test_load_config_defaults_and_missing_optional_cloudflare(tmp_path: Path) -> None:
-    settings = load_config(write_env(tmp_path))
+    settings = load_config(write_env(tmp_path), secrets_dir=tmp_path / "secrets")
 
     assert settings.nas_host == "192.0.2.10"
     assert settings.nas_port == 22
     assert settings.cf_api_token is None
     assert settings.cf_tunnel_id is None
-    assert settings.cloudflare_api_ready is False
+    assert settings.default_cloudflare_account.ready is False
     assert settings.db_mode == "none"
     assert settings.db_publish_port is False
 
@@ -55,7 +55,7 @@ def test_load_config_detects_complete_cloudflare_api_config(tmp_path: Path) -> N
         )
     )
 
-    assert settings.cloudflare_api_ready is True
+    assert settings.default_cloudflare_account.ready is True
 
 
 def test_load_config_requires_core_values(tmp_path: Path) -> None:
@@ -67,7 +67,7 @@ def test_load_config_requires_core_values(tmp_path: Path) -> None:
 
 
 def test_load_config_default_site_domain_defaults_to_none(tmp_path: Path) -> None:
-    settings = load_config(write_env(tmp_path))
+    settings = load_config(write_env(tmp_path), secrets_dir=tmp_path / "secrets")
 
     assert settings.default_site_domain is None
 
@@ -76,3 +76,57 @@ def test_load_config_reads_default_site_domain(tmp_path: Path) -> None:
     settings = load_config(write_env(tmp_path, "DEFAULT_SITE_DOMAIN=veloso.dev"))
 
     assert settings.default_site_domain == "veloso.dev"
+
+
+def write_workspace(tmp_path: Path, name: str, *, zone_domain: str, **extra: str) -> None:
+    workspace_dir = tmp_path / "secrets" / name
+    workspace_dir.mkdir(parents=True)
+    lines = [f"CF_ZONE_DOMAIN={zone_domain}"] + [f"{key}={value}" for key, value in extra.items()]
+    (workspace_dir / "cloudflare.env").write_text("\n".join(lines), encoding="utf-8")
+
+
+def test_load_config_discovers_extra_cloudflare_workspaces(tmp_path: Path) -> None:
+    write_workspace(
+        tmp_path,
+        "acmeco",
+        zone_domain="acmeco.dev",
+        CF_API_TOKEN="acme-token",
+        CF_ACCOUNT_ID="acme-account",
+        CF_ZONE_ID="acme-zone",
+        CF_TUNNEL_ID="acme-tunnel",
+    )
+
+    settings = load_config(write_env(tmp_path), secrets_dir=tmp_path / "secrets")
+
+    assert [account.name for account in settings.cloudflare_accounts] == ["acmeco"]
+    account = settings.cloudflare_accounts[0]
+    assert account.zone_domain == "acmeco.dev"
+    assert account.ready is True
+
+
+def test_resolve_cloudflare_matches_domain_to_workspace(tmp_path: Path) -> None:
+    write_workspace(tmp_path, "acmeco", zone_domain="acmeco.dev")
+
+    settings = load_config(write_env(tmp_path), secrets_dir=tmp_path / "secrets")
+
+    assert settings.resolve_cloudflare("app.acmeco.dev").name == "acmeco"
+    assert settings.resolve_cloudflare("app.example.com").name == "default"
+
+
+def test_resolve_cloudflare_explicit_workspace_override(tmp_path: Path) -> None:
+    write_workspace(tmp_path, "acmeco", zone_domain="acmeco.dev")
+
+    settings = load_config(write_env(tmp_path), secrets_dir=tmp_path / "secrets")
+
+    assert settings.resolve_cloudflare("app.example.com", workspace="acmeco").name == "acmeco"
+    with pytest.raises(SynologySiteError, match="Unknown Cloudflare workspace"):
+        settings.resolve_cloudflare("app.example.com", workspace="does-not-exist")
+
+
+def test_discover_cloudflare_accounts_requires_zone_domain(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "secrets" / "broken"
+    workspace_dir.mkdir(parents=True)
+    (workspace_dir / "cloudflare.env").write_text("CF_API_TOKEN=token", encoding="utf-8")
+
+    with pytest.raises(SynologySiteError, match="CF_ZONE_DOMAIN"):
+        load_config(write_env(tmp_path), secrets_dir=tmp_path / "secrets")

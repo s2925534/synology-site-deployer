@@ -1,36 +1,18 @@
 from __future__ import annotations
 
 from synology_site.cloudflare.api import configure_cloudflare_route
-from synology_site.config import Settings
+from synology_site.cloudflare.workspace import CloudflareAccount
 
 
-def settings() -> Settings:
-    return Settings(
-        nas_host="192.0.2.10",
-        nas_port=22,
-        nas_user="deploy",
-        nas_docker_root="/volume1/docker",
-        nas_ssh_key_path=None,
-        nas_ssh_password="secret",
-        local_base_url_host="192.0.2.10",
-        default_start_port=5050,
-        default_end_port=5999,
-        default_framework="flask",
-        restart_policy="unless-stopped",
-        cf_api_token="token",
-        cf_account_id="account",
-        cf_zone_id="zone",
-        cf_zone_domain="example.com",
-        cf_tunnel_id="tunnel-id",
-        cf_tunnel_name="my-nas-tunnel",
-        db_mode="none",
-        db_type="mariadb",
-        db_image="mariadb:11",
-        db_password_length=32,
-        db_publish_port=False,
-        db_host_port=None,
-        allow_overwrite=False,
-        dry_run=False,
+def account() -> CloudflareAccount:
+    return CloudflareAccount(
+        name="default",
+        api_token="token",
+        account_id="account",
+        zone_id="zone",
+        zone_domain="example.com",
+        tunnel_id="tunnel-id",
+        tunnel_name="my-nas-tunnel",
     )
 
 
@@ -64,7 +46,7 @@ def test_configure_cloudflare_route_updates_tunnel_and_dns() -> None:
     session = FakeSession()
 
     result = configure_cloudflare_route(
-        settings(),
+        account(),
         hostname="demo.example.com",
         service_url="http://192.0.2.10:5051",
         session=session,

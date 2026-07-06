@@ -1,0 +1,29 @@
+
+Route::get('/health', function () {
+    return response()->json([
+        'status' => 'ok',
+        'service' => '{{ slug }}',
+        'domain' => '{{ domain }}',
+        'framework' => 'laravel',
+    ]);
+});
+{% if db_enabled %}
+
+Route::get('/db-health', function () {
+    try {
+        \DB::select('select 1');
+    } catch (\Throwable $e) {
+        return response()->json([
+            'status' => 'error',
+            'database' => 'not_connected',
+            'message' => 'Database connection failed',
+        ], 503);
+    }
+
+    return response()->json([
+        'status' => 'ok',
+        'database' => 'connected',
+        'service' => '{{ slug }}',
+    ]);
+});
+{% endif %}

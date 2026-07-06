@@ -27,7 +27,12 @@ from synology_site.errors import SynologySiteError
 from synology_site.naming import db_container_name, domain_to_slug
 from synology_site.output import console, next_step, ok, warn
 from synology_site.port_allocator import find_available_port
-from synology_site.scaffold import FRAMEWORKS
+from synology_site.scaffold import (
+    FRAMEWORKS,
+    PRODUCTION_PHP_SERVERS,
+    validate_frontend,
+    validate_php_server,
+)
 from synology_site.scaffold.base import GeneratedFile, ScaffoldContext
 from synology_site.ssh_client import SSHClient
 from synology_site.validators import apply_default_site_domain, validate_domain
@@ -61,19 +66,25 @@ def create_site(
     dry_run: bool = False,
     strict_cloudflare: bool = False,
     db_mode: str = "none",
+    frontend: str = "none",
+    php_server: str = "artisan",
+    workspace: str | None = None,
     ssh_factory: SSHFactory = default_ssh_factory,
     health_get: HealthGetter = requests.get,
     prompted_password: str | None = None,
 ) -> CreateResult:
     if db_mode not in {"none", "container"}:
         raise SynologySiteError("Only DB mode none or container is supported")
+    validate_frontend(frontend)
+    validate_php_server(framework, php_server)
     domain = validate_domain(domain)
     scaffold = FRAMEWORKS.get(framework)
     if scaffold is None:
         msg = f"Unsupported framework: {framework}"
         raise SynologySiteError(msg)
 
-    cf_split = split_domain_for_zone(domain, settings.cf_zone_domain, strict=False)
+    account = settings.resolve_cloudflare(domain, workspace=workspace)
+    cf_split = split_domain_for_zone(domain, account.zone_domain, strict=False)
     if cf_split.warning and strict_cloudflare:
         raise SynologySiteError(cf_split.warning)
 
@@ -113,6 +124,7 @@ def create_site(
             db_root_password=db_root_password,
             db_publish_port=settings.db_publish_port,
             db_host_port=settings.db_host_port,
+            php_server=php_server,
         )
         files = scaffold.generate(context)
         if dry_run:
@@ -133,7 +145,8 @@ def create_site(
         _upload_files(ssh, project_path, files)
         _start_compose(ssh, project_path, compose)
         docker = docker_command(ssh)
-        _confirm_container(ssh, slug, docker)
+        for container_name in scaffold.container_names(context):
+            _confirm_container(ssh, container_name, docker)
         if context.db_enabled:
             _confirm_container(ssh, db_container_name(domain), docker)
         _confirm_health(health_get, f"{resolved_local_url}/health")
@@ -215,9 +228,24 @@ def app(
     port: int | None = typer.Option(None, "--port"),
     with_db: bool = typer.Option(False, "--with-db"),
     db_mode: str = typer.Option("none", "--db-mode"),
+    frontend: str = typer.Option(
+        "none",
+        "--frontend",
+        help="Frontend to pair with the backend. Only 'none' is implemented today; "
+        "vue/react/angular/inertia-vue/inertia-react/livewire are planned.",
+    ),
+    php_server: str = typer.Option(
+        "artisan",
+        "--php-server",
+        help="Laravel only. 'artisan' (php artisan serve, single process) or 'fpm-nginx' "
+        "(PHP-FPM + nginx, two containers -- recommended for production NAS use).",
+    ),
     dry_run: bool = typer.Option(False, "--dry-run"),
     force: bool = typer.Option(False, "--force"),
     strict_cloudflare: bool = typer.Option(False, "--strict-cloudflare"),
+    workspace: str | None = typer.Option(
+        None, "--workspace", help="Force a specific Cloudflare workspace (see secrets/<name>/)"
+    ),
 ) -> None:
     selected_db_mode = "container" if with_db else db_mode
     try:
@@ -235,6 +263,9 @@ def app(
             dry_run=dry_run or settings.dry_run,
             strict_cloudflare=strict_cloudflare,
             db_mode=selected_db_mode,
+            frontend=frontend,
+            php_server=php_server,
+            workspace=workspace,
             prompted_password=prompted_password,
         )
     except SynologySiteError as exc:
@@ -248,10 +279,17 @@ def app(
     ok(f"Health URL: {result.health_url}")
     if result.db_health_url:
         ok(f"DB Health URL: {result.db_health_url}")
-    if settings.cloudflare_api_ready:
+    if framework == "laravel" and php_server not in PRODUCTION_PHP_SERVERS:
+        warn(
+            "Running php artisan serve (single process, not production-grade). "
+            "For a NAS deployment meant for production traffic, re-run with "
+            "--php-server fpm-nginx for a PHP-FPM + nginx setup."
+        )
+    account = settings.resolve_cloudflare(result.domain, workspace=workspace)
+    if account.ready:
         try:
             configure_cloudflare_route(
-                settings,
+                account,
                 hostname=result.domain,
                 service_url=result.local_url,
             )
@@ -263,10 +301,10 @@ def app(
             console.print(
                 build_manual_instructions(
                     result.domain,
-                    settings.cf_zone_domain,
+                    account.zone_domain,
                     settings.local_base_url_host,
                     result.port,
-                    settings.cf_tunnel_name,
+                    account.tunnel_name,
                 )
             )
     else:
@@ -275,10 +313,10 @@ def app(
         console.print(
             build_manual_instructions(
                 result.domain,
-                settings.cf_zone_domain,
+                account.zone_domain,
                 settings.local_base_url_host,
                 result.port,
-                settings.cf_tunnel_name,
+                account.tunnel_name,
             )
         )
     next_step(f"Open {result.local_url}")

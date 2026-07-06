@@ -33,15 +33,22 @@ class CloudflaredContainer:
 SSHFactory = Callable[[Settings, str | None], SSHClient]
 
 
-def cloudflare_instructions(domain: str, port: int = typer.Option(..., "--port")) -> None:
+def cloudflare_instructions(
+    domain: str,
+    port: int = typer.Option(..., "--port"),
+    workspace: str | None = typer.Option(
+        None, "--workspace", help="Force a specific Cloudflare workspace (see secrets/<name>/)"
+    ),
+) -> None:
     try:
         settings = load_config()
+        account = settings.resolve_cloudflare(domain, workspace=workspace)
         instructions = build_manual_instructions(
             domain,
-            settings.cf_zone_domain,
+            account.zone_domain,
             settings.local_base_url_host,
             port,
-            settings.cf_tunnel_name,
+            account.tunnel_name,
         )
     except SynologySiteError as exc:
         console.print(f"[ERROR] {exc}")
