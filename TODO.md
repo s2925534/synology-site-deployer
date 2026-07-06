@@ -97,7 +97,7 @@ almost always needs more than a web container.
 
 **Phase 7 complete.** All three items (`--with-redis`, `--with-queue`, `--with-scheduler`) shipped, independently combinable with each other and with `--with-db`, across both `--php-server` modes.
 
-## Phase 8 — Popular Self-Hosted App Bootstraps (Not Started)
+## Phase 8 — Popular Self-Hosted App Bootstraps
 
 `bootstrap-supabase` already proves out the pattern (clone the project's own compose file,
 regenerate security-critical secrets properly, wire up the tunnel). The self-hosting/homelab
@@ -105,11 +105,11 @@ audience this tool serves regularly asks for the same treatment for other popula
 
 | Status | Item |
 |---|---|
+| 🟢 | `bootstrap-uptime-kuma` — self-hosted status/uptime monitoring, natural pairing with `list --all-targets`. Turned out much simpler than Supabase in practice: Uptime Kuma ships as a single official image with no secrets to regenerate (own first-run setup wizard), so there's no repo to clone or `.env` to rewrite — just a small generated Compose file with a named volume, reusing the same port allocator `create` uses. Doesn't wire up Cloudflare automatically (same as `bootstrap-supabase`); prints the `cloudflare-route` follow-up command instead. |
 | 🔴 | `bootstrap-n8n` — self-hosted workflow automation, very popular alongside Supabase |
-| 🔴 | `bootstrap-uptime-kuma` — self-hosted status/uptime monitoring, natural pairing with `list --all-targets` |
 | 🔴 | `bootstrap-vaultwarden` — self-hosted Bitwarden-compatible password manager |
 | 🔴 | `bootstrap-plausible` or `bootstrap-umami` — privacy-friendly analytics, common ask for anyone deploying sites with this tool |
-| 🔴 | Extract the shared "clone + regenerate secrets + wire tunnel" logic out of `bootstrap_supabase.py` into a reusable helper once a second bootstrap command exists, instead of copy-pasting it |
+| 🔴 | Extract the shared "clone + regenerate secrets + wire tunnel" logic out of `bootstrap_supabase.py` into a reusable helper once a bootstrap command that actually needs it exists — `bootstrap-uptime-kuma` didn't need any of that machinery, so there was nothing to share yet. `bootstrap-n8n`/`bootstrap-vaultwarden` (which do have real secrets to generate) are better candidates to trigger this extraction. |
 
 ## Phase 9 — Deployment Lifecycle (Not Started)
 
