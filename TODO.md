@@ -92,7 +92,9 @@ almost always needs more than a web container.
 |---|---|
 | 🟢 | `--with-redis` alongside `--with-db` (independent of each other — either, both, or neither) — adds a `redis:7-alpine` container, no password, not published to a host port (same posture as MariaDB); switches `SESSION_DRIVER`/`CACHE_STORE`/`QUEUE_CONNECTION` from `file`/`sync` to `redis` in `app/.env` and adds the `redis` PHP extension. Works with every `--php-server`/`--frontend` combination, including alongside `--with-db` simultaneously. Laravel-only (validated, same pattern as `--frontend`/`--php-server`). |
 | 🟢 | `--with-queue` — queue worker container (`php artisan queue:work --sleep=3 --tries=3 --max-time=3600`) reusing the app's own build/image (same Dockerfile target, different `command:`), requires `--with-redis`. Works with both `--php-server` modes and alongside `--with-db`. |
-| 🔴 | Scheduler container running `php artisan schedule:run` on a cron loop (Laravel has no built-in daemon for this — needs an explicit cron or sleep-loop container) |
+| 🟢 | `--with-scheduler` — container looping `php artisan schedule:run --verbose --no-interaction` every 60s via a shell `while true` loop (no cron daemon installed), reusing the app's own build/image. Unlike `--with-queue`, doesn't require `--with-db`/`--with-redis` — a fresh install has no scheduled tasks, so it's a no-op until you register some. |
+
+**Phase 7 complete.** All three items (`--with-redis`, `--with-queue`, `--with-scheduler`) shipped, independently combinable with each other and with `--with-db`, across both `--php-server` modes.
 
 ## Phase 8 — Popular Self-Hosted App Bootstraps (Not Started)
 

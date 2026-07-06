@@ -82,6 +82,28 @@ services:
     networks:
       - {{ db_network }}
 {% endif %}
+{% if scheduler_enabled %}
+
+  {{ slug }}-scheduler:
+    build:
+      context: ./app
+    container_name: {{ slug }}-scheduler
+    restart: {{ restart_policy }}
+    command: ["sh", "-c", "while true; do php artisan schedule:run --verbose --no-interaction; sleep 60; done"]
+{% if db_enabled or redis_enabled %}
+    depends_on:
+{% if db_enabled %}
+      {{ db_container }}:
+        condition: service_healthy
+{% endif %}
+{% if redis_enabled %}
+      {{ redis_container }}:
+        condition: service_healthy
+{% endif %}
+    networks:
+      - {{ db_network }}
+{% endif %}
+{% endif %}
 {% if db_enabled or redis_enabled %}
 
 volumes:

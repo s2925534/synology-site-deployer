@@ -68,6 +68,7 @@ def create_site(
     db_mode: str = "none",
     redis_enabled: bool = False,
     queue_enabled: bool = False,
+    scheduler_enabled: bool = False,
     frontend: str = "none",
     php_server: str = "artisan",
     workspace: str | None = None,
@@ -86,6 +87,8 @@ def create_site(
             "--with-queue requires --with-redis (a queue worker needs a real queue backend, "
             "not the default sync driver)"
         )
+    if scheduler_enabled and framework != "laravel":
+        raise SynologySiteError("--with-scheduler is only applicable to --framework laravel")
     validate_php_server(framework, php_server)
     validate_frontend(framework, frontend, php_server)
     domain = validate_domain(domain)
@@ -149,6 +152,7 @@ def create_site(
             frontend=frontend,
             redis_enabled=redis_enabled,
             queue_enabled=queue_enabled,
+            scheduler_enabled=scheduler_enabled,
         )
         files = scaffold.generate(context)
         if dry_run:
@@ -266,6 +270,12 @@ def app(
         help="Laravel only. Adds a queue worker container (php artisan queue:work) sharing "
         "the app's image. Requires --with-redis.",
     ),
+    with_scheduler: bool = typer.Option(
+        False,
+        "--with-scheduler",
+        help="Laravel only. Adds a container looping php artisan schedule:run every minute "
+        "(Laravel has no built-in scheduler daemon).",
+    ),
     frontend: str = typer.Option(
         "none",
         "--frontend",
@@ -308,6 +318,7 @@ def app(
             db_mode=selected_db_mode,
             redis_enabled=with_redis,
             queue_enabled=with_queue,
+            scheduler_enabled=with_scheduler,
             frontend=frontend,
             php_server=php_server,
             workspace=workspace,

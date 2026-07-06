@@ -73,6 +73,8 @@ class LaravelScaffold:
         )
         if context.queue_enabled:
             names.append(f"{context.slug}-queue")
+        if context.scheduler_enabled:
+            names.append(f"{context.slug}-scheduler")
         return names
 
     def _render(self, template_name: str, values: dict[str, object]) -> str:
