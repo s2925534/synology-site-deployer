@@ -24,13 +24,15 @@ def configure_route(
     port: int,
     settings: Settings,
     service_host: str | None = None,
+    workspace: str | None = None,
     session: Any = requests,
 ) -> CloudflareRouteResult:
     hostname = validate_domain(hostname)
     host = service_host or settings.local_base_url_host
     service_url = f"http://{host}:{port}"
+    account = settings.resolve_cloudflare(hostname, workspace=workspace)
     return configure_cloudflare_route(
-        settings, hostname=hostname, service_url=service_url, session=session
+        account, hostname=hostname, service_url=service_url, session=session
     )
 
 
@@ -42,12 +44,15 @@ def app(
     service_host: str | None = typer.Option(
         None, "--service-host", help="Override the service host (defaults to LOCAL_BASE_URL_HOST)"
     ),
+    workspace: str | None = typer.Option(
+        None, "--workspace", help="Force a specific Cloudflare workspace (see secrets/<name>/)"
+    ),
 ) -> None:
     try:
         settings = load_config()
         hostname = apply_default_site_domain(hostname, settings.default_site_domain)
         result = configure_route(
-            hostname, port=port, settings=settings, service_host=service_host
+            hostname, port=port, settings=settings, service_host=service_host, workspace=workspace
         )
     except SynologySiteError as exc:
         console.print(f"[ERROR] {exc}")

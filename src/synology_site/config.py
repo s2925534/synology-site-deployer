@@ -6,6 +6,12 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
+from synology_site.cloudflare.workspace import (
+    DEFAULT_WORKSPACE_NAME,
+    CloudflareAccount,
+    discover_cloudflare_accounts,
+    resolve_cloudflare_account,
+)
 from synology_site.errors import SynologySiteError
 
 
@@ -37,17 +43,26 @@ class Settings:
     allow_overwrite: bool
     dry_run: bool
     default_site_domain: str | None = None
+    cloudflare_accounts: tuple[CloudflareAccount, ...] = ()
 
     @property
-    def cloudflare_api_ready(self) -> bool:
-        return all(
-            [
-                self.cf_api_token,
-                self.cf_account_id,
-                self.cf_zone_id,
-                self.cf_zone_domain,
-                self.cf_tunnel_id,
-            ]
+    def default_cloudflare_account(self) -> CloudflareAccount:
+        return CloudflareAccount(
+            name=DEFAULT_WORKSPACE_NAME,
+            api_token=self.cf_api_token,
+            account_id=self.cf_account_id,
+            zone_id=self.cf_zone_id,
+            zone_domain=self.cf_zone_domain,
+            tunnel_id=self.cf_tunnel_id,
+            tunnel_name=self.cf_tunnel_name,
+        )
+
+    def resolve_cloudflare(self, domain: str, *, workspace: str | None = None) -> CloudflareAccount:
+        return resolve_cloudflare_account(
+            domain,
+            self.default_cloudflare_account,
+            self.cloudflare_accounts,
+            workspace=workspace,
         )
 
 
@@ -97,7 +112,7 @@ def _bool(values: dict[str, str], key: str, default: bool = False) -> bool:
     return raw.lower() in {"1", "true", "yes", "on"}
 
 
-def load_config(path: str | Path = ".env") -> Settings:
+def load_config(path: str | Path = ".env", secrets_dir: str | Path = "secrets") -> Settings:
     values = _merged_env(path)
     start_port = _int(values, "DEFAULT_START_PORT", 5050)
     end_port = _int(values, "DEFAULT_END_PORT", 5999)
@@ -138,4 +153,5 @@ def load_config(path: str | Path = ".env") -> Settings:
         allow_overwrite=_bool(values, "ALLOW_OVERWRITE", False),
         dry_run=_bool(values, "DRY_RUN", False),
         default_site_domain=_optional(values.get("DEFAULT_SITE_DOMAIN")),
+        cloudflare_accounts=discover_cloudflare_accounts(secrets_dir),
     )

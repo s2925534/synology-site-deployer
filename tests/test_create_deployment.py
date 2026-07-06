@@ -72,6 +72,7 @@ class FakeSSH:
         elif command in {
             "docker inspect -f '{{.State.Running}}' demo-example-com",
             "docker inspect -f '{{.State.Running}}' demo-example-com-db",
+            "docker inspect -f '{{.State.Running}}' demo-example-com-web",
         }:
             stdout = "true\n"
         elif command == "docker ps --format '{{.Ports}}'":
@@ -117,6 +118,93 @@ def test_create_site_dry_run_skips_remote_writes_and_start() -> None:
     assert result.uploaded_files
     assert fake.uploads == {}
     assert not any("up -d --build" in command for command in fake.commands)
+
+
+def test_create_site_rejects_planned_frontend_before_touching_ssh() -> None:
+    def boom(_settings: object, _password: object) -> object:
+        raise AssertionError("SSH should not be attempted for a rejected --frontend value")
+
+    with pytest.raises(SynologySiteError, match="planned but not implemented"):
+        create_site(
+            "demo.example.com",
+            settings=settings(),
+            frontend="vue",
+            ssh_factory=boom,
+        )
+
+
+def test_create_site_rejects_unknown_frontend() -> None:
+    with pytest.raises(SynologySiteError, match="Unsupported frontend"):
+        create_site(
+            "demo.example.com",
+            settings=settings(),
+            frontend="svelte-but-not-inertia",
+            ssh_factory=lambda _settings, _password: FakeSSH(),
+        )
+
+
+def test_create_site_deploys_laravel_without_db() -> None:
+    fake = FakeSSH()
+
+    result = create_site(
+        "demo.example.com",
+        settings=settings(),
+        framework="laravel",
+        ssh_factory=lambda _settings, _password: fake,
+        health_get=lambda _url, timeout: FakeResponse(),
+    )
+
+    assert result.port == 5051
+    assert "/volume1/docker/demo-example-com/app/Dockerfile" in fake.uploads
+    assert "/volume1/docker/demo-example-com/docker-compose.yml" in fake.uploads
+    assert "composer create-project" in fake.uploads[
+        "/volume1/docker/demo-example-com/app/Dockerfile"
+    ]
+
+
+def test_create_site_deploys_laravel_fpm_nginx_confirms_both_containers() -> None:
+    fake = FakeSSH()
+
+    result = create_site(
+        "demo.example.com",
+        settings=settings(),
+        framework="laravel",
+        php_server="fpm-nginx",
+        ssh_factory=lambda _settings, _password: fake,
+        health_get=lambda _url, timeout: FakeResponse(),
+    )
+
+    assert result.port == 5051
+    assert "/volume1/docker/demo-example-com/app/nginx.conf" in fake.uploads
+    assert (
+        "docker inspect -f '{{.State.Running}}' demo-example-com-web" in fake.commands
+    )
+    assert "docker inspect -f '{{.State.Running}}' demo-example-com" in fake.commands
+    dockerfile = fake.uploads["/volume1/docker/demo-example-com/app/Dockerfile"]
+    assert "FROM php:8.3-fpm AS php-fpm" in dockerfile
+    assert "FROM nginx:alpine AS nginx" in dockerfile
+
+
+def test_create_site_rejects_php_server_for_non_laravel_framework() -> None:
+    with pytest.raises(SynologySiteError, match="only applicable to --framework laravel"):
+        create_site(
+            "demo.example.com",
+            settings=settings(),
+            framework="flask",
+            php_server="fpm-nginx",
+            ssh_factory=lambda _settings, _password: FakeSSH(),
+        )
+
+
+def test_create_site_rejects_unknown_php_server() -> None:
+    with pytest.raises(SynologySiteError, match="Unsupported --php-server"):
+        create_site(
+            "demo.example.com",
+            settings=settings(),
+            framework="laravel",
+            php_server="bogus",
+            ssh_factory=lambda _settings, _password: FakeSSH(),
+        )
 
 
 def test_create_site_refuses_existing_project_without_force() -> None:
