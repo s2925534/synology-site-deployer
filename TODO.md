@@ -81,7 +81,7 @@ yet covered, picked for popularity rather than novelty.
 |---|---|
 | 🔴 | `--framework nextjs` — Next.js (React full-stack), scaffolded via `npx create-next-app` at build time, same Option-C hybrid pattern as Laravel (don't hand-template it) |
 | 🔴 | `--framework fastapi` — FastAPI has largely replaced Flask as the default choice for new Python APIs; `uv`/`pip`-based build, ASGI server (uvicorn/gunicorn) instead of Flask's WSGI dev server |
-| 🔴 | Evaluate whether Flask's own scaffold should gain a `--python-server` axis mirroring Laravel's `--php-server` (gunicorn is already production-grade, so likely no — worth a deliberate "no" rather than leaving it unasked) |
+| 🟢 | **Decided: no.** Evaluated whether Flask's scaffold should gain a `--python-server` axis mirroring Laravel's `--php-server`. Laravel needed the axis because its default `php artisan serve` is an explicitly-documented dev-only single process; Flask's `flask_dockerfile.j2` already runs `gunicorn` (a real pre-fork multi-worker WSGI server) as its only mode, so there's no dev-vs-production serving gap to offer a flag for. If FastAPI is added (this phase), it needs the equivalent one-time decision — likely also "no axis needed" if it defaults straight to `uvicorn`/`gunicorn` rather than `uvicorn --reload`. |
 
 ## Phase 7 — Laravel Production Completeness (Not Started)
 
