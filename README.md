@@ -15,6 +15,7 @@ Contact: `pedro@veloso.dev`
 - `create`: scaffolds and deploys a new Flask, Laravel, FastAPI, or Next.js app (`--framework`) to a Synology NAS using Docker Compose, optionally with a MariaDB 11 container (private network + persistent volume), a non-secret project README, `docs/DATABASE.md`, and `/health`/`/db-health` checks. `--frontend` pairs a Vue/React/Angular/Inertia/Livewire frontend with the Laravel backend (see "Backend + Frontend Roadmap").
 - `deploy`: uploads an existing project's own Compose file (+ optional `.env`) and starts it — any framework, since it doesn't generate app code. `docker compose pull` with a `--build` fallback. Works with a fixed reverse-proxy port (Traefik, etc., no port allocation/Cloudflare/health-check) or a standalone published port (same behavior as `create`).
 - `bootstrap-supabase`: clones and starts Supabase's self-hosted stack, regenerating every security-critical secret properly (including correctly HS256-signed `ANON_KEY`/`SERVICE_ROLE_KEY` JWTs, not random strings), and can upload a Traefik-label override alongside it.
+- `bootstrap-uptime-kuma`: stands up Uptime Kuma (self-hosted status/uptime monitoring), a single official image with no secrets to regenerate.
 - `cloudflare-route`: points one hostname at a fixed port via the Cloudflare API directly, no NAS/SSH interaction — for reverse-proxy setups where many hostnames share one port.
 - `workspaces`: lists configured Cloudflare accounts/NAS targets and flags copy-paste credential mistakes (e.g. a `CF_TUNNEL_ID` accidentally reused across workspaces).
 - `list --all-targets`: aggregates sites across every configured NAS target instead of just the default one.
@@ -409,6 +410,35 @@ Options:
 - `--traefik-override PATH` — a local `docker-compose.override.yml` adding Traefik labels to Supabase's `kong`/`studio` services, uploaded into the project directory before startup. **Note:** Supabase's own `.env` sets `COMPOSE_FILE=docker-compose.yml`, which disables Compose's normal override auto-discovery — when this option is given, the command passes `-f docker-compose.yml -f docker-compose.override.yml` explicitly to `up -d` rather than relying on it.
 - `--force` — tear down (`docker compose down` + `sudo rm -rf`, since Postgres writes its data directory as a container UID the SSH user can't otherwise remove) and recreate an existing install
 - `--dry-run`
+
+## Bootstrapping Uptime Kuma
+
+`bootstrap-uptime-kuma` stands up [Uptime Kuma](https://github.com/louislam/uptime-kuma), a
+self-hosted status/uptime monitor — the same "one command, popular self-hosted stack" pattern as
+`bootstrap-supabase`, but much simpler: Uptime Kuma ships as a single official image
+(`louislam/uptime-kuma:1`) with no secrets to regenerate (it has its own first-run setup wizard
+for creating the admin account), so there's no repo to clone and no `.env` to rewrite.
+
+```bash
+synology-site bootstrap-uptime-kuma
+```
+
+This finds a free port (same allocator `create` uses), generates a minimal Compose file with a
+named volume for Uptime Kuma's SQLite data at `/app/data`, uploads it, and starts it. Visit the
+printed local URL to complete the first-run setup wizard — there is no default login.
+
+Options:
+
+- `--project-dir-name NAME` (default `uptime-kuma`) — NAS folder name under `NAS_DOCKER_ROOT`, also used as the container name
+- `--port N` — request a specific host port instead of auto-allocating one
+- `--force` — tear down and recreate an existing install (no `sudo` needed here — unlike Supabase's Postgres, Uptime Kuma's data lives in a named Docker volume, not a bind-mounted directory the SSH user doesn't own)
+- `--dry-run`
+
+Wire up public access the same way as any fixed-port service:
+
+```bash
+synology-site cloudflare-route status.example.com --port <the allocated port>
+```
 
 ## Manual Cloudflare Route
 
