@@ -8,9 +8,17 @@ services:
 {% if db_enabled %}
     env_file:
       - ./app/.env
+{% endif %}
+{% if db_enabled or redis_enabled %}
     depends_on:
+{% if db_enabled %}
       {{ db_container }}:
         condition: service_healthy
+{% endif %}
+{% if redis_enabled %}
+      {{ redis_container }}:
+        condition: service_healthy
+{% endif %}
     networks:
       - {{ db_network }}
       - default
@@ -26,7 +34,7 @@ services:
       - "{{ port }}:80"
     depends_on:
       - {{ slug }}
-{% if db_enabled %}
+{% if db_enabled or redis_enabled %}
     networks:
       - default
 {% endif %}
@@ -54,9 +62,32 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+{% endif %}
+{% if redis_enabled %}
+
+  {{ redis_container }}:
+    image: redis:7-alpine
+    container_name: {{ redis_container }}
+    restart: {{ restart_policy }}
+    volumes:
+      - {{ redis_volume }}:/data
+    networks:
+      - {{ db_network }}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+{% endif %}
+{% if db_enabled or redis_enabled %}
 
 volumes:
+{% if db_enabled %}
   {{ db_volume }}:
+{% endif %}
+{% if redis_enabled %}
+  {{ redis_volume }}:
+{% endif %}
 
 networks:
   {{ db_network }}:

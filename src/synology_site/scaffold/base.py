@@ -4,7 +4,13 @@ from dataclasses import dataclass
 
 from synology_site import __version__
 from synology_site.database.naming import database_name, database_user
-from synology_site.naming import db_container_name, db_volume_name, network_name
+from synology_site.naming import (
+    db_container_name,
+    db_volume_name,
+    network_name,
+    redis_container_name,
+    redis_volume_name,
+)
 
 # "none" -- no frontend framework, just the backend (default).
 # "livewire" / "inertia-vue" / "inertia-react" -- single container, glue lives inside the same
@@ -49,6 +55,7 @@ class ScaffoldContext:
     cloudflare_manual_required: bool = True
     php_server: str = "artisan"
     frontend: str = "none"
+    redis_enabled: bool = False
 
 
 def common_template_values(context: ScaffoldContext, *, internal_port: int) -> dict[str, object]:
@@ -81,6 +88,9 @@ def common_template_values(context: ScaffoldContext, *, internal_port: int) -> d
         "db_network": network_name(context.domain),
         "db_publish_port": context.db_publish_port,
         "db_host_port": context.db_host_port,
+        "redis_enabled": context.redis_enabled,
+        "redis_container": redis_container_name(context.domain),
+        "redis_volume": redis_volume_name(context.domain),
         "cloudflare_attempted": context.cloudflare_attempted,
         "cloudflare_configured": context.cloudflare_configured,
         "cloudflare_manual_required": context.cloudflare_manual_required,

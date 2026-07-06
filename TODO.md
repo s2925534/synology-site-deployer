@@ -83,17 +83,16 @@ yet covered, picked for popularity rather than novelty.
 | 🔴 | `--framework fastapi` — FastAPI has largely replaced Flask as the default choice for new Python APIs; `uv`/`pip`-based build, ASGI server (uvicorn/gunicorn) instead of Flask's WSGI dev server |
 | 🟢 | **Decided: no.** Evaluated whether Flask's scaffold should gain a `--python-server` axis mirroring Laravel's `--php-server`. Laravel needed the axis because its default `php artisan serve` is an explicitly-documented dev-only single process; Flask's `flask_dockerfile.j2` already runs `gunicorn` (a real pre-fork multi-worker WSGI server) as its only mode, so there's no dev-vs-production serving gap to offer a flag for. If FastAPI is added (this phase), it needs the equivalent one-time decision — likely also "no axis needed" if it defaults straight to `uvicorn`/`gunicorn` rather than `uvicorn --reload`. |
 
-## Phase 7 — Laravel Production Completeness (Not Started)
+## Phase 7 — Laravel Production Completeness
 
 Arguably a bigger real-world gap than the frontend work: a Laravel app in actual production
 almost always needs more than a web container.
 
 | Status | Item |
 |---|---|
+| 🟢 | `--with-redis` alongside `--with-db` (independent of each other — either, both, or neither) — adds a `redis:7-alpine` container, no password, not published to a host port (same posture as MariaDB); switches `SESSION_DRIVER`/`CACHE_STORE`/`QUEUE_CONNECTION` from `file`/`sync` to `redis` in `app/.env` and adds the `redis` PHP extension. Works with every `--php-server`/`--frontend` combination, including alongside `--with-db` simultaneously. Laravel-only (validated, same pattern as `--frontend`/`--php-server`). |
 | 🔴 | Queue worker container (`php artisan queue:work`) as an opt-in sibling service, sharing the same app image/build |
 | 🔴 | Scheduler container running `php artisan schedule:run` on a cron loop (Laravel has no built-in daemon for this — needs an explicit cron or sleep-loop container) |
-| 🔴 | `--with-redis` alongside `--with-db` — cache/session/queue backends in real Laravel production almost always want Redis, not the database driver `laravel_env.j2` currently defaults to |
-| 🔴 | Decide default `QUEUE_CONNECTION`/`CACHE_STORE`/`SESSION_DRIVER` once Redis exists as an option — today's `file`/`sync` defaults were deliberately chosen to avoid needing any of this; revisit once it does |
 
 ## Phase 8 — Popular Self-Hosted App Bootstraps (Not Started)
 

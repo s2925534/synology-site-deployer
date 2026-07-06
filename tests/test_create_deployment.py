@@ -74,6 +74,7 @@ class FakeSSH:
             "docker inspect -f '{{.State.Running}}' demo-example-com",
             "docker inspect -f '{{.State.Running}}' demo-example-com-db",
             "docker inspect -f '{{.State.Running}}' demo-example-com-web",
+            "docker inspect -f '{{.State.Running}}' demo-example-com-redis",
         }:
             stdout = "true\n"
         elif command == "docker ps --format '{{.Ports}}'":
@@ -177,6 +178,37 @@ def test_create_site_deploys_laravel_without_db() -> None:
     assert "composer create-project" in fake.uploads[
         "/volume1/docker/demo-example-com/app/Dockerfile"
     ]
+
+
+def test_create_site_deploys_laravel_with_redis() -> None:
+    fake = FakeSSH()
+
+    create_site(
+        "demo.example.com",
+        settings=settings(),
+        framework="laravel",
+        redis_enabled=True,
+        ssh_factory=lambda _settings, _password: fake,
+        health_get=lambda _url, timeout: FakeResponse(),
+    )
+
+    assert "docker inspect -f '{{.State.Running}}' demo-example-com-redis" in fake.commands
+    env = fake.uploads["/volume1/docker/demo-example-com/app/.env"]
+    assert "CACHE_STORE=redis" in env
+
+
+def test_create_site_rejects_redis_for_non_laravel_framework_before_touching_ssh() -> None:
+    def boom(_settings: object, _password: object) -> object:
+        raise AssertionError("SSH should not be attempted for a rejected --with-redis combo")
+
+    with pytest.raises(SynologySiteError, match="only applicable to --framework laravel"):
+        create_site(
+            "demo.example.com",
+            settings=settings(),
+            framework="flask",
+            redis_enabled=True,
+            ssh_factory=boom,
+        )
 
 
 def test_create_site_deploys_laravel_with_livewire_single_container() -> None:

@@ -4,6 +4,8 @@ from synology_site.naming import (
     db_volume_name,
     domain_to_slug,
     network_name,
+    redis_container_name,
+    redis_volume_name,
 )
 
 
@@ -19,3 +21,5 @@ def test_container_resource_names() -> None:
     assert db_container_name("demo.example.com") == "demo-example-com-db"
     assert db_volume_name("demo.example.com") == "demo-example-com-db-data"
     assert network_name("demo.example.com") == "demo-example-com-network"
+    assert redis_container_name("demo.example.com") == "demo-example-com-redis"
+    assert redis_volume_name("demo.example.com") == "demo-example-com-redis-data"

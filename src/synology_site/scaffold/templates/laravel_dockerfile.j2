@@ -18,7 +18,8 @@ RUN npm ci && npm run build
 
 FROM php:8.3-cli
 COPY --from=mlocati/docker-php-extension-installer:latest /usr/bin/install-php-extensions /usr/local/bin/
-RUN install-php-extensions pdo_mysql pdo_sqlite mbstring
+RUN install-php-extensions pdo_mysql pdo_sqlite mbstring{% if redis_enabled %} redis{% endif %}
+
 WORKDIR /app
 COPY --from=build /app /app
 EXPOSE 8000

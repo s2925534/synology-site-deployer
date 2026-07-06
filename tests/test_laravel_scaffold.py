@@ -8,7 +8,10 @@ from synology_site.scaffold.laravel import LaravelScaffold
 
 
 def context(
-    db_enabled: bool = False, php_server: str = "artisan", frontend: str = "none"
+    db_enabled: bool = False,
+    php_server: str = "artisan",
+    frontend: str = "none",
+    redis_enabled: bool = False,
 ) -> ScaffoldContext:
     return ScaffoldContext(
         domain="demo.example.com",
@@ -26,15 +29,21 @@ def context(
         db_root_password="root_password_1234567890",
         php_server=php_server,
         frontend=frontend,
+        redis_enabled=redis_enabled,
     )
 
 
 def generated_files(
-    db_enabled: bool = False, php_server: str = "artisan", frontend: str = "none"
+    db_enabled: bool = False,
+    php_server: str = "artisan",
+    frontend: str = "none",
+    redis_enabled: bool = False,
 ) -> dict[str, str]:
     return {
         item.path: item.content
-        for item in LaravelScaffold().generate(context(db_enabled, php_server, frontend))
+        for item in LaravelScaffold().generate(
+            context(db_enabled, php_server, frontend, redis_enabled)
+        )
     }
 
 
@@ -230,3 +239,59 @@ def test_non_decoupled_frontends_keep_serving_laravel_public_via_nginx() -> None
         dockerfile = generated_files(php_server="fpm-nginx", frontend=frontend)["app/Dockerfile"]
         assert "COPY --from=build /app/public /usr/share/nginx/html" in dockerfile
         assert "frontend-build" not in dockerfile
+
+
+def test_redis_disabled_by_default_uses_file_session_and_cache() -> None:
+    env = generated_files()["app/.env"]
+
+    assert "SESSION_DRIVER=file" in env
+    assert "CACHE_STORE=file" in env
+    assert "QUEUE_CONNECTION=sync" in env
+    assert "REDIS_HOST" not in env
+
+
+def test_redis_enabled_switches_drivers_and_adds_extension() -> None:
+    files = generated_files(redis_enabled=True)
+
+    env = files["app/.env"]
+    assert "SESSION_DRIVER=redis" in env
+    assert "CACHE_STORE=redis" in env
+    assert "QUEUE_CONNECTION=redis" in env
+    assert "REDIS_HOST=demo-example-com-redis" in env
+
+    assert "install-php-extensions pdo_mysql pdo_sqlite mbstring redis" in files["app/Dockerfile"]
+
+
+def test_redis_enabled_adds_independent_compose_service() -> None:
+    compose = yaml.safe_load(generated_files(redis_enabled=True)["docker-compose.yml"])
+
+    assert "demo-example-com-redis" in compose["services"]
+    redis_service = compose["services"]["demo-example-com-redis"]
+    assert redis_service["image"] == "redis:7-alpine"
+    assert redis_service["volumes"] == ["demo-example-com-redis-data:/data"]
+    assert "demo-example-com-db" not in compose["services"]
+
+
+def test_redis_and_db_both_enabled_coexist() -> None:
+    compose = yaml.safe_load(
+        generated_files(db_enabled=True, redis_enabled=True)["docker-compose.yml"]
+    )
+
+    assert {"demo-example-com", "demo-example-com-db", "demo-example-com-redis"} == set(
+        compose["services"]
+    )
+    app_depends_on = compose["services"]["demo-example-com"]["depends_on"]
+    assert app_depends_on["demo-example-com-db"]["condition"] == "service_healthy"
+    assert app_depends_on["demo-example-com-redis"]["condition"] == "service_healthy"
+
+
+def test_redis_with_fpm_nginx_topology() -> None:
+    compose = yaml.safe_load(
+        generated_files(php_server="fpm-nginx", redis_enabled=True)["docker-compose.yml"]
+    )
+
+    assert sorted(compose["services"]) == [
+        "demo-example-com",
+        "demo-example-com-redis",
+        "demo-example-com-web",
+    ]
