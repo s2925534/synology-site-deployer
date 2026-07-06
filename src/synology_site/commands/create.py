@@ -24,7 +24,7 @@ from synology_site.docker_remote import (
     require_docker,
 )
 from synology_site.errors import SynologySiteError
-from synology_site.naming import db_container_name, domain_to_slug
+from synology_site.naming import db_container_name, domain_to_slug, redis_container_name
 from synology_site.output import console, next_step, ok, warn
 from synology_site.port_allocator import find_available_port
 from synology_site.scaffold import (
@@ -66,6 +66,7 @@ def create_site(
     dry_run: bool = False,
     strict_cloudflare: bool = False,
     db_mode: str = "none",
+    redis_enabled: bool = False,
     frontend: str = "none",
     php_server: str = "artisan",
     workspace: str | None = None,
@@ -75,6 +76,8 @@ def create_site(
 ) -> CreateResult:
     if db_mode not in {"none", "container"}:
         raise SynologySiteError("Only DB mode none or container is supported")
+    if redis_enabled and framework != "laravel":
+        raise SynologySiteError("--with-redis is only applicable to --framework laravel")
     validate_php_server(framework, php_server)
     validate_frontend(framework, frontend, php_server)
     domain = validate_domain(domain)
@@ -136,6 +139,7 @@ def create_site(
             db_host_port=settings.db_host_port,
             php_server=php_server,
             frontend=frontend,
+            redis_enabled=redis_enabled,
         )
         files = scaffold.generate(context)
         if dry_run:
@@ -160,6 +164,8 @@ def create_site(
             _confirm_container(ssh, container_name, docker)
         if context.db_enabled:
             _confirm_container(ssh, db_container_name(domain), docker)
+        if context.redis_enabled:
+            _confirm_container(ssh, redis_container_name(domain), docker)
         _confirm_health(health_get, f"{resolved_local_url}/health")
         if context.db_enabled:
             _confirm_health(health_get, f"{resolved_local_url}/db-health")
@@ -239,6 +245,12 @@ def app(
     port: int | None = typer.Option(None, "--port"),
     with_db: bool = typer.Option(False, "--with-db"),
     db_mode: str = typer.Option("none", "--db-mode"),
+    with_redis: bool = typer.Option(
+        False,
+        "--with-redis",
+        help="Laravel only. Adds a Redis container, and switches cache/session/queue "
+        "drivers to it instead of file/sync.",
+    ),
     frontend: str = typer.Option(
         "none",
         "--frontend",
@@ -279,6 +291,7 @@ def app(
             dry_run=dry_run or settings.dry_run,
             strict_cloudflare=strict_cloudflare,
             db_mode=selected_db_mode,
+            redis_enabled=with_redis,
             frontend=frontend,
             php_server=php_server,
             workspace=workspace,

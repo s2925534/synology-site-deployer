@@ -39,7 +39,7 @@ RUN mkdir -p /frontend-dist \
 
 FROM php:8.3-fpm AS php-fpm
 COPY --from=mlocati/docker-php-extension-installer:latest /usr/bin/install-php-extensions /usr/local/bin/
-RUN install-php-extensions pdo_mysql pdo_sqlite mbstring opcache
+RUN install-php-extensions pdo_mysql pdo_sqlite mbstring opcache{% if redis_enabled %} redis{% endif %}
 WORKDIR /app
 COPY --from=build /app /app
 RUN chown -R www-data:www-data storage bootstrap/cache

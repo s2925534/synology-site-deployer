@@ -21,3 +21,11 @@ def db_volume_name(domain: str) -> str:
 
 def network_name(domain: str) -> str:
     return f"{domain_to_slug(domain)}-network"
+
+
+def redis_container_name(domain: str) -> str:
+    return f"{domain_to_slug(domain)}-redis"
+
+
+def redis_volume_name(domain: str) -> str:
+    return f"{domain_to_slug(domain)}-redis-data"

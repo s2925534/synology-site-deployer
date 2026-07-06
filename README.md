@@ -238,7 +238,11 @@ time, so the NAS needs network access to Packagist during the first `docker comp
 --build`. `create` only uploads the Dockerfile, Compose file, `app/.env`, docs, and marker file.
 Add `--with-db` for the same MariaDB container topology as Flask, wired into Laravel's `.env`
 (`DB_CONNECTION=mysql`); without it, Laravel falls back to its own default `sqlite` connection
-(never actually queried, since nothing beyond `/health` runs by default).
+(never actually queried, since nothing beyond `/health` runs by default). Add `--with-redis` for
+a Redis container (independent of `--with-db` — either, both, or neither), which also switches
+`SESSION_DRIVER`/`CACHE_STORE`/`QUEUE_CONNECTION` from `file`/`sync` to `redis` in `app/.env`.
+Redis has no password and isn't published to a host port — same "internal-only, relies on
+Docker network isolation" posture as MariaDB.
 
 `--php-server` picks how the app is actually served:
 

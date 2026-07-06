@@ -17,7 +17,18 @@ DB_PASSWORD={{ db_password }}
 DB_CONNECTION=sqlite
 {% endif %}
 
+{% if redis_enabled %}
+REDIS_HOST={{ redis_container }}
+REDIS_PORT=6379
+REDIS_PASSWORD=null
+
+SESSION_DRIVER=redis
+SESSION_LIFETIME=120
+CACHE_STORE=redis
+QUEUE_CONNECTION=redis
+{% else %}
 SESSION_DRIVER=file
 SESSION_LIFETIME=120
 CACHE_STORE=file
 QUEUE_CONNECTION=sync
+{% endif %}
