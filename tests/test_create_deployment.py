@@ -201,6 +201,23 @@ def test_create_site_deploys_fastapi_without_db() -> None:
     assert "uvicorn.workers.UvicornWorker" in dockerfile
 
 
+def test_create_site_deploys_nextjs_without_db() -> None:
+    fake = FakeSSH()
+
+    result = create_site(
+        "demo.example.com",
+        settings=settings(),
+        framework="nextjs",
+        ssh_factory=lambda _settings, _password: fake,
+        health_get=lambda _url, timeout: FakeResponse(),
+    )
+
+    assert result.port == 5051
+    assert "/volume1/docker/demo-example-com/app/health-route.js" in fake.uploads
+    dockerfile = fake.uploads["/volume1/docker/demo-example-com/app/Dockerfile"]
+    assert "create-next-app" in dockerfile
+
+
 def test_create_site_deploys_laravel_with_redis() -> None:
     fake = FakeSSH()
 

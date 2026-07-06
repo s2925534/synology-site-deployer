@@ -1,0 +1,12 @@
+FROM node:20-alpine
+WORKDIR /app
+RUN npx --yes create-next-app@latest . --js --no-tailwind --no-eslint --no-src-dir --app --import-alias "@/*" --use-npm --no-git --no-agents-md
+COPY health-route.js app/health/route.js
+{% if db_enabled %}
+COPY .env .env
+COPY db-health-route.js app/db-health/route.js
+RUN npm install mysql2
+{% endif %}
+RUN npm run build
+EXPOSE 3000
+CMD ["npm", "start"]
