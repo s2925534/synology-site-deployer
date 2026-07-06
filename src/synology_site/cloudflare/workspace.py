@@ -78,13 +78,18 @@ def resolve_cloudflare_account(
     *,
     workspace: str | None = None,
 ) -> CloudflareAccount:
+    """Look up an account by explicit workspace name, or match it to the domain.
+
+    Falls back to the default account when an explicit workspace name has no cloudflare.env of
+    its own (e.g. a workspace that only overrides the NAS target) -- whether the workspace name
+    is valid at all is validated once, centrally, by the caller.
+    """
     candidates = (default_account, *extra_accounts)
     if workspace is not None:
         for account in candidates:
             if account.name == workspace:
                 return account
-        msg = f"Unknown Cloudflare workspace: {workspace}"
-        raise SynologySiteError(msg)
+        return default_account
 
     normalized_domain = domain.lower()
     matches = [

@@ -1,12 +1,15 @@
 import json
 
+import pytest
 import yaml
 
 from synology_site.scaffold.base import ScaffoldContext
 from synology_site.scaffold.laravel import LaravelScaffold
 
 
-def context(db_enabled: bool = False, php_server: str = "artisan") -> ScaffoldContext:
+def context(
+    db_enabled: bool = False, php_server: str = "artisan", frontend: str = "none"
+) -> ScaffoldContext:
     return ScaffoldContext(
         domain="demo.example.com",
         slug="demo-example-com",
@@ -22,13 +25,16 @@ def context(db_enabled: bool = False, php_server: str = "artisan") -> ScaffoldCo
         db_password="user_password_1234567890",
         db_root_password="root_password_1234567890",
         php_server=php_server,
+        frontend=frontend,
     )
 
 
-def generated_files(db_enabled: bool = False, php_server: str = "artisan") -> dict[str, str]:
+def generated_files(
+    db_enabled: bool = False, php_server: str = "artisan", frontend: str = "none"
+) -> dict[str, str]:
     return {
         item.path: item.content
-        for item in LaravelScaffold().generate(context(db_enabled, php_server))
+        for item in LaravelScaffold().generate(context(db_enabled, php_server, frontend))
     }
 
 
@@ -159,3 +165,68 @@ def test_laravel_fpm_nginx_with_db_joins_both_app_services_to_default_network() 
     assert set(app_service["networks"]) == {"demo-example-com-network", "default"}
     assert web_service["networks"] == ["default"]
     assert db_service["networks"] == ["demo-example-com-network"]
+
+
+def test_livewire_frontend_adds_package_no_frontend_build_stage() -> None:
+    dockerfile = generated_files(frontend="livewire")["app/Dockerfile"]
+
+    assert "composer require --no-interaction livewire/livewire" in dockerfile
+    assert "npm" not in dockerfile
+
+
+def test_inertia_vue_frontend_uses_breeze_and_builds_assets() -> None:
+    dockerfile = generated_files(frontend="inertia-vue")["app/Dockerfile"]
+
+    assert "composer require --no-interaction laravel/breeze --dev" in dockerfile
+    assert "breeze:install vue --no-interaction" in dockerfile
+    assert "apk add --no-cache nodejs npm" in dockerfile
+    assert "npm ci && npm run build" in dockerfile
+
+
+def test_inertia_react_frontend_uses_breeze_react_stack() -> None:
+    dockerfile = generated_files(frontend="inertia-react")["app/Dockerfile"]
+
+    assert "breeze:install react --no-interaction" in dockerfile
+
+
+@pytest.mark.parametrize("frontend", ["vue", "react", "angular"])
+def test_decoupled_spa_frontends_add_frontend_build_stage_and_api_backend(
+    frontend: str,
+) -> None:
+    files = generated_files(php_server="fpm-nginx", frontend=frontend)
+    dockerfile = files["app/Dockerfile"]
+
+    assert "breeze:install api --no-interaction" in dockerfile
+    assert "FROM node:20-alpine AS frontend-build" in dockerfile
+    assert "COPY --from=frontend-build /frontend-dist /usr/share/nginx/html" in dockerfile
+    assert "COPY --from=build /app/public /usr/share/nginx/html" not in dockerfile
+
+    nginx_conf = files["app/nginx.conf"]
+    assert "location ~ ^/(api|health|db-health)" in nginx_conf
+    assert "try_files $uri $uri/ /index.html" in nginx_conf
+
+
+def test_decoupled_spa_vue_uses_vite_scaffold() -> None:
+    dockerfile = generated_files(php_server="fpm-nginx", frontend="vue")["app/Dockerfile"]
+
+    assert "npm create vite@latest . -- --template vue" in dockerfile
+
+
+def test_decoupled_spa_react_uses_vite_scaffold() -> None:
+    dockerfile = generated_files(php_server="fpm-nginx", frontend="react")["app/Dockerfile"]
+
+    assert "npm create vite@latest . -- --template react" in dockerfile
+
+
+def test_decoupled_spa_angular_uses_angular_cli() -> None:
+    dockerfile = generated_files(php_server="fpm-nginx", frontend="angular")["app/Dockerfile"]
+
+    assert "npm install -g @angular/cli" in dockerfile
+    assert "ng new ." in dockerfile
+
+
+def test_non_decoupled_frontends_keep_serving_laravel_public_via_nginx() -> None:
+    for frontend in ("none", "livewire", "inertia-vue", "inertia-react"):
+        dockerfile = generated_files(php_server="fpm-nginx", frontend=frontend)["app/Dockerfile"]
+        assert "COPY --from=build /app/public /usr/share/nginx/html" in dockerfile
+        assert "frontend-build" not in dockerfile

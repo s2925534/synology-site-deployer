@@ -150,9 +150,15 @@ The single `--stack` flag proposed above was split into two independent flags on
 clear they're orthogonal concerns:
 
 - **`--frontend`** (`none` | `vue` | `react` | `angular` | `inertia-vue` | `inertia-react` |
-  `livewire`) covers the frontend-framework question from §3. Only `none` (no-op) is implemented;
-  every other value is accepted by the CLI and rejected with a "planned, see this doc" error —
-  this *is* the Phase 2/3 work below, still undone.
+  `livewire`) covers the frontend-framework question from §3. **All values are now implemented**
+  (this was the Phase 2/3 work below — both are now done, ahead of the original plan). Health
+  checks for the decoupled `vue`/`react`/`angular` mode stayed at the plain `/health`/`/db-health`
+  paths rather than moving to `/api/health` — nginx just special-cases those two literal paths
+  (in addition to `/api/*`) to also proxy to PHP-FPM, avoiding any change to `create_site`'s
+  health-check URLs or the shared doc/marker templates. One important caveat: the exact
+  Composer/Breeze/Vite/Angular CLI invocations are authored from documented usage, not verified
+  against a real `docker compose up -d --build` (no reliable registry access in the authoring
+  environment) — see README's "Backend + Frontend Roadmap" caveat note.
 - **`--php-server`** (`artisan` | `fpm-nginx`) is a different axis this doc didn't originally
   anticipate: not "which frontend," but "how does the container actually serve PHP." `artisan`
   (default) is `php artisan serve`, a single process — fine for personal use, not production
@@ -171,23 +177,28 @@ clear they're orthogonal concerns:
    PHP-FPM + nginx topology (see the note in §4). `container_names()` was added to the scaffold
    interface so `create_site` can confirm however many containers a given scaffold/mode uses,
    which is also what a future `spa-*` preset would reuse.
-2. **Phase 2 — not started.** Add `inertia-vue`, `inertia-react`, `livewire` as real `--frontend`
-   values instead of the current "planned" rejection — still single container, just a different
-   Dockerfile build recipe/npm build step per preset. No changes needed to `commands/create.py`
-   itself, only new templates + registry entries.
-3. **Phase 3 — not started.** Add `spa-vue`, `spa-react`, `spa-angular` — this is the only phase that touches
-   `create_site`'s core assumptions (one container/one port/one health URL per site), since it's
-   two containers behind one domain. Reuses whatever pattern gets built here for any future
-   "frontend + API" combo, not just Laravel's.
+2. **Phase 2 — done.** `inertia-vue`, `inertia-react`, `livewire` are real `--frontend` values —
+   single container, no changes needed to `commands/create.py` itself, only new Dockerfile build
+   steps (conditional on `frontend`) + templates.
+3. **Phase 3 — done.** `vue`, `react`, `angular` decoupled SPA frontends are implemented, but as a
+   *single* nginx+PHP-FPM container pair (reusing `--php-server fpm-nginx`'s existing two-container
+   topology) rather than the `{slug}-api` + `{slug}-web` two-hostname split originally described in
+   §3b — nginx does the `/api` vs. static-file split internally, so it needed **no** new port
+   allocation, health-check, or Cloudflare-route plumbing in `create_site`. This turned out simpler
+   than §3b anticipated, at the cost of frontend and backend always scaling/restarting together
+   (not the fully independent two-origin topology §3b described) — revisit if that independence is
+   ever actually needed.
 
 ## 6. Open questions for you
 
-- Do you actually need Angular, or was it named as "the third framework people ask about"? If
-  nobody needs Angular specifically, Phase 3 (the only phase Angular requires) could be dropped
-  entirely and everything ships as single-container Inertia/Livewire presets.
-- For decoupled SPA mode (3b), do you want path-based routing on one domain (`/api` vs `/`) or two
-  subdomains (`api.app.example.com` + `app.example.com`)? This decides the Cloudflare/Traefik
-  routing shape and is the main new architectural piece.
+- ~~Do you actually need Angular...~~ Moot now: since Phase 3 ended up being one nginx container
+  doing internal path routing (not a new Cloudflare-level topology), Angular cost nothing extra
+  to include alongside vue/react, so it shipped too.
+- ~~For decoupled SPA mode (3b), do you want path-based routing...~~ Resolved by construction:
+  nginx does the `/api` vs. static-file split *inside* the one container pair, on the one
+  hostname/port `create` already allocates — no Cloudflare-level path routing or second subdomain
+  needed. The two-origin/two-hostname version this question originally asked about was **not**
+  built; it remains a real option if independent frontend/backend scaling is ever needed later.
 - ~~Should `--stack` have a default...~~ Resolved: `--frontend none` and `--php-server artisan`
   are both the defaults today, matching the original recommendation's spirit (minimal-by-default,
   parity with Flask) — `--php-server fpm-nginx` is opt-in and recommended, not default, so a

@@ -8,6 +8,7 @@ import pytest
 from synology_site.commands.deploy import deploy_existing_project
 from synology_site.config import Settings
 from synology_site.errors import SynologySiteError
+from synology_site.nas.target import NasTarget
 from synology_site.ssh_client import RemoteCommandResult
 
 
@@ -346,3 +347,40 @@ def test_deploy_source_dir_missing_directory_raises(tmp_path: Path) -> None:
             settings=settings(),
             ssh_factory=lambda _settings, _password: fake,
         )
+
+
+def test_deploy_uses_resolved_nas_target_for_ssh_connection(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    fake = FakeSSH()
+    captured_settings: list[Settings] = []
+
+    def capturing_ssh_factory(passed_settings: Settings, _password: object) -> FakeSSH:
+        captured_settings.append(passed_settings)
+        return fake
+
+    clienta_target = NasTarget(
+        name="clienta",
+        host="203.0.113.5",
+        port=2222,
+        user="clienta-deploy",
+        ssh_key_path=None,
+        ssh_password="clienta-secret",
+        docker_root="/volume1/docker",
+        local_base_url_host="192.0.2.10",
+        default_start_port=5050,
+        default_end_port=5999,
+    )
+    multi_nas_settings = replace(settings(), nas_targets=(clienta_target,))
+
+    deploy_existing_project(
+        "app.example.com",
+        compose_file=_compose_file(tmp_path),
+        settings=multi_nas_settings,
+        workspace="clienta",
+        ssh_factory=capturing_ssh_factory,
+    )
+
+    assert captured_settings[0].nas_host == "203.0.113.5"
+    assert captured_settings[0].nas_port == 2222
+    assert captured_settings[0].nas_user == "clienta-deploy"

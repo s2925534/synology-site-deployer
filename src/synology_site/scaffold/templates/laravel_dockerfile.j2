@@ -1,10 +1,20 @@
 FROM composer:2 AS build
 WORKDIR /app
 RUN composer create-project --prefer-dist --no-interaction laravel/laravel:^11.0 .
+{% if frontend == 'livewire' %}
+RUN composer require --no-interaction livewire/livewire
+{% elif frontend in ('inertia-vue', 'inertia-react') %}
+RUN apk add --no-cache nodejs npm
+RUN composer require --no-interaction laravel/breeze --dev
+RUN php artisan breeze:install {{ 'vue' if frontend == 'inertia-vue' else 'react' }} --no-interaction
+{% endif %}
 COPY .env .env
 COPY routes-extra.php /tmp/routes-extra.php
 RUN cat /tmp/routes-extra.php >> routes/web.php
 RUN php artisan key:generate --force
+{% if frontend in ('inertia-vue', 'inertia-react') %}
+RUN npm ci && npm run build
+{% endif %}
 
 FROM php:8.3-cli
 COPY --from=mlocati/docker-php-extension-installer:latest /usr/bin/install-php-extensions /usr/local/bin/

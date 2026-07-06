@@ -1,10 +1,41 @@
 FROM composer:2 AS build
 WORKDIR /app
 RUN composer create-project --prefer-dist --no-interaction laravel/laravel:^11.0 .
+{% if frontend == 'livewire' %}
+RUN composer require --no-interaction livewire/livewire
+{% elif frontend in ('inertia-vue', 'inertia-react') %}
+RUN apk add --no-cache nodejs npm
+RUN composer require --no-interaction laravel/breeze --dev
+RUN php artisan breeze:install {{ 'vue' if frontend == 'inertia-vue' else 'react' }} --no-interaction
+{% elif frontend in ('vue', 'react', 'angular') %}
+RUN composer require --no-interaction laravel/breeze --dev
+RUN php artisan breeze:install api --no-interaction
+{% endif %}
 COPY .env .env
 COPY routes-extra.php /tmp/routes-extra.php
 RUN cat /tmp/routes-extra.php >> routes/web.php
 RUN php artisan key:generate --force
+{% if frontend in ('inertia-vue', 'inertia-react') %}
+RUN npm ci && npm run build
+{% endif %}
+
+{% if frontend in ('vue', 'react', 'angular') %}
+FROM node:20-alpine AS frontend-build
+WORKDIR /frontend
+{% if frontend == 'vue' %}
+RUN npm create vite@latest . -- --template vue
+RUN npm install
+{% elif frontend == 'react' %}
+RUN npm create vite@latest . -- --template react
+RUN npm install
+{% elif frontend == 'angular' %}
+RUN npm install -g @angular/cli
+RUN ng new . --directory=. --routing=false --style=css --skip-git --defaults --skip-install=false
+{% endif %}
+RUN npm run build
+RUN mkdir -p /frontend-dist \
+    && cp -r "$(dirname "$(find . -name index.html -not -path './node_modules/*' | head -1)")/." /frontend-dist/
+{% endif %}
 
 FROM php:8.3-fpm AS php-fpm
 COPY --from=mlocati/docker-php-extension-installer:latest /usr/bin/install-php-extensions /usr/local/bin/
@@ -16,6 +47,10 @@ EXPOSE 9000
 CMD ["php-fpm"]
 
 FROM nginx:alpine AS nginx
+{% if frontend in ('vue', 'react', 'angular') %}
+COPY --from=frontend-build /frontend-dist /usr/share/nginx/html
+{% else %}
 COPY --from=build /app/public /usr/share/nginx/html
+{% endif %}
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80

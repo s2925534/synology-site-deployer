@@ -6,6 +6,17 @@ from synology_site import __version__
 from synology_site.database.naming import database_name, database_user
 from synology_site.naming import db_container_name, db_volume_name, network_name
 
+# "none" -- no frontend framework, just the backend (default).
+# "livewire" / "inertia-vue" / "inertia-react" -- single container, glue lives inside the same
+#   Laravel app (Livewire components, or Inertia pages rendered by Laravel controllers).
+# "vue" / "react" / "angular" -- a fully decoupled SPA: independently-built frontend + a Laravel
+#   API backend (via Breeze's "api" stack, Sanctum-ready), served together through nginx
+#   (static assets + /api proxy to PHP-FPM). Requires --php-server fpm-nginx, since artisan's
+#   single dev server has no static-file/proxy split.
+SINGLE_CONTAINER_FRONTENDS = {"livewire", "inertia-vue", "inertia-react"}
+DECOUPLED_SPA_FRONTENDS = {"vue", "react", "angular"}
+FRONTENDS = {"none", *SINGLE_CONTAINER_FRONTENDS, *DECOUPLED_SPA_FRONTENDS}
+
 
 @dataclass(frozen=True)
 class GeneratedFile:
@@ -37,6 +48,7 @@ class ScaffoldContext:
     cloudflare_configured: bool = False
     cloudflare_manual_required: bool = True
     php_server: str = "artisan"
+    frontend: str = "none"
 
 
 def common_template_values(context: ScaffoldContext, *, internal_port: int) -> dict[str, object]:

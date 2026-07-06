@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from synology_site.errors import SynologySiteError
+from synology_site.scaffold.base import DECOUPLED_SPA_FRONTENDS, FRONTENDS
 from synology_site.scaffold.flask import FlaskScaffold
 from synology_site.scaffold.laravel import LaravelScaffold
 
@@ -9,22 +10,22 @@ FRAMEWORKS = {
     "laravel": LaravelScaffold(),
 }
 
-# Recognized in the CLI but not implemented yet -- see docs/laravel-scaffold-options.md for the
-# design rationale (Inertia vs. a fully decoupled SPA vs. Livewire).
-PLANNED_FRONTENDS = {"vue", "react", "angular", "inertia-vue", "inertia-react", "livewire"}
 
-
-def validate_frontend(frontend: str) -> None:
+def validate_frontend(framework: str, frontend: str, php_server: str) -> None:
+    if frontend not in FRONTENDS:
+        msg = f"Unsupported frontend: {frontend}"
+        raise SynologySiteError(msg)
     if frontend == "none":
         return
-    if frontend in PLANNED_FRONTENDS:
+    if framework != "laravel":
+        msg = "--frontend is only applicable to --framework laravel"
+        raise SynologySiteError(msg)
+    if frontend in DECOUPLED_SPA_FRONTENDS and php_server != "fpm-nginx":
         msg = (
-            f"--frontend {frontend} is planned but not implemented yet. "
-            "See docs/laravel-scaffold-options.md for the roadmap."
+            f"--frontend {frontend} requires --php-server fpm-nginx "
+            "(nginx serves the built SPA and proxies /api to PHP-FPM)"
         )
         raise SynologySiteError(msg)
-    msg = f"Unsupported frontend: {frontend}"
-    raise SynologySiteError(msg)
 
 
 # "artisan" is Laravel's single-process dev server (php artisan serve) -- simplest, matches the

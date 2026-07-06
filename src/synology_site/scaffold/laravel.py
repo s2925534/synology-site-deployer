@@ -4,7 +4,12 @@ from importlib.resources import files
 
 from jinja2 import Environment, StrictUndefined
 
-from synology_site.scaffold.base import GeneratedFile, ScaffoldContext, common_template_values
+from synology_site.scaffold.base import (
+    DECOUPLED_SPA_FRONTENDS,
+    GeneratedFile,
+    ScaffoldContext,
+    common_template_values,
+)
 
 
 class LaravelScaffold:
@@ -45,8 +50,10 @@ class LaravelScaffold:
             GeneratedFile(".synology-site.json", self._render("marker.json.j2", values)),
         ]
         if production:
+            spa = context.frontend in DECOUPLED_SPA_FRONTENDS
+            nginx_template = "laravel_spa_nginx_conf.j2" if spa else "laravel_nginx_conf.j2"
             files_to_generate.append(
-                GeneratedFile("app/nginx.conf", self._render("laravel_nginx_conf.j2", values))
+                GeneratedFile("app/nginx.conf", self._render(nginx_template, values))
             )
         if context.db_enabled:
             files_to_generate.append(
@@ -68,4 +75,6 @@ class LaravelScaffold:
         return self.env.from_string(template_text).render(**values).rstrip() + "\n"
 
     def _values(self, context: ScaffoldContext) -> dict[str, object]:
-        return common_template_values(context, internal_port=8000)
+        values = common_template_values(context, internal_port=8000)
+        values["frontend"] = context.frontend
+        return values

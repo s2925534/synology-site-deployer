@@ -3,7 +3,7 @@ from __future__ import annotations
 import shlex
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from getpass import getpass
 from typing import Any
 
@@ -75,8 +75,8 @@ def create_site(
 ) -> CreateResult:
     if db_mode not in {"none", "container"}:
         raise SynologySiteError("Only DB mode none or container is supported")
-    validate_frontend(frontend)
     validate_php_server(framework, php_server)
+    validate_frontend(framework, frontend, php_server)
     domain = validate_domain(domain)
     scaffold = FRAMEWORKS.get(framework)
     if scaffold is None:
@@ -88,18 +88,28 @@ def create_site(
     if cf_split.warning and strict_cloudflare:
         raise SynologySiteError(cf_split.warning)
 
-    slug = domain_to_slug(domain)
-    project_path = f"{settings.nas_docker_root.rstrip('/')}/{slug}"
-    local_url = f"http://{settings.local_base_url_host}:{{port}}"
+    target = settings.resolve_target(workspace=workspace)
+    connection_settings = replace(
+        settings,
+        nas_host=target.host,
+        nas_port=target.port,
+        nas_user=target.user,
+        nas_ssh_key_path=target.ssh_key_path,
+        nas_ssh_password=target.ssh_password,
+    )
 
-    with ssh_factory(settings, prompted_password) as ssh:
+    slug = domain_to_slug(domain)
+    project_path = f"{target.docker_root.rstrip('/')}/{slug}"
+    local_url = f"http://{target.local_base_url_host}:{{port}}"
+
+    with ssh_factory(connection_settings, prompted_password) as ssh:
         require_docker(ssh)
         compose = detect_compose_command(ssh)
-        ensure_remote_directory(ssh, settings.nas_docker_root)
+        ensure_remote_directory(ssh, target.docker_root)
         selected_port = find_available_port(
             ssh,
-            start=settings.default_start_port,
-            end=settings.default_end_port,
+            start=target.default_start_port,
+            end=target.default_end_port,
             requested=port,
         )
         resolved_local_url = local_url.format(port=selected_port)
@@ -112,7 +122,7 @@ def create_site(
             framework=framework,
             port=selected_port,
             project_path=project_path,
-            local_base_url_host=settings.local_base_url_host,
+            local_base_url_host=target.local_base_url_host,
             restart_policy=settings.restart_policy,
             db_enabled=db_enabled,
             db_mode=db_mode,
@@ -125,6 +135,7 @@ def create_site(
             db_publish_port=settings.db_publish_port,
             db_host_port=settings.db_host_port,
             php_server=php_server,
+            frontend=frontend,
         )
         files = scaffold.generate(context)
         if dry_run:
@@ -231,8 +242,9 @@ def app(
     frontend: str = typer.Option(
         "none",
         "--frontend",
-        help="Frontend to pair with the backend. Only 'none' is implemented today; "
-        "vue/react/angular/inertia-vue/inertia-react/livewire are planned.",
+        help="Laravel only. 'none' (default), 'livewire', 'inertia-vue', 'inertia-react' "
+        "(single container), or 'vue'/'react'/'angular' (decoupled SPA, requires "
+        "--php-server fpm-nginx).",
     ),
     php_server: str = typer.Option(
         "artisan",
@@ -244,15 +256,19 @@ def app(
     force: bool = typer.Option(False, "--force"),
     strict_cloudflare: bool = typer.Option(False, "--strict-cloudflare"),
     workspace: str | None = typer.Option(
-        None, "--workspace", help="Force a specific Cloudflare workspace (see secrets/<name>/)"
+        None,
+        "--workspace",
+        help="Force a specific workspace (Cloudflare account and/or NAS target, "
+        "see secrets/<name>/)",
     ),
 ) -> None:
     selected_db_mode = "container" if with_db else db_mode
     try:
         settings = load_config()
         domain = apply_default_site_domain(domain, settings.default_site_domain)
+        target = settings.resolve_target(workspace=workspace)
         prompted_password = None
-        if not settings.nas_ssh_key_path and not settings.nas_ssh_password:
+        if not target.ssh_key_path and not target.ssh_password:
             prompted_password = getpass("NAS SSH password: ")
         result = create_site(
             domain,

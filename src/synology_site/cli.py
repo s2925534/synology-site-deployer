@@ -12,6 +12,7 @@ from synology_site.commands.list_sites import app as list_app
 from synology_site.commands.remove import app as remove_app
 from synology_site.commands.start import app as start_app
 from synology_site.commands.stop import app as stop_app
+from synology_site.commands.workspaces import app as workspaces_app
 
 app = typer.Typer(help="Deploy containerized sites to a Synology NAS.")
 
@@ -27,6 +28,7 @@ app.command(name="remove")(remove_app)
 app.command(name="cloudflare-instructions")(tunnel_fix.cloudflare_instructions)
 app.command(name="tunnel-fix-autostart")(tunnel_fix.tunnel_fix_autostart)
 app.command(name="set-autostart")(tunnel_fix.set_autostart)
+app.command(name="workspaces")(workspaces_app)
 
 
 def main() -> None:
