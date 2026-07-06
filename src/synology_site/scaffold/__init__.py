@@ -5,11 +5,13 @@ from synology_site.scaffold.base import DECOUPLED_SPA_FRONTENDS, FRONTENDS
 from synology_site.scaffold.fastapi import FastAPIScaffold
 from synology_site.scaffold.flask import FlaskScaffold
 from synology_site.scaffold.laravel import LaravelScaffold
+from synology_site.scaffold.nextjs import NextJsScaffold
 
 FRAMEWORKS = {
     "flask": FlaskScaffold(),
     "laravel": LaravelScaffold(),
     "fastapi": FastAPIScaffold(),
+    "nextjs": NextJsScaffold(),
 }
 
 

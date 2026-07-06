@@ -1,0 +1,22 @@
+import mysql from "mysql2/promise";
+
+export async function GET() {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    return Response.json(
+      { status: "error", database: "not_connected", message: "Database connection failed" },
+      { status: 503 }
+    );
+  }
+  try {
+    const connection = await mysql.createConnection({ uri: databaseUrl, connectTimeout: 3000 });
+    await connection.query("SELECT 1");
+    await connection.end();
+  } catch (error) {
+    return Response.json(
+      { status: "error", database: "not_connected", message: "Database connection failed" },
+      { status: 503 }
+    );
+  }
+  return Response.json({ status: "ok", database: "connected", service: "{{ slug }}" });
+}

@@ -1,6 +1,6 @@
 # Synology Site Deployer
 
-Synology Site Deployer is a local Python CLI for deploying containerized apps to a Synology NAS over SSH. `create` scaffolds and deploys a new Flask, Laravel, or FastAPI app from scratch (optionally with a MariaDB container); `deploy` uploads and starts an existing project's own Compose file for any framework — it doesn't generate app code, so it isn't limited to what `create` supports. `bootstrap-supabase` stands up Supabase's self-hosted stack. `cloudflare-route` wires a Cloudflare Tunnel route to a fixed port directly. All of them can configure Cloudflare Tunnel routes + DNS via the Cloudflare API when credentials are present, across multiple Cloudflare accounts/domains via workspaces (see below).
+Synology Site Deployer is a local Python CLI for deploying containerized apps to a Synology NAS over SSH. `create` scaffolds and deploys a new Flask, Laravel, FastAPI, or Next.js app from scratch (optionally with a MariaDB container); `deploy` uploads and starts an existing project's own Compose file for any framework — it doesn't generate app code, so it isn't limited to what `create` supports. `bootstrap-supabase` stands up Supabase's self-hosted stack. `cloudflare-route` wires a Cloudflare Tunnel route to a fixed port directly. All of them can configure Cloudflare Tunnel routes + DNS via the Cloudflare API when credentials are present, across multiple Cloudflare accounts/domains via workspaces (see below).
 
 The tool is generic. Domains, NAS hosts, Docker paths, Cloudflare zones, tunnel names, and ports come from `.env`, CLI options, or validated defaults.
 
@@ -12,7 +12,7 @@ Contact: `pedro@veloso.dev`
 
 ## What It Does
 
-- `create`: scaffolds and deploys a new Flask, Laravel, or FastAPI app (`--framework`) to a Synology NAS using Docker Compose, optionally with a MariaDB 11 container (private network + persistent volume), a non-secret project README, `docs/DATABASE.md`, and `/health`/`/db-health` checks. `--frontend` pairs a Vue/React/Angular/Inertia/Livewire frontend with the Laravel backend (see "Backend + Frontend Roadmap").
+- `create`: scaffolds and deploys a new Flask, Laravel, FastAPI, or Next.js app (`--framework`) to a Synology NAS using Docker Compose, optionally with a MariaDB 11 container (private network + persistent volume), a non-secret project README, `docs/DATABASE.md`, and `/health`/`/db-health` checks. `--frontend` pairs a Vue/React/Angular/Inertia/Livewire frontend with the Laravel backend (see "Backend + Frontend Roadmap").
 - `deploy`: uploads an existing project's own Compose file (+ optional `.env`) and starts it — any framework, since it doesn't generate app code. `docker compose pull` with a `--build` fallback. Works with a fixed reverse-proxy port (Traefik, etc., no port allocation/Cloudflare/health-check) or a standalone published port (same behavior as `create`).
 - `bootstrap-supabase`: clones and starts Supabase's self-hosted stack, regenerating every security-critical secret properly (including correctly HS256-signed `ANON_KEY`/`SERVICE_ROLE_KEY` JWTs, not random strings), and can upload a Traefik-label override alongside it.
 - `cloudflare-route`: points one hostname at a fixed port via the Cloudflare API directly, no NAS/SSH interaction — for reverse-proxy setups where many hostnames share one port.
@@ -25,7 +25,7 @@ Contact: `pedro@veloso.dev`
 
 - It does not expose Synology DSM, SSH, or MariaDB/Postgres to the public internet.
 - It does not require the Synology DSM database package.
-- It does not generate application code for frameworks other than Flask/Laravel/FastAPI (`create`) — but `deploy` can start any already-built project regardless of framework.
+- It does not generate application code for frameworks other than Flask/Laravel/FastAPI/Next.js (`create`) — but `deploy` can start any already-built project regardless of framework.
 - It does not commit `.env`, tokens, generated passwords, or database credentials.
 
 ## Requirements
@@ -292,9 +292,32 @@ there's no separate `--python-server` axis: no dev-server default to avoid here.
 synology-site create demo.example.com --framework fastapi --with-db
 ```
 
+## Deploy Next.js
+
+```bash
+synology-site create demo.example.com --framework nextjs
+```
+
+Like Laravel, this runs the real `npx create-next-app@latest` installer at image-build time
+(App Router, JavaScript, no Tailwind/ESLint, no `AGENTS.md`/`CLAUDE.md`) rather than
+hand-templating Next.js's file tree, then copies in a `/health` route handler and runs
+`npm run build`. Add `--with-db` for the same MariaDB container topology as the other
+frameworks, wired into a `/db-health` route via `mysql2` (Node's MySQL client) and a
+`DATABASE_URL=mysql://...` in `app/.env`. Runs on `npm start` (Next.js's own production
+server) on port 3000 internally.
+
+```bash
+synology-site create demo.example.com --framework nextjs --with-db
+```
+
+**Validated for real**, not just template-rendered: this recipe (exact `create-next-app` flags,
+the App Router health/db-health route handlers, `npm run build`, `npm start` respecting `PORT`,
+and a real `mysql2` connection-failure path returning 503) was smoke-tested end-to-end against
+the real npm registry in the authoring environment — see `RESUME.md`.
+
 ## Deploy An Existing Project (Any Framework)
 
-`create` scaffolds new Flask, Laravel, or FastAPI apps (`--framework flask|laravel|fastapi`). `deploy` is the counterpart for a project that already has its own Dockerfile and Compose file — a Next.js app, a Node API, or anything else with a CI pipeline that builds and pushes an image. It does not generate any application code; it uploads your Compose file (and optional `.env`), then pulls/builds and starts it on the NAS.
+`create` scaffolds new Flask, Laravel, FastAPI, or Next.js apps (`--framework flask|laravel|fastapi|nextjs`). `deploy` is the counterpart for a project that already has its own Dockerfile and Compose file — a Next.js app, a Node API, or anything else with a CI pipeline that builds and pushes an image. It does not generate any application code; it uploads your Compose file (and optional `.env`), then pulls/builds and starts it on the NAS.
 
 ```bash
 synology-site deploy app.example.com --compose-file ./infra/web/docker-compose.web.yml --env-file ./infra/web/.env
