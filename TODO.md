@@ -138,6 +138,20 @@ once a site has been running in production for a while.
 | 🔴 | Traefik + Let's Encrypt as a documented alternative to Cloudflare Tunnel for anyone who doesn't want a Cloudflare dependency at all — `deploy` already supports the "existing reverse proxy" no-port-allocation mode, but there's no scaffold-side guidance for setting one up from scratch |
 | 🔴 | Secrets stored as plaintext files under `secrets/` today; evaluate age/sops-encrypted secrets or a proper secrets manager (1Password CLI, Doppler) for anyone deploying this from a shared/less-trusted machine |
 
+## Phase 12 — Remote Access to the Home NAS (Not Started)
+
+Running `create`/`deploy` from a network that isn't the NAS's own LAN (e.g. an office) requires
+reaching the NAS's SSH port without a paid remote-access tool. The real constraint: most home
+ISPs use CGNAT (no public IP at all), so the connection has to be *initiated outbound from the
+NAS*, not inbound to it — the same principle Cloudflare Tunnel already uses in this project.
+
+| Status | Item |
+|---|---|
+| 🔴 | **Document Tailscale (or ZeroTier) as the recommended zero-code solution** — free mesh VPN, official Synology package, works through CGNAT with no router config. `NAS_HOST` in a workspace's `nas.env` just becomes the Tailscale IP; the tool needs no changes since it already just SSHes to whatever host is configured. This alone fully solves the stated need with no development work — worth writing up in the README even before anything below is built. |
+| 🔴 | **Build: reach the NAS through the Cloudflare Tunnel already running for this project's sites**, instead of a separate VPN. Cloudflare Access (free tier) can gate a private TCP/SSH route through the same `cloudflared` process already deployed; `cloudflared access tcp` opens a local proxy that forwards to the NAS's SSH port with no port-forward and no VPN client. This is the piece actually worth coding: a `NasTarget` field (e.g. `ssh_access_hostname`) that, when set, makes the CLI transparently spawn/manage that local proxy before connecting via SSH, instead of requiring the user to start it by hand every session. Ties directly into the Cloudflare Access item already listed in Phase 11 — likely the same underlying integration work. |
+| 🔴 | Document self-hosted WireGuard (DSM's built-in VPN Server package) as a no-third-party fallback — free, but needs a forwarded UDP port + DDNS, and doesn't work at all under CGNAT (call this constraint out explicitly so it's not a surprise). |
+| 🔴 | Document (lower priority) a reverse-SSH-tunnel-through-a-free-VPS pattern (e.g. Oracle Cloud's free tier + `autossh`) as the option that works under CGNAT without depending on Tailscale or Cloudflare specifically — most moving parts to keep alive of all the options, so positioned as a fallback rather than the default recommendation. |
+
 ---
 
 Design rationale and phased rollout detail for Phase 4 lives in `docs/laravel-scaffold-options.md`.
