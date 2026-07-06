@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+gunicorn
+{% if db_enabled %}
+SQLAlchemy
+PyMySQL
+{% endif %}
