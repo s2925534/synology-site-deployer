@@ -66,9 +66,14 @@ class LaravelScaffold:
         return files_to_generate
 
     def container_names(self, context: ScaffoldContext) -> list[str]:
-        if context.php_server == "fpm-nginx":
-            return [context.slug, f"{context.slug}-web"]
-        return [context.slug]
+        names = (
+            [context.slug, f"{context.slug}-web"]
+            if context.php_server == "fpm-nginx"
+            else [context.slug]
+        )
+        if context.queue_enabled:
+            names.append(f"{context.slug}-queue")
+        return names
 
     def _render(self, template_name: str, values: dict[str, object]) -> str:
         template_text = self.template_root.joinpath(template_name).read_text(encoding="utf-8")

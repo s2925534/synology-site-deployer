@@ -242,7 +242,14 @@ Add `--with-db` for the same MariaDB container topology as Flask, wired into Lar
 a Redis container (independent of `--with-db` — either, both, or neither), which also switches
 `SESSION_DRIVER`/`CACHE_STORE`/`QUEUE_CONNECTION` from `file`/`sync` to `redis` in `app/.env`.
 Redis has no password and isn't published to a host port — same "internal-only, relies on
-Docker network isolation" posture as MariaDB.
+Docker network isolation" posture as MariaDB. Add `--with-queue` for a queue worker container
+(`php artisan queue:work`, sharing the app's own build/image, just with a different command) —
+requires `--with-redis`, since a worker only makes sense against a real queue backend, not the
+default `sync` driver which already runs jobs inline with no worker needed.
+
+```bash
+synology-site create demo.example.com --framework laravel --with-redis --with-queue
+```
 
 `--php-server` picks how the app is actually served:
 

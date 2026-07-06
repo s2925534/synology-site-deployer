@@ -67,6 +67,7 @@ def create_site(
     strict_cloudflare: bool = False,
     db_mode: str = "none",
     redis_enabled: bool = False,
+    queue_enabled: bool = False,
     frontend: str = "none",
     php_server: str = "artisan",
     workspace: str | None = None,
@@ -78,6 +79,13 @@ def create_site(
         raise SynologySiteError("Only DB mode none or container is supported")
     if redis_enabled and framework != "laravel":
         raise SynologySiteError("--with-redis is only applicable to --framework laravel")
+    if queue_enabled and framework != "laravel":
+        raise SynologySiteError("--with-queue is only applicable to --framework laravel")
+    if queue_enabled and not redis_enabled:
+        raise SynologySiteError(
+            "--with-queue requires --with-redis (a queue worker needs a real queue backend, "
+            "not the default sync driver)"
+        )
     validate_php_server(framework, php_server)
     validate_frontend(framework, frontend, php_server)
     domain = validate_domain(domain)
@@ -140,6 +148,7 @@ def create_site(
             php_server=php_server,
             frontend=frontend,
             redis_enabled=redis_enabled,
+            queue_enabled=queue_enabled,
         )
         files = scaffold.generate(context)
         if dry_run:
@@ -251,6 +260,12 @@ def app(
         help="Laravel only. Adds a Redis container, and switches cache/session/queue "
         "drivers to it instead of file/sync.",
     ),
+    with_queue: bool = typer.Option(
+        False,
+        "--with-queue",
+        help="Laravel only. Adds a queue worker container (php artisan queue:work) sharing "
+        "the app's image. Requires --with-redis.",
+    ),
     frontend: str = typer.Option(
         "none",
         "--frontend",
@@ -292,6 +307,7 @@ def app(
             strict_cloudflare=strict_cloudflare,
             db_mode=selected_db_mode,
             redis_enabled=with_redis,
+            queue_enabled=with_queue,
             frontend=frontend,
             php_server=php_server,
             workspace=workspace,

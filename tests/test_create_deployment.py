@@ -75,6 +75,7 @@ class FakeSSH:
             "docker inspect -f '{{.State.Running}}' demo-example-com-db",
             "docker inspect -f '{{.State.Running}}' demo-example-com-web",
             "docker inspect -f '{{.State.Running}}' demo-example-com-redis",
+            "docker inspect -f '{{.State.Running}}' demo-example-com-queue",
         }:
             stdout = "true\n"
         elif command == "docker ps --format '{{.Ports}}'":
@@ -195,6 +196,36 @@ def test_create_site_deploys_laravel_with_redis() -> None:
     assert "docker inspect -f '{{.State.Running}}' demo-example-com-redis" in fake.commands
     env = fake.uploads["/volume1/docker/demo-example-com/app/.env"]
     assert "CACHE_STORE=redis" in env
+
+
+def test_create_site_deploys_laravel_with_queue_worker() -> None:
+    fake = FakeSSH()
+
+    create_site(
+        "demo.example.com",
+        settings=settings(),
+        framework="laravel",
+        redis_enabled=True,
+        queue_enabled=True,
+        ssh_factory=lambda _settings, _password: fake,
+        health_get=lambda _url, timeout: FakeResponse(),
+    )
+
+    assert "docker inspect -f '{{.State.Running}}' demo-example-com-queue" in fake.commands
+
+
+def test_create_site_rejects_queue_without_redis() -> None:
+    def boom(_settings: object, _password: object) -> object:
+        raise AssertionError("SSH should not be attempted for a rejected --with-queue combo")
+
+    with pytest.raises(SynologySiteError, match="requires --with-redis"):
+        create_site(
+            "demo.example.com",
+            settings=settings(),
+            framework="laravel",
+            queue_enabled=True,
+            ssh_factory=boom,
+        )
 
 
 def test_create_site_rejects_redis_for_non_laravel_framework_before_touching_ssh() -> None:
