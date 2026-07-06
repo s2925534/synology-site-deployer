@@ -64,6 +64,24 @@ services:
       timeout: 5s
       retries: 10
 {% endif %}
+{% if queue_enabled %}
+
+  {{ slug }}-queue:
+    build:
+      context: ./app
+    container_name: {{ slug }}-queue
+    restart: {{ restart_policy }}
+    command: ["php", "artisan", "queue:work", "--sleep=3", "--tries=3", "--max-time=3600"]
+    depends_on:
+      {{ redis_container }}:
+        condition: service_healthy
+{% if db_enabled %}
+      {{ db_container }}:
+        condition: service_healthy
+{% endif %}
+    networks:
+      - {{ db_network }}
+{% endif %}
 {% if db_enabled or redis_enabled %}
 
 volumes:

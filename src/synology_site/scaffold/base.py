@@ -56,6 +56,7 @@ class ScaffoldContext:
     php_server: str = "artisan"
     frontend: str = "none"
     redis_enabled: bool = False
+    queue_enabled: bool = False
 
 
 def common_template_values(context: ScaffoldContext, *, internal_port: int) -> dict[str, object]:
@@ -91,6 +92,7 @@ def common_template_values(context: ScaffoldContext, *, internal_port: int) -> d
         "redis_enabled": context.redis_enabled,
         "redis_container": redis_container_name(context.domain),
         "redis_volume": redis_volume_name(context.domain),
+        "queue_enabled": context.queue_enabled,
         "cloudflare_attempted": context.cloudflare_attempted,
         "cloudflare_configured": context.cloudflare_configured,
         "cloudflare_manual_required": context.cloudflare_manual_required,

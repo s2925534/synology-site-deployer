@@ -12,6 +12,7 @@ def context(
     php_server: str = "artisan",
     frontend: str = "none",
     redis_enabled: bool = False,
+    queue_enabled: bool = False,
 ) -> ScaffoldContext:
     return ScaffoldContext(
         domain="demo.example.com",
@@ -30,6 +31,7 @@ def context(
         php_server=php_server,
         frontend=frontend,
         redis_enabled=redis_enabled,
+        queue_enabled=queue_enabled,
     )
 
 
@@ -38,11 +40,12 @@ def generated_files(
     php_server: str = "artisan",
     frontend: str = "none",
     redis_enabled: bool = False,
+    queue_enabled: bool = False,
 ) -> dict[str, str]:
     return {
         item.path: item.content
         for item in LaravelScaffold().generate(
-            context(db_enabled, php_server, frontend, redis_enabled)
+            context(db_enabled, php_server, frontend, redis_enabled, queue_enabled)
         )
     }
 
@@ -295,3 +298,58 @@ def test_redis_with_fpm_nginx_topology() -> None:
         "demo-example-com-redis",
         "demo-example-com-web",
     ]
+
+
+def test_queue_worker_disabled_by_default() -> None:
+    compose = yaml.safe_load(generated_files(redis_enabled=True)["docker-compose.yml"])
+
+    assert "demo-example-com-queue" not in compose["services"]
+
+
+def test_queue_worker_adds_service_depending_on_redis() -> None:
+    compose = yaml.safe_load(
+        generated_files(redis_enabled=True, queue_enabled=True)["docker-compose.yml"]
+    )
+
+    queue_service = compose["services"]["demo-example-com-queue"]
+    assert queue_service["command"] == [
+        "php",
+        "artisan",
+        "queue:work",
+        "--sleep=3",
+        "--tries=3",
+        "--max-time=3600",
+    ]
+    assert queue_service["depends_on"] == {
+        "demo-example-com-redis": {"condition": "service_healthy"}
+    }
+
+
+def test_queue_worker_also_depends_on_db_when_both_enabled() -> None:
+    compose = yaml.safe_load(
+        generated_files(db_enabled=True, redis_enabled=True, queue_enabled=True)[
+            "docker-compose.yml"
+        ]
+    )
+
+    queue_depends_on = compose["services"]["demo-example-com-queue"]["depends_on"]
+    assert queue_depends_on["demo-example-com-db"]["condition"] == "service_healthy"
+    assert queue_depends_on["demo-example-com-redis"]["condition"] == "service_healthy"
+
+
+def test_queue_worker_with_fpm_nginx_uses_php_fpm_target() -> None:
+    compose = yaml.safe_load(
+        generated_files(php_server="fpm-nginx", redis_enabled=True, queue_enabled=True)[
+            "docker-compose.yml"
+        ]
+    )
+
+    assert compose["services"]["demo-example-com-queue"]["build"]["target"] == "php-fpm"
+
+
+def test_queue_worker_container_name_included_in_container_names() -> None:
+    names = LaravelScaffold().container_names(
+        context(redis_enabled=True, queue_enabled=True)
+    )
+
+    assert names == ["demo-example-com", "demo-example-com-queue"]
