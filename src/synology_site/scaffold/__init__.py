@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from synology_site.errors import SynologySiteError
 from synology_site.scaffold.base import DECOUPLED_SPA_FRONTENDS, FRONTENDS
+from synology_site.scaffold.fastapi import FastAPIScaffold
 from synology_site.scaffold.flask import FlaskScaffold
 from synology_site.scaffold.laravel import LaravelScaffold
 
 FRAMEWORKS = {
     "flask": FlaskScaffold(),
     "laravel": LaravelScaffold(),
+    "fastapi": FastAPIScaffold(),
 }
 
 

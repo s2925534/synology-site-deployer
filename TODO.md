@@ -72,16 +72,17 @@ network (shared LAN/VPN mesh). If one Cloudflare account's sites end up split ac
 that are genuinely network-isolated from each other, "one tunnel per account" and "multi-NAS"
 pull in different directions for that account.
 
-## Phase 6 — Additional Backend/Runtime Options (Not Started)
+## Phase 6 — Additional Backend/Runtime Options
 
 Flask + Laravel cover Python/PHP; these are the two most-requested "deploy my app" targets not
 yet covered, picked for popularity rather than novelty.
 
 | Status | Item |
 |---|---|
+| 🟢 | `--framework fastapi` — unlike Laravel, FastAPI has no official project installer to run at build time (it's just a library, not a full framework with its own CLI generator), so this hand-templates `app/main.py` the same way Flask's scaffold does, rather than needing Laravel's Dockerfile-driven installer approach. Ships `/health` + `/db-health` (same SQLAlchemy/MariaDB pattern as Flask, works with `--with-db`). Runs on `gunicorn` + `uvicorn.workers.UvicornWorker` — already production-grade by default, so no `--python-server` axis needed (see the decision below). **Actually smoke-tested**, not just template-rendered: ran the generated `main.py` under real `uvicorn` in this environment (PyPI access works here, unlike Composer/npm registries) and confirmed `/`, `/health`, and a real SQLAlchemy connection-failure path on `/db-health` all return correct responses. |
 | 🔴 | `--framework nextjs` — Next.js (React full-stack), scaffolded via `npx create-next-app` at build time, same Option-C hybrid pattern as Laravel (don't hand-template it) |
-| 🔴 | `--framework fastapi` — FastAPI has largely replaced Flask as the default choice for new Python APIs; `uv`/`pip`-based build, ASGI server (uvicorn/gunicorn) instead of Flask's WSGI dev server |
-| 🟢 | **Decided: no.** Evaluated whether Flask's scaffold should gain a `--python-server` axis mirroring Laravel's `--php-server`. Laravel needed the axis because its default `php artisan serve` is an explicitly-documented dev-only single process; Flask's `flask_dockerfile.j2` already runs `gunicorn` (a real pre-fork multi-worker WSGI server) as its only mode, so there's no dev-vs-production serving gap to offer a flag for. If FastAPI is added (this phase), it needs the equivalent one-time decision — likely also "no axis needed" if it defaults straight to `uvicorn`/`gunicorn` rather than `uvicorn --reload`. |
+| 🟢 | **Decided: no `--python-server` axis for Flask.** Laravel needed the axis because its default `php artisan serve` is an explicitly-documented dev-only single process; Flask's `flask_dockerfile.j2` already runs `gunicorn` (a real pre-fork multi-worker WSGI server) as its only mode, so there's no dev-vs-production serving gap to offer a flag for. |
+| 🟢 | **Decided: no `--python-server` axis for FastAPI either**, for the same reason — it defaults straight to `gunicorn`+`uvicorn.workers.UvicornWorker`, never `uvicorn --reload`. |
 
 ## Phase 7 — Laravel Production Completeness
 

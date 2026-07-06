@@ -1,0 +1,56 @@
+import os
+
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+{% if db_enabled %}
+from fastapi.responses import JSONResponse
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
+{% endif %}
+
+app = FastAPI()
+
+
+@app.get("/", response_class=HTMLResponse)
+def index() -> str:
+    return "<h1>It works</h1><p>{{ domain }} is running successfully.</p>"
+
+
+@app.get("/health")
+def health() -> dict:
+    return {
+        "status": "ok",
+        "service": "{{ slug }}",
+        "domain": "{{ domain }}",
+        "framework": "fastapi",
+    }
+{% if db_enabled %}
+
+
+@app.get("/db-health")
+def db_health():
+    database_url = os.environ.get("DATABASE_URL")
+    if not database_url:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "error",
+                "database": "not_connected",
+                "message": "Database connection failed",
+            },
+        )
+    try:
+        engine = create_engine(database_url, pool_pre_ping=True)
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except SQLAlchemyError:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "error",
+                "database": "not_connected",
+                "message": "Database connection failed",
+            },
+        )
+    return {"status": "ok", "database": "connected", "service": "{{ slug }}"}
+{% endif %}

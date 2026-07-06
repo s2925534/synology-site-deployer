@@ -182,6 +182,25 @@ def test_create_site_deploys_laravel_without_db() -> None:
     ]
 
 
+def test_create_site_deploys_fastapi_without_db() -> None:
+    fake = FakeSSH()
+
+    result = create_site(
+        "demo.example.com",
+        settings=settings(),
+        framework="fastapi",
+        ssh_factory=lambda _settings, _password: fake,
+        health_get=lambda _url, timeout: FakeResponse(),
+    )
+
+    assert result.port == 5051
+    assert "/volume1/docker/demo-example-com/app/main.py" in fake.uploads
+    assert "/volume1/docker/demo-example-com/app/requirements.txt" in fake.uploads
+    dockerfile = fake.uploads["/volume1/docker/demo-example-com/app/Dockerfile"]
+    assert "gunicorn" in dockerfile
+    assert "uvicorn.workers.UvicornWorker" in dockerfile
+
+
 def test_create_site_deploys_laravel_with_redis() -> None:
     fake = FakeSSH()
 
