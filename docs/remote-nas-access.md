@@ -15,13 +15,19 @@ router port forward, and the Synology package handles the outbound connection fr
 4. Enable SSH in DSM: **Control Panel -> Terminal & SNMP -> Enable SSH service**.
 5. If DSM Firewall is enabled, allow TCP `22` from `100.64.0.0/10`.
 6. Install and sign in to Tailscale on the machine running `synology-site`.
-7. Set `NAS_HOST` to the NAS's Tailscale address.
+7. Set `TAILSCALE_ENABLED=true` and `TAILSCALE_NAS_HOST` to the NAS's Tailscale address.
+
+`TAILSCALE_ENABLED` is off by default. When enabled, only the SSH connection uses
+`TAILSCALE_NAS_HOST`; `LOCAL_BASE_URL_HOST` remains the address that health checks and Cloudflare
+Tunnel service URLs use to reach containers on the NAS.
 
 For the default workspace:
 
 ```env
-NAS_HOST=100.x.y.z
+NAS_HOST=192.168.1.100
 NAS_PORT=22
+TAILSCALE_ENABLED=true
+TAILSCALE_NAS_HOST=100.x.y.z
 ```
 
 For a workspace-specific NAS:
@@ -33,8 +39,10 @@ secrets/
 ```
 
 ```env
-NAS_HOST=100.x.y.z
+NAS_HOST=192.168.1.100
 NAS_PORT=22
+TAILSCALE_ENABLED=true
+TAILSCALE_NAS_HOST=100.x.y.z
 SYSTEM_TYPE=synology
 ```
 
@@ -57,10 +65,32 @@ Tailscale:
 - Zero Trust must be enabled for the Cloudflare account.
 - An Access application and policy must allow the user or service identity.
 - The tunnel ingress must route a private SSH hostname to `ssh://<nas-host>:22`.
-- The local machine must run `cloudflared access tcp` before SSH connects.
+- The local machine must have the `cloudflared` CLI installed and authenticated.
 
-This repository does not yet automate that flow. Until it does, use Cloudflare's `cloudflared`
-client manually or prefer Tailscale for day-to-day `synology-site` work.
+`synology-site` can start the local `cloudflared access tcp` proxy automatically before opening
+SSH. Configure a private SSH hostname in Cloudflare Access first, then opt in:
+
+```env
+SSH_ACCESS_HOSTNAME=nas-ssh.example.com
+SSH_ACCESS_LOCAL_PORT=0
+```
+
+`SSH_ACCESS_LOCAL_PORT=0` asks the CLI to pick a free local port each run. Set a fixed value, such
+as `9210`, only if you need predictable local firewall or audit rules.
+
+For a workspace-specific NAS:
+
+```env
+NAS_HOST=192.168.1.100
+NAS_PORT=22
+SSH_ACCESS_HOSTNAME=nas-ssh.example.com
+SSH_ACCESS_LOCAL_PORT=0
+SYSTEM_TYPE=synology
+```
+
+When this is configured, normal SSH still uses the same DSM username/key/password settings. The
+only transport change is that the SSH client connects to the local `cloudflared` proxy instead of
+directly to `NAS_HOST` or `TAILSCALE_NAS_HOST`.
 
 ## Alternative: WireGuard
 
@@ -74,4 +104,3 @@ A free or low-cost VPS can act as a relay with `autossh`: the NAS opens an outbo
 to the VPS, and the CLI connects to the VPS-forwarded port. This works through CGNAT and avoids a
 mesh VPN provider, but it is the highest-maintenance option because the relay, keys, firewall, and
 restart behavior all need to stay healthy.
-

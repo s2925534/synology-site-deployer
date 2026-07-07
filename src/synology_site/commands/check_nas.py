@@ -16,7 +16,7 @@ from synology_site.docker_remote import (
 )
 from synology_site.errors import SynologySiteError
 from synology_site.output import console, error, ok
-from synology_site.ssh_client import SSHClient
+from synology_site.ssh_client import CloudflareAccessSSHClient, SSHClient
 
 
 @dataclass(frozen=True)
@@ -31,8 +31,16 @@ SSHFactory = Callable[[Settings, str | None], SSHClient]
 
 def default_ssh_factory(settings: Settings, prompted_password: str | None = None) -> SSHClient:
     password = settings.nas_ssh_password or prompted_password
+    if settings.ssh_access_hostname:
+        return CloudflareAccessSSHClient(
+            settings.ssh_access_hostname,
+            settings.ssh_access_local_port,
+            settings.nas_user,
+            key_path=settings.nas_ssh_key_path,
+            password=password,
+        )
     return SSHClient(
-        settings.nas_host,
+        settings.nas_connection_host,
         settings.nas_port,
         settings.nas_user,
         key_path=settings.nas_ssh_key_path,
@@ -51,7 +59,9 @@ def run_check_nas(
     ]
     with ssh_factory(settings, prompted_password) as ssh:
         results.append(
-            CheckResult("SSH", True, f"Connected to {settings.nas_host}:{settings.nas_port}")
+            CheckResult(
+                "SSH", True, f"Connected to {settings.nas_connection_host}:{settings.nas_port}"
+            )
         )
 
         require_docker(ssh)

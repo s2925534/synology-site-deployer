@@ -1,15 +1,14 @@
 # RESUME — Status Across All Phases
 
 Updated after completing as much of `TODO.md` as possible without new infrastructure/accounts.
-Every item below was validated (tests, or real smoke-testing where the tooling allowed it),
-committed, and pushed individually — nothing is sitting uncommitted in the working tree.
+Every item below was validated with tests or real smoke-testing where the tooling allowed it.
 
 ## TL;DR
 
-- **Phases 1–8 are done** (Phases 1–3 from earlier sessions; Phases 4–8 completed in this pass).
-  Phases 9–11 remain fully unstarted (🔴) — they need real design/implementation work, not just
-  validation, and are left for a future pass.
-- 215 tests pass, `ruff check` is clean, and the real `.env` on this machine still resolves to
+- **Phases 1–8 and Phase 12 are done**. Phase 9 and Phase 10 are partially done in `TODO.md`; the next
+  substantive unfinished work is the remaining deployment lifecycle, observability/backup,
+  and security-hardening items.
+- 253 tests pass, `ruff check` is clean, and the real `.env` on this machine still resolves to
   exactly one workspace (`default`) — confirming zero behavior change for the existing
   single-NAS, single-Cloudflare-account setup throughout all of this.
 - **Corrected an earlier finding**: I'd previously reported "no reliable Packagist/npm registry
@@ -55,16 +54,28 @@ committed, and pushed individually — nothing is sitting uncommitted in the wor
 - All three are independently combinable with each other, with `--with-db`, and across both
   `--php-server` modes — verified with dedicated compose-topology tests for every combination.
 
-### Phase 8 — Popular self-hosted app bootstraps (partial)
+### Phase 8 — Popular self-hosted app bootstraps
 - `bootstrap-uptime-kuma`: turned out much simpler than `bootstrap-supabase` in practice — Uptime
   Kuma ships as a single official image with no secrets to regenerate (its own first-run setup
   wizard creates the admin account), so there's no repo to clone or `.env` to rewrite. Reuses the
   same port allocator `create` uses; doesn't wire up Cloudflare automatically (same as
   `bootstrap-supabase` — prints the `cloudflare-route` follow-up command instead).
-- `bootstrap-n8n`, `bootstrap-vaultwarden`, `bootstrap-plausible`/`bootstrap-umami` are **not yet
-  built** — these have real secrets to generate (unlike Uptime Kuma), so they're a better fit for
-  extracting `bootstrap_supabase.py`'s shared "clone + regenerate secrets + wire tunnel" logic
-  into something reusable, which wasn't worth doing for Uptime Kuma alone.
+- `bootstrap-n8n`, `bootstrap-vaultwarden`, and `bootstrap-umami` are built. Their generated
+  Compose/env deployment path is shared through `commands/bootstrap_compose.py`: port selection,
+  overwrite handling, upload, local secret persistence, startup, and container-running checks.
+  Supabase's clone-and-patch flow remains separate because it has materially different behavior.
+
+### Phase 12 — Remote access to the home NAS
+- Tailscale remains the recommended path and is now an explicit opt-in SSH override:
+  `TAILSCALE_ENABLED=false` by default, with `TAILSCALE_NAS_HOST` used only for the SSH
+  connection when enabled. `NAS_HOST` and `LOCAL_BASE_URL_HOST` remain available for LAN/service
+  routing.
+- Cloudflare Access SSH is implemented as an optional transport: `SSH_ACCESS_HOSTNAME` makes the
+  CLI start `cloudflared access tcp --hostname ... --url localhost:<port>` before opening SSH.
+  `SSH_ACCESS_LOCAL_PORT=0` picks a free local port per run. The Cloudflare Access app/tunnel
+  route still has to be configured in Cloudflare first.
+- WireGuard and reverse-SSH-through-a-VPS are documented as fallbacks in
+  `docs/remote-nas-access.md`, with their CGNAT/maintenance constraints called out.
 
 ## What's still unverified against real infrastructure (unchanged from before)
 
@@ -116,11 +127,9 @@ synology-site create test.yourdomain.dev --workspace testnas --dry-run
 
 ## Remaining phases (not started)
 
-- **Phase 8 (remainder)**: `bootstrap-n8n`, `bootstrap-vaultwarden`, `bootstrap-plausible`/`umami`.
-- **Phase 9**: deployment lifecycle (`update` command, health-gated zero-downtime restarts,
-  registry-based image build docs).
-- **Phase 10**: observability/backups (scheduled DB backups to S3-compatible storage, Slack/
-  Discord deploy notifications, aggregated health dashboard).
+- **Phase 9 remainder**: health-gated zero-downtime restarts and registry-based image build docs.
+- **Phase 10 remainder**: scheduled DB backups to S3-compatible storage and Slack/Discord deploy
+  notifications.
 - **Phase 11**: security hardening (Cloudflare Access/Zero Trust integration, Traefik+Let's
   Encrypt as a documented Cloudflare Tunnel alternative, secrets-manager evaluation).
 
@@ -128,8 +137,7 @@ See `TODO.md` for the full per-item breakdown and status of everything above.
 
 ## Validation performed this pass
 
-- `pytest`: 215/215 passing (started at 166 at the top of this pass; +49 new tests across
-  Redis/queue/scheduler, FastAPI, Next.js, and Uptime Kuma).
+- `pytest`: 253/253 passing.
 - `ruff check .`: clean.
 - Real runtime smoke tests (not just template rendering): FastAPI app under `uvicorn` (index,
   health, and a genuine DB-connection-failure path); Next.js app built and served with `npm run
@@ -137,5 +145,4 @@ See `TODO.md` for the full per-item breakdown and status of everything above.
   scaffolding for both `vue` and `react` templates.
 - Loaded the real local `.env` through `load_config()` — still resolves to exactly the `default`
   workspace, confirming no behavior change to the existing setup throughout this entire pass.
-- Every item was committed and pushed individually as it was completed and validated (see `git
-  log` for the sequence) — nothing was batched into one large, harder-to-review commit.
+- Current working tree changes are intentionally uncommitted.

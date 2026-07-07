@@ -4,10 +4,10 @@ from dataclasses import replace
 
 import pytest
 
-from synology_site.commands.check_nas import run_check_nas
+from synology_site.commands.check_nas import default_ssh_factory, run_check_nas
 from synology_site.config import Settings
 from synology_site.errors import SynologySiteError
-from synology_site.ssh_client import RemoteCommandResult
+from synology_site.ssh_client import CloudflareAccessSSHClient, RemoteCommandResult
 
 
 def settings() -> Settings:
@@ -133,3 +133,17 @@ def test_run_check_nas_accepts_prompted_password() -> None:
     )
 
     assert captured["password"] == "prompted"
+
+
+def test_default_ssh_factory_uses_cloudflare_access_when_configured() -> None:
+    ssh = default_ssh_factory(
+        replace(
+            settings(),
+            ssh_access_hostname="nas-ssh.example.com",
+            ssh_access_local_port=9210,
+        )
+    )
+
+    assert isinstance(ssh, CloudflareAccessSSHClient)
+    assert ssh.access_hostname == "nas-ssh.example.com"
+    assert ssh.requested_local_port == 9210

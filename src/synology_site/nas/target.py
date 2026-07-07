@@ -29,12 +29,32 @@ class NasTarget:
     default_start_port: int
     default_end_port: int
     system_type: str = "synology"
+    tailscale_enabled: bool = False
+    tailscale_host: str | None = None
+    ssh_access_hostname: str | None = None
+    ssh_access_local_port: int = 0
+
+    @property
+    def connection_host(self) -> str:
+        if self.tailscale_enabled:
+            if not self.tailscale_host:
+                msg = f"TAILSCALE_NAS_HOST is required for NAS target {self.name}"
+                raise SynologySiteError(msg)
+            return self.tailscale_host
+        return self.host
 
 
 def _optional(value: str | None) -> str | None:
     if value is None or value.strip() == "":
         return None
     return value.strip()
+
+
+def _bool(value: str | None, *, default: bool = False) -> bool:
+    raw = _optional(value)
+    if raw is None:
+        return default
+    return raw.lower() in {"1", "true", "yes", "on"}
 
 
 def _target_from_env_file(name: str, env_file: Path, *, default: NasTarget) -> NasTarget:
@@ -48,6 +68,22 @@ def _target_from_env_file(name: str, env_file: Path, *, default: NasTarget) -> N
     def _get(key: str, fallback: str) -> str:
         return _optional(values.get(key)) or fallback
 
+    host_override = _optional(values.get("NAS_HOST"))
+    inherits_default_host = host_override is None
+    tailscale_enabled = _bool(
+        values.get("TAILSCALE_ENABLED"),
+        default=default.tailscale_enabled if inherits_default_host else False,
+    )
+    tailscale_host = _optional(values.get("TAILSCALE_NAS_HOST")) or (
+        default.tailscale_host if inherits_default_host else None
+    )
+    ssh_access_hostname = _optional(values.get("SSH_ACCESS_HOSTNAME")) or (
+        default.ssh_access_hostname if inherits_default_host else None
+    )
+    ssh_access_local_port = int(
+        _optional(values.get("SSH_ACCESS_LOCAL_PORT"))
+        or (default.ssh_access_local_port if inherits_default_host else 0)
+    )
     system_type = _get("SYSTEM_TYPE", default.system_type).lower()
     if system_type not in SYSTEM_TYPES:
         msg = (
@@ -55,10 +91,13 @@ def _target_from_env_file(name: str, env_file: Path, *, default: NasTarget) -> N
             f"(expected one of {sorted(SYSTEM_TYPES)})"
         )
         raise SynologySiteError(msg)
+    if tailscale_enabled and not tailscale_host:
+        msg = f"TAILSCALE_NAS_HOST is required when TAILSCALE_ENABLED=true in {env_file}"
+        raise SynologySiteError(msg)
 
     return NasTarget(
         name=name,
-        host=_get("NAS_HOST", default.host),
+        host=host_override or default.host,
         port=int(_get("NAS_PORT", str(default.port))),
         user=_get("NAS_USER", default.user),
         ssh_key_path=_optional(values.get("NAS_SSH_KEY_PATH")) or default.ssh_key_path,
@@ -68,6 +107,10 @@ def _target_from_env_file(name: str, env_file: Path, *, default: NasTarget) -> N
         default_start_port=int(_get("DEFAULT_START_PORT", str(default.default_start_port))),
         default_end_port=int(_get("DEFAULT_END_PORT", str(default.default_end_port))),
         system_type=system_type,
+        tailscale_enabled=tailscale_enabled,
+        tailscale_host=tailscale_host,
+        ssh_access_hostname=ssh_access_hostname,
+        ssh_access_local_port=ssh_access_local_port,
     )
 
 
