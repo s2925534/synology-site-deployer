@@ -82,7 +82,7 @@ class SSHClient:
         try:
             client.connect(**connect_kwargs)
         except Exception as exc:  # noqa: BLE001
-            msg = f"SSH connection to {self.host}:{self.port} failed"
+            msg = f"SSH connection to {self.host}:{self.port} failed: {exc}"
             raise SynologySiteError(msg) from exc
         self._client = client
 

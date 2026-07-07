@@ -128,6 +128,16 @@ def test_ssh_client_connects_with_password() -> None:
     assert "key_filename" not in fake.connected_kwargs
 
 
+def test_ssh_client_connect_failure_includes_underlying_error() -> None:
+    fake = FakeSSH(connect_error=TimeoutError("timed out"))
+    client = SSHClient(
+        "100.64.1.2", 22, "deploy", password="secret", client_factory=lambda: fake
+    )
+
+    with pytest.raises(SynologySiteError, match="timed out"):
+        client.connect()
+
+
 def test_ssh_client_runs_command() -> None:
     fake = FakeSSH()
     client = SSHClient("nas.local", 22, "deploy", client_factory=lambda: fake)
