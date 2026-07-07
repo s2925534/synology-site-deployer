@@ -49,8 +49,11 @@ On Synology, Docker may be available at `/usr/local/bin/docker` instead of the d
 
 When running away from the NAS's LAN, use a private remote-access path such as Tailscale. Leave
 `NAS_HOST` as the normal NAS address and opt in with `TAILSCALE_ENABLED=true` plus
-`TAILSCALE_NAS_HOST=<100.x.y.z>` when you want SSH to use Tailscale. See
-`docs/remote-nas-access.md`.
+`TAILSCALE_NAS_HOST=<100.x.y.z>` when you want SSH to use Tailscale. If `TAILSCALE_CLIENT_ID`/
+`TAILSCALE_CLIENT_SECRET` are set, `synology-site configure-tailscale` looks the NAS's Tailscale
+address up automatically instead of copying it from the admin console by hand. `synology-site
+check-nas` auto-detects LAN vs. remote (a `--remote` flag forces the remote path for testing).
+See `docs/remote-nas-access.md`.
 
 ## Install For Development
 
@@ -89,6 +92,8 @@ DEFAULT_START_PORT=5050
 DEFAULT_END_PORT=5999
 TAILSCALE_ENABLED=false
 TAILSCALE_NAS_HOST=
+TAILSCALE_CLIENT_ID=
+TAILSCALE_CLIENT_SECRET=
 SSH_ACCESS_HOSTNAME=
 SSH_ACCESS_LOCAL_PORT=0
 DEFAULT_SITE_DOMAIN=example.com
@@ -741,6 +746,8 @@ synology-site tunnel-fix-autostart
 
 ```bash
 synology-site check-nas
+synology-site check-nas --remote
+synology-site configure-tailscale
 synology-site list
 synology-site list --all-targets
 synology-site health
@@ -751,6 +758,13 @@ synology-site stop demo.example.com
 synology-site set-autostart demo.example.com
 synology-site remove demo.example.com
 ```
+
+`check-nas` auto-detects whether the NAS is reachable directly on the LAN; if not, it falls back
+to whichever remote transport is configured (Tailscale/Cloudflare Access) automatically. Pass
+`--remote` to force that remote path even from inside the LAN, to verify it actually works.
+`configure-tailscale` requires `TAILSCALE_CLIENT_ID`/`TAILSCALE_CLIENT_SECRET` (an OAuth client
+from the Tailscale admin console) and writes `TAILSCALE_ENABLED`/`TAILSCALE_NAS_HOST` into `.env`
+automatically -- see `docs/remote-nas-access.md`.
 
 `health` reads the same `.synology-site.json` markers as `list` and requests `/health` on each
 site that has a stored port. Use `--path` for a different endpoint, or `--all-targets` to check
