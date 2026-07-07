@@ -3,6 +3,7 @@ from __future__ import annotations
 import typer
 
 from synology_site.commands import tunnel_fix
+from synology_site.commands.backup_plan import app as backup_plan_app
 from synology_site.commands.bootstrap_n8n import app as bootstrap_n8n_app
 from synology_site.commands.bootstrap_supabase import app as bootstrap_supabase_app
 from synology_site.commands.bootstrap_umami import app as bootstrap_umami_app
@@ -33,6 +34,7 @@ app.command(name="bootstrap-uptime-kuma")(bootstrap_uptime_kuma_app)
 app.command(name="bootstrap-vaultwarden")(bootstrap_vaultwarden_app)
 app.command(name="check-nas")(check_nas_app)
 app.command(name="health")(health_app)
+app.command(name="backup-plan")(backup_plan_app)
 app.command(name="list")(list_app)
 app.command(name="start")(start_app)
 app.command(name="stop")(stop_app)
