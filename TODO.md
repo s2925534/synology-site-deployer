@@ -120,7 +120,7 @@ once a site has been running in production for a while.
 |---|---|
 | 🟢 | `synology-site update <domain>` — pull latest image/rebuild and restart an existing site without re-running the full `create` scaffold/health-check-from-zero flow. Implemented as an in-place Compose update that reads `.synology-site.json`, uses stored deploy compose paths, falls back from failed pull to build, verifies a container when known/provided, and health-checks generated `create` sites. |
 | 🔴 | Health-gated restart instead of a hard `docker compose down && up` — start the new container, confirm its health check passes, *then* stop the old one, to avoid a visible-downtime window on every redeploy |
-| 🔴 | Registry-based image builds (build once in CI, push to GHCR, `deploy --pull` on the NAS) as the documented recommended path for anything beyond a personal project — building on the NAS itself (today's default for `create`) is fine for low-traffic personal use but doesn't scale to frequent deploys |
+| 🟢 | Registry-based image builds (build once in CI, push to GHCR, `deploy --pull` on the NAS) as the documented recommended path for anything beyond a personal project — documented in README with Compose, `deploy`, `update`, GHCR login, and GitHub Actions examples. |
 
 ## Phase 10 — Observability, Backups & Notifications (Partially Done)
 
