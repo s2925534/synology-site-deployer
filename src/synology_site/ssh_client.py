@@ -3,6 +3,10 @@ from __future__ import annotations
 import base64
 import os
 import shlex
+import shutil
+import socket
+import subprocess
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,6 +32,9 @@ class RemoteCommandResult:
 class ParamikoClientFactory(Protocol):
     def __call__(self) -> Any:
         pass
+
+
+ProcessFactory = Callable[..., subprocess.Popen[Any]]
 
 
 class SSHClient:
@@ -226,3 +233,104 @@ class SSHClient:
         if self._client is None:
             raise SynologySiteError("SSH client is not connected")
         return self._client
+
+
+class CloudflareAccessSSHClient(SSHClient):
+    def __init__(
+        self,
+        access_hostname: str,
+        local_port: int,
+        username: str,
+        *,
+        key_path: str | None = None,
+        password: str | None = None,
+        cloudflared_path: str = "cloudflared",
+        client_factory: ParamikoClientFactory = paramiko.SSHClient,
+        process_factory: ProcessFactory = subprocess.Popen,
+        timeout: int = 20,
+    ) -> None:
+        self.access_hostname = access_hostname
+        self.requested_local_port = local_port
+        self.cloudflared_path = cloudflared_path
+        self.process_factory = process_factory
+        self._process: subprocess.Popen[Any] | None = None
+        super().__init__(
+            "127.0.0.1",
+            local_port,
+            username,
+            key_path=key_path,
+            password=password,
+            client_factory=client_factory,
+            timeout=timeout,
+        )
+
+    def connect(self) -> None:
+        if self.cloudflared_path == "cloudflared" and shutil.which(self.cloudflared_path) is None:
+            msg = "cloudflared is required for SSH_ACCESS_HOSTNAME but was not found on PATH"
+            raise SynologySiteError(msg)
+        if self.requested_local_port <= 0:
+            self.port = _find_free_local_port()
+        try:
+            self._start_proxy()
+            self._wait_for_proxy()
+            super().connect()
+        except Exception:
+            self._stop_proxy()
+            raise
+
+    def close(self) -> None:
+        super().close()
+        self._stop_proxy()
+
+    def _stop_proxy(self) -> None:
+        if self._process is not None:
+            self._process.terminate()
+            try:
+                self._process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self._process.kill()
+                self._process.wait(timeout=5)
+            self._process = None
+
+    def _start_proxy(self) -> None:
+        command = [
+            self.cloudflared_path,
+            "access",
+            "tcp",
+            "--hostname",
+            self.access_hostname,
+            "--url",
+            f"localhost:{self.port}",
+        ]
+        try:
+            self._process = self.process_factory(
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except FileNotFoundError as exc:
+            msg = "cloudflared is required for SSH_ACCESS_HOSTNAME but was not found"
+            raise SynologySiteError(msg) from exc
+        except Exception as exc:  # noqa: BLE001
+            msg = f"Failed to start cloudflared access proxy for {self.access_hostname}"
+            raise SynologySiteError(msg) from exc
+
+    def _wait_for_proxy(self) -> None:
+        deadline = time.monotonic() + self.timeout
+        while time.monotonic() < deadline:
+            if self._process is not None and self._process.poll() is not None:
+                msg = f"cloudflared access proxy exited early for {self.access_hostname}"
+                raise SynologySiteError(msg)
+            try:
+                with socket.create_connection(("127.0.0.1", self.port), timeout=0.5):
+                    return
+            except OSError:
+                time.sleep(0.2)
+        msg = f"Timed out waiting for cloudflared access proxy on localhost:{self.port}"
+        raise SynologySiteError(msg)
+
+
+def _find_free_local_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])

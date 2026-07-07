@@ -454,6 +454,85 @@ def test_create_site_uses_resolved_nas_target_for_ssh_connection() -> None:
     assert captured_settings[0].nas_ssh_password == "clienta-secret"
 
 
+def test_create_site_uses_tailscale_host_for_workspace_ssh_only() -> None:
+    from dataclasses import replace
+
+    fake = FakeSSH()
+    captured_settings: list[Settings] = []
+    health_urls: list[str] = []
+
+    def capturing_ssh_factory(passed_settings: Settings, _password: object) -> FakeSSH:
+        captured_settings.append(passed_settings)
+        return fake
+
+    clienta_target = NasTarget(
+        name="clienta",
+        host="192.0.2.50",
+        port=22,
+        user="clienta-deploy",
+        ssh_key_path=None,
+        ssh_password="clienta-secret",
+        docker_root="/volume1/docker",
+        local_base_url_host="192.0.2.10",
+        default_start_port=5050,
+        default_end_port=5999,
+        tailscale_enabled=True,
+        tailscale_host="100.64.1.50",
+    )
+    multi_nas_settings = replace(settings(), nas_targets=(clienta_target,))
+
+    result = create_site(
+        "demo.example.com",
+        settings=multi_nas_settings,
+        workspace="clienta",
+        ssh_factory=capturing_ssh_factory,
+        health_get=lambda url, timeout: health_urls.append(url) or FakeResponse(),
+    )
+
+    assert captured_settings[0].nas_host == "100.64.1.50"
+    assert result.local_url == "http://192.0.2.10:5051"
+    assert health_urls == ["http://192.0.2.10:5051/health"]
+
+
+def test_create_site_passes_cloudflare_access_ssh_settings_from_workspace() -> None:
+    from dataclasses import replace
+
+    fake = FakeSSH()
+    captured_settings: list[Settings] = []
+
+    def capturing_ssh_factory(passed_settings: Settings, _password: object) -> FakeSSH:
+        captured_settings.append(passed_settings)
+        return fake
+
+    clienta_target = NasTarget(
+        name="clienta",
+        host="192.0.2.50",
+        port=22,
+        user="clienta-deploy",
+        ssh_key_path=None,
+        ssh_password="clienta-secret",
+        docker_root="/volume1/docker",
+        local_base_url_host="192.0.2.10",
+        default_start_port=5050,
+        default_end_port=5999,
+        ssh_access_hostname="nas-ssh.example.com",
+        ssh_access_local_port=9210,
+    )
+    multi_nas_settings = replace(settings(), nas_targets=(clienta_target,))
+
+    create_site(
+        "demo.example.com",
+        settings=multi_nas_settings,
+        workspace="clienta",
+        ssh_factory=capturing_ssh_factory,
+        health_get=lambda _url, timeout: FakeResponse(),
+    )
+
+    assert captured_settings[0].nas_host == "192.0.2.50"
+    assert captured_settings[0].ssh_access_hostname == "nas-ssh.example.com"
+    assert captured_settings[0].ssh_access_local_port == 9210
+
+
 def test_create_site_without_workspace_keeps_using_default_nas_target() -> None:
     fake = FakeSSH()
     captured_settings: list[Settings] = []

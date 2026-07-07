@@ -145,8 +145,59 @@ def test_load_config_default_nas_target_matches_root_env(tmp_path: Path) -> None
     target = settings.default_nas_target
     assert target.name == "default"
     assert target.host == "192.0.2.10"
+    assert target.connection_host == "192.0.2.10"
     assert target.docker_root == "/volume1/docker"
     assert target.system_type == "synology"
+    assert target.tailscale_enabled is False
+    assert target.tailscale_host is None
+
+
+def test_load_config_tailscale_is_opt_in_for_default_target(tmp_path: Path) -> None:
+    settings = load_config(
+        write_env(
+            tmp_path,
+            "\n".join(
+                [
+                    "TAILSCALE_ENABLED=true",
+                    "TAILSCALE_NAS_HOST=100.64.1.10",
+                ]
+            ),
+        ),
+        secrets_dir=tmp_path / "secrets",
+    )
+
+    assert settings.nas_host == "192.0.2.10"
+    assert settings.nas_connection_host == "100.64.1.10"
+    assert settings.default_nas_target.host == "192.0.2.10"
+    assert settings.default_nas_target.connection_host == "100.64.1.10"
+    assert settings.default_nas_target.tailscale_enabled is True
+
+
+def test_load_config_reads_cloudflare_access_ssh_proxy_for_default_target(
+    tmp_path: Path,
+) -> None:
+    settings = load_config(
+        write_env(
+            tmp_path,
+            "\n".join(
+                [
+                    "SSH_ACCESS_HOSTNAME=ssh.example.com",
+                    "SSH_ACCESS_LOCAL_PORT=9210",
+                ]
+            ),
+        ),
+        secrets_dir=tmp_path / "secrets",
+    )
+
+    assert settings.ssh_access_hostname == "ssh.example.com"
+    assert settings.ssh_access_local_port == 9210
+    assert settings.default_nas_target.ssh_access_hostname == "ssh.example.com"
+    assert settings.default_nas_target.ssh_access_local_port == 9210
+
+
+def test_load_config_requires_tailscale_host_when_enabled(tmp_path: Path) -> None:
+    with pytest.raises(SynologySiteError, match="TAILSCALE_NAS_HOST"):
+        load_config(write_env(tmp_path, "TAILSCALE_ENABLED=true"), secrets_dir=tmp_path / "secrets")
 
 
 def test_load_config_discovers_extra_nas_target_and_inherits_unset_fields(tmp_path: Path) -> None:
@@ -161,6 +212,67 @@ def test_load_config_discovers_extra_nas_target_and_inherits_unset_fields(tmp_pa
     # Not overridden -- inherited from the root .env's default target.
     assert target.docker_root == "/volume1/docker"
     assert target.local_base_url_host == "192.0.2.10"
+
+
+def test_nas_target_can_use_tailscale_for_ssh_without_changing_service_host(
+    tmp_path: Path,
+) -> None:
+    write_nas_target(
+        tmp_path,
+        "clienta",
+        NAS_HOST="192.0.2.50",
+        TAILSCALE_ENABLED="true",
+        TAILSCALE_NAS_HOST="100.64.1.50",
+    )
+
+    settings = load_config(write_env(tmp_path), secrets_dir=tmp_path / "secrets")
+
+    target = settings.resolve_target(workspace="clienta")
+    assert target.host == "192.0.2.50"
+    assert target.connection_host == "100.64.1.50"
+    assert target.local_base_url_host == "192.0.2.10"
+
+
+def test_nas_target_with_own_host_does_not_inherit_default_tailscale_host(
+    tmp_path: Path,
+) -> None:
+    write_nas_target(tmp_path, "clienta", NAS_HOST="203.0.113.5")
+
+    settings = load_config(
+        write_env(
+            tmp_path,
+            "\n".join(
+                [
+                    "TAILSCALE_ENABLED=true",
+                    "TAILSCALE_NAS_HOST=100.64.1.10",
+                ]
+            ),
+        ),
+        secrets_dir=tmp_path / "secrets",
+    )
+
+    target = settings.resolve_target(workspace="clienta")
+    assert target.host == "203.0.113.5"
+    assert target.connection_host == "203.0.113.5"
+    assert target.tailscale_enabled is False
+
+
+def test_nas_target_can_use_cloudflare_access_for_ssh(tmp_path: Path) -> None:
+    write_nas_target(
+        tmp_path,
+        "clienta",
+        NAS_HOST="192.0.2.50",
+        SSH_ACCESS_HOSTNAME="nas-ssh.example.com",
+        SSH_ACCESS_LOCAL_PORT="9210",
+    )
+
+    settings = load_config(write_env(tmp_path), secrets_dir=tmp_path / "secrets")
+
+    target = settings.resolve_target(workspace="clienta")
+    assert target.host == "192.0.2.50"
+    assert target.connection_host == "192.0.2.50"
+    assert target.ssh_access_hostname == "nas-ssh.example.com"
+    assert target.ssh_access_local_port == 9210
 
 
 def test_resolve_target_falls_back_to_default_when_workspace_has_no_nas_override(

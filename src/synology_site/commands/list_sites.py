@@ -28,11 +28,13 @@ def list_markers_for_target(
 ) -> list[dict[str, Any]]:
     connection_settings = replace(
         settings,
-        nas_host=target.host,
+        nas_host=target.connection_host,
         nas_port=target.port,
         nas_user=target.user,
         nas_ssh_key_path=target.ssh_key_path,
         nas_ssh_password=target.ssh_password,
+        ssh_access_hostname=target.ssh_access_hostname,
+        ssh_access_local_port=target.ssh_access_local_port,
     )
     with ssh_factory(connection_settings, prompted_password) as ssh:
         quoted_root = shlex.quote(target.docker_root)

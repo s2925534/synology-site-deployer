@@ -105,11 +105,13 @@ def create_site(
     target = settings.resolve_target(workspace=workspace)
     connection_settings = replace(
         settings,
-        nas_host=target.host,
+        nas_host=target.connection_host,
         nas_port=target.port,
         nas_user=target.user,
         nas_ssh_key_path=target.ssh_key_path,
         nas_ssh_password=target.ssh_password,
+        ssh_access_hostname=target.ssh_access_hostname,
+        ssh_access_local_port=target.ssh_access_local_port,
     )
 
     slug = domain_to_slug(domain)

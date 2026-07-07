@@ -49,8 +49,21 @@ class Settings:
     allow_overwrite: bool
     dry_run: bool
     default_site_domain: str | None = None
+    tailscale_enabled: bool = False
+    tailscale_host: str | None = None
+    ssh_access_hostname: str | None = None
+    ssh_access_local_port: int = 0
     cloudflare_accounts: tuple[CloudflareAccount, ...] = ()
     nas_targets: tuple[NasTarget, ...] = ()
+
+    @property
+    def nas_connection_host(self) -> str:
+        if self.tailscale_enabled:
+            if not self.tailscale_host:
+                msg = "TAILSCALE_NAS_HOST is required when TAILSCALE_ENABLED=true"
+                raise SynologySiteError(msg)
+            return self.tailscale_host
+        return self.nas_host
 
     @property
     def default_cloudflare_account(self) -> CloudflareAccount:
@@ -77,6 +90,10 @@ class Settings:
             local_base_url_host=self.local_base_url_host,
             default_start_port=self.default_start_port,
             default_end_port=self.default_end_port,
+            tailscale_enabled=self.tailscale_enabled,
+            tailscale_host=self.tailscale_host,
+            ssh_access_hostname=self.ssh_access_hostname,
+            ssh_access_local_port=self.ssh_access_local_port,
         )
 
     @property
@@ -179,6 +196,13 @@ def load_config(path: str | Path = ".env", secrets_dir: str | Path = "secrets") 
     nas_ssh_key_path = _optional(values.get("NAS_SSH_KEY_PATH"))
     nas_ssh_password = _optional(values.get("NAS_SSH_PASSWORD"))
     local_base_url_host = _required(values, "LOCAL_BASE_URL_HOST")
+    tailscale_enabled = _bool(values, "TAILSCALE_ENABLED", False)
+    tailscale_host = _optional(values.get("TAILSCALE_NAS_HOST"))
+    if tailscale_enabled and not tailscale_host:
+        msg = "TAILSCALE_NAS_HOST is required when TAILSCALE_ENABLED=true"
+        raise SynologySiteError(msg)
+    ssh_access_hostname = _optional(values.get("SSH_ACCESS_HOSTNAME"))
+    ssh_access_local_port = _int(values, "SSH_ACCESS_LOCAL_PORT", 0)
     default_nas_target = NasTarget(
         name=DEFAULT_TARGET_NAME,
         host=nas_host,
@@ -190,6 +214,10 @@ def load_config(path: str | Path = ".env", secrets_dir: str | Path = "secrets") 
         local_base_url_host=local_base_url_host,
         default_start_port=start_port,
         default_end_port=end_port,
+        tailscale_enabled=tailscale_enabled,
+        tailscale_host=tailscale_host,
+        ssh_access_hostname=ssh_access_hostname,
+        ssh_access_local_port=ssh_access_local_port,
     )
 
     return Settings(
@@ -219,6 +247,10 @@ def load_config(path: str | Path = ".env", secrets_dir: str | Path = "secrets") 
         allow_overwrite=_bool(values, "ALLOW_OVERWRITE", False),
         dry_run=_bool(values, "DRY_RUN", False),
         default_site_domain=_optional(values.get("DEFAULT_SITE_DOMAIN")),
+        tailscale_enabled=tailscale_enabled,
+        tailscale_host=tailscale_host,
+        ssh_access_hostname=ssh_access_hostname,
+        ssh_access_local_port=ssh_access_local_port,
         cloudflare_accounts=discover_cloudflare_accounts(secrets_dir),
         nas_targets=discover_nas_targets(secrets_dir, default=default_nas_target),
     )

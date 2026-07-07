@@ -45,8 +45,10 @@ Contact: `pedro@veloso.dev`
 
 On Synology, Docker may be available at `/usr/local/bin/docker` instead of the default shell `PATH`. The tool detects this path automatically. If the SSH user can only access Docker through `sudo`, the tool can use `sudo -S` with the configured SSH password.
 
-When running away from the NAS's LAN, use a private remote-access path such as Tailscale and point
-`NAS_HOST` at the NAS's VPN address. See `docs/remote-nas-access.md`.
+When running away from the NAS's LAN, use a private remote-access path such as Tailscale. Leave
+`NAS_HOST` as the normal NAS address and opt in with `TAILSCALE_ENABLED=true` plus
+`TAILSCALE_NAS_HOST=<100.x.y.z>` when you want SSH to use Tailscale. See
+`docs/remote-nas-access.md`.
 
 ## Install For Development
 
@@ -83,6 +85,10 @@ NAS_DOCKER_ROOT=/volume1/docker
 LOCAL_BASE_URL_HOST=192.168.1.100
 DEFAULT_START_PORT=5050
 DEFAULT_END_PORT=5999
+TAILSCALE_ENABLED=false
+TAILSCALE_NAS_HOST=
+SSH_ACCESS_HOSTNAME=
+SSH_ACCESS_LOCAL_PORT=0
 DEFAULT_SITE_DOMAIN=example.com
 CF_ZONE_DOMAIN=example.com
 CF_TUNNEL_NAME=my-nas-tunnel

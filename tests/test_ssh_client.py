@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from synology_site.errors import SynologySiteError
-from synology_site.ssh_client import SSHClient
+from synology_site.ssh_client import CloudflareAccessSSHClient, SSHClient
 
 
 class FakeChannel:
@@ -76,6 +76,25 @@ class FakeSSH:
         self.closed = True
 
 
+class FakeProcess:
+    def __init__(self) -> None:
+        self.terminated = False
+        self.killed = False
+
+    def poll(self) -> int | None:
+        return None
+
+    def terminate(self) -> None:
+        self.terminated = True
+
+    def kill(self) -> None:
+        self.killed = True
+
+    def wait(self, timeout: int | None = None) -> int:
+        del timeout
+        return 0
+
+
 def test_ssh_client_connects_with_key() -> None:
     fake = FakeSSH()
     client = SSHClient(
@@ -134,3 +153,56 @@ def test_ssh_client_requires_connection() -> None:
 
     with pytest.raises(SynologySiteError, match="not connected"):
         client.run("docker ps")
+
+
+def test_cloudflare_access_ssh_client_starts_proxy_and_connects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_ssh = FakeSSH()
+    fake_process = FakeProcess()
+    commands: list[list[str]] = []
+
+    def process_factory(command: list[str], **_kwargs: object) -> FakeProcess:
+        commands.append(command)
+        return fake_process
+
+    class FakeSocket:
+        def __enter__(self) -> FakeSocket:
+            return self
+
+        def __exit__(self, *_exc: object) -> None:
+            pass
+
+    monkeypatch.setattr(
+        "synology_site.ssh_client.socket.create_connection",
+        lambda _address, timeout: FakeSocket(),
+    )
+
+    client = CloudflareAccessSSHClient(
+        "nas-ssh.example.com",
+        9210,
+        "deploy",
+        password="secret",
+        cloudflared_path="/usr/local/bin/cloudflared",
+        client_factory=lambda: fake_ssh,
+        process_factory=process_factory,
+    )
+
+    client.connect()
+    client.close()
+
+    assert commands == [
+        [
+            "/usr/local/bin/cloudflared",
+            "access",
+            "tcp",
+            "--hostname",
+            "nas-ssh.example.com",
+            "--url",
+            "localhost:9210",
+        ]
+    ]
+    assert fake_ssh.connected_kwargs is not None
+    assert fake_ssh.connected_kwargs["hostname"] == "127.0.0.1"
+    assert fake_ssh.connected_kwargs["port"] == 9210
+    assert fake_process.terminated is True
