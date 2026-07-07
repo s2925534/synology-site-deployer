@@ -17,6 +17,7 @@ Contact: `pedro@veloso.dev`
 - `bootstrap-supabase`: clones and starts Supabase's self-hosted stack, regenerating every security-critical secret properly (including correctly HS256-signed `ANON_KEY`/`SERVICE_ROLE_KEY` JWTs, not random strings), and can upload a Traefik-label override alongside it.
 - `bootstrap-uptime-kuma`: stands up Uptime Kuma (self-hosted status/uptime monitoring), a single official image with no secrets to regenerate.
 - `bootstrap-n8n`: stands up n8n (self-hosted workflow automation), generating and saving its credential-encryption key.
+- `bootstrap-vaultwarden`: stands up Vaultwarden (Bitwarden-compatible password manager), generating and saving its admin token with public signups closed by default.
 - `cloudflare-route`: points one hostname at a fixed port via the Cloudflare API directly, no NAS/SSH interaction — for reverse-proxy setups where many hostnames share one port.
 - `workspaces`: lists configured Cloudflare accounts/NAS targets and flags copy-paste credential mistakes (e.g. a `CF_TUNNEL_ID` accidentally reused across workspaces).
 - `list --all-targets`: aggregates sites across every configured NAS target instead of just the default one.
@@ -472,6 +473,36 @@ Wire up public access after the command prints the selected port:
 ```bash
 synology-site bootstrap-n8n --hostname n8n.example.com
 synology-site cloudflare-route n8n.example.com --port <the allocated port>
+```
+
+## Bootstrapping Vaultwarden
+
+`bootstrap-vaultwarden` stands up [Vaultwarden](https://github.com/dani-garcia/vaultwarden), a
+lightweight Bitwarden-compatible password manager, using the official
+`vaultwarden/server:latest` image with a named Docker volume mounted at `/data`.
+
+```bash
+synology-site bootstrap-vaultwarden
+```
+
+The command generates `ADMIN_TOKEN`, uploads it to the NAS as the project's `.env`, and writes the
+same value locally to `secrets/vaultwarden.env`. Public signups are disabled by default; use the
+admin token at `/admin` to invite the first user or temporarily run with `--allow-signups`.
+
+Options:
+
+- `--project-dir-name NAME` (default `vaultwarden`) — NAS folder name under `NAS_DOCKER_ROOT`, also used as the container name
+- `--hostname HOSTNAME` — sets Vaultwarden's public HTTPS `DOMAIN`
+- `--port N` — request a specific host port instead of auto-allocating one
+- `--allow-signups` — allow public account registration; off by default
+- `--force` — tear down and recreate an existing install
+- `--dry-run`
+
+Wire up public access after the command prints the selected port:
+
+```bash
+synology-site bootstrap-vaultwarden --hostname vault.example.com
+synology-site cloudflare-route vault.example.com --port <the allocated port>
 ```
 
 ## Manual Cloudflare Route
