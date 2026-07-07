@@ -14,6 +14,7 @@ Contact: `pedro@veloso.dev`
 
 - `create`: scaffolds and deploys a new Flask, Laravel, FastAPI, or Next.js app (`--framework`) to a Synology NAS using Docker Compose, optionally with a MariaDB 11 container (private network + persistent volume), a non-secret project README, `docs/DATABASE.md`, and `/health`/`/db-health` checks. `--frontend` pairs a Vue/React/Angular/Inertia/Livewire frontend with the Laravel backend (see "Backend + Frontend Roadmap").
 - `deploy`: uploads an existing project's own Compose file (+ optional `.env`) and starts it — any framework, since it doesn't generate app code. `docker compose pull` with a `--build` fallback. Works with a fixed reverse-proxy port (Traefik, etc., no port allocation/Cloudflare/health-check) or a standalone published port (same behavior as `create`).
+- `update`: refreshes an existing deployed site's Compose project in place (`pull` + `up -d`, with build fallback) without re-uploading or recreating the scaffold.
 - `bootstrap-supabase`: clones and starts Supabase's self-hosted stack, regenerating every security-critical secret properly (including correctly HS256-signed `ANON_KEY`/`SERVICE_ROLE_KEY` JWTs, not random strings), and can upload a Traefik-label override alongside it.
 - `bootstrap-uptime-kuma`: stands up Uptime Kuma (self-hosted status/uptime monitoring), a single official image with no secrets to regenerate.
 - `bootstrap-n8n`: stands up n8n (self-hosted workflow automation), generating and saving its credential-encryption key.
@@ -357,6 +358,36 @@ Options:
 - `--force`, `--dry-run`, `--strict-cloudflare` — same meaning as on `create`
 
 Sites deployed this way show up in `synology-site list` and work with `start`/`stop`/`remove`/`set-autostart` like any other site.
+
+## Updating An Existing Site
+
+`update` refreshes a site that already exists on the NAS without re-running the full `create` or
+`deploy` upload flow:
+
+```bash
+synology-site update demo.example.com
+```
+
+It reads `.synology-site.json` when present, uses the stored Compose file path for `deploy`
+projects, runs `docker compose pull`, then `docker compose up -d`. If the pull fails, it falls
+back to `up -d --build`, matching `deploy`'s current behavior. For `create`-generated sites with
+a stored port, it checks `/health` after the restart; for `deploy` sites, pass an explicit health
+path if one exists:
+
+```bash
+synology-site update app.example.com --health-path /health --container-name app-web
+```
+
+Options:
+
+- `--pull/--no-pull` — pull images before restarting (default `--pull`)
+- `--build/--no-build` — force a rebuild during `up -d`
+- `--health-path PATH` — health path to check after update
+- `--container-name NAME` — container name to verify after update
+- `--workspace NAME` — update the site on a specific NAS target
+- `--dry-run`
+
+This is an in-place Compose update, not a zero-downtime blue/green deployment.
 
 ### Building From Full Source (`--source-dir`)
 
