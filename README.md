@@ -396,6 +396,83 @@ Options:
 
 This is an in-place Compose update, not a zero-downtime blue/green deployment.
 
+### Registry-Based Deploys (Recommended For Production)
+
+For anything beyond a personal or low-traffic app, build images in CI and let the NAS pull them.
+That keeps Composer/npm/Docker build work off the NAS and makes `update` a fast image refresh
+instead of a source build.
+
+The Compose file you deploy should reference an immutable or intentionally moving registry tag:
+
+```yaml
+services:
+  web:
+    image: ghcr.io/your-org/your-app:main
+    container_name: your-app
+    restart: unless-stopped
+    ports:
+      - "5060:3000"
+```
+
+Deploy it once:
+
+```bash
+synology-site deploy app.example.com \
+  --compose-file ./docker-compose.prod.yml \
+  --port 5060 \
+  --container-name your-app \
+  --health-path /health \
+  --pull
+```
+
+Then each release is just:
+
+```bash
+synology-site update app.example.com --container-name your-app --health-path /health
+```
+
+For GHCR, the NAS must be able to pull the image. Public images need no extra setup. Private
+images require a one-time Docker login on the NAS with a GitHub token that has package read
+access:
+
+```bash
+echo "<github-token>" | docker login ghcr.io -u <github-username> --password-stdin
+```
+
+A minimal GitHub Actions build/push workflow looks like:
+
+```yaml
+name: image
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ github.repository }}:main
+```
+
+Use immutable tags such as a Git SHA when rollback precision matters, and update the Compose file
+tag deliberately. Use a moving tag such as `:main` when you want `synology-site update` to always
+pull the latest successful CI build.
+
 ### Building From Full Source (`--source-dir`)
 
 `--compose-file`/`--pull`/`--build` alone assume the Compose file's own `build.context` is self-contained (or that you're pulling a prebuilt image). That's not true for a monorepo where the build context needs sibling packages — e.g. `context: ../..` in a compose file that lives under `infra/`. For that case, `--source-dir` uploads the *whole* local directory tree (not just the one Compose file) and builds directly on the NAS, with the Compose file staying at the same path relative to the uploaded root that it has locally — so a relative `context: ../..` resolves the same way it would on your machine.
