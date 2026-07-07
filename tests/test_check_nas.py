@@ -4,10 +4,17 @@ from dataclasses import replace
 
 import pytest
 
-from synology_site.commands.check_nas import default_ssh_factory, run_check_nas
+from synology_site.commands.check_nas import (
+    default_ssh_factory,
+    local_ssh_factory,
+    probe_lan_reachable,
+    remote_transport_label,
+    resolve_remote_mode,
+    run_check_nas,
+)
 from synology_site.config import Settings
 from synology_site.errors import SynologySiteError
-from synology_site.ssh_client import CloudflareAccessSSHClient, RemoteCommandResult
+from synology_site.ssh_client import CloudflareAccessSSHClient, RemoteCommandResult, SSHClient
 
 
 def settings() -> Settings:
@@ -81,6 +88,7 @@ def test_run_check_nas_success() -> None:
 
     assert [result.name for result in results] == [
         "Configuration",
+        "Network",
         "SSH",
         "Docker",
         "Docker Compose",
@@ -147,3 +155,86 @@ def test_default_ssh_factory_uses_cloudflare_access_when_configured() -> None:
     assert isinstance(ssh, CloudflareAccessSSHClient)
     assert ssh.access_hostname == "nas-ssh.example.com"
     assert ssh.requested_local_port == 9210
+
+
+def test_local_ssh_factory_always_uses_plain_nas_host_ignoring_tailscale() -> None:
+    ssh = local_ssh_factory(
+        replace(settings(), tailscale_enabled=True, tailscale_host="100.64.1.2")
+    )
+
+    assert isinstance(ssh, SSHClient)
+    assert not isinstance(ssh, CloudflareAccessSSHClient)
+    assert ssh.host == "192.0.2.10"
+
+
+def test_resolve_remote_mode_force_remote_skips_lan_probe() -> None:
+    probed: list[tuple[str, int]] = []
+
+    def probe(host: str, port: int) -> bool:
+        probed.append((host, port))
+        return True
+
+    assert resolve_remote_mode(settings(), force_remote=True, lan_probe=probe) is True
+    assert probed == []
+
+
+def test_resolve_remote_mode_auto_detects_from_lan_probe() -> None:
+    assert resolve_remote_mode(settings(), lan_probe=lambda host, port: True) is False
+    assert resolve_remote_mode(settings(), lan_probe=lambda host, port: False) is True
+
+
+def test_probe_lan_reachable_returns_false_on_connection_refused() -> None:
+    # Port 1 on the TEST-NET-1 documentation range (RFC 5737) is never reachable, so this
+    # exercises the real socket path without depending on any actual network being up.
+    assert probe_lan_reachable("192.0.2.10", 1, timeout=0.2) is False
+
+
+def test_remote_transport_label_prefers_cloudflare_access_over_tailscale() -> None:
+    label = remote_transport_label(
+        replace(
+            settings(),
+            ssh_access_hostname="nas-ssh.example.com",
+            tailscale_enabled=True,
+            tailscale_host="100.64.1.2",
+        )
+    )
+
+    assert "Cloudflare Access" in label
+    assert "nas-ssh.example.com" in label
+
+
+def test_remote_transport_label_falls_back_to_tailscale() -> None:
+    label = remote_transport_label(
+        replace(settings(), tailscale_enabled=True, tailscale_host="100.64.1.2")
+    )
+
+    assert "Tailscale" in label
+    assert "100.64.1.2" in label
+
+
+def test_remote_transport_label_reports_nothing_configured() -> None:
+    label = remote_transport_label(settings())
+
+    assert "no remote transport configured" in label
+
+
+def test_run_check_nas_reports_local_network_by_default() -> None:
+    fake = FakeSSH()
+
+    results = run_check_nas(settings(), ssh_factory=lambda _settings, _password: fake)
+
+    network = next(result for result in results if result.name == "Network")
+    assert network.detail == "local LAN"
+
+
+def test_run_check_nas_reports_remote_network_when_requested() -> None:
+    fake = FakeSSH()
+
+    results = run_check_nas(
+        replace(settings(), tailscale_enabled=True, tailscale_host="100.64.1.2"),
+        ssh_factory=lambda _settings, _password: fake,
+        remote_mode=True,
+    )
+
+    network = next(result for result in results if result.name == "Network")
+    assert "remote via Tailscale" in network.detail
