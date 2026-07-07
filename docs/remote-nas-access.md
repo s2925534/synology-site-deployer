@@ -11,7 +11,8 @@ router port forward, and the Synology package handles the outbound connection fr
 
 1. Install **Tailscale** from Synology Package Center.
 2. Open the Tailscale package and sign in.
-3. In the Tailscale admin console, copy the NAS's `100.x.y.z` address.
+3. In the Tailscale admin console, copy the NAS's `100.x.y.z` address (or use `configure-tailscale`
+   below to skip this step).
 4. Enable SSH in DSM: **Control Panel -> Terminal & SNMP -> Enable SSH service**.
 5. If DSM Firewall is enabled, allow TCP `22` from `100.64.0.0/10`.
 6. Install and sign in to Tailscale on the machine running `synology-site`.
@@ -29,6 +30,52 @@ NAS_PORT=22
 TAILSCALE_ENABLED=true
 TAILSCALE_NAS_HOST=100.x.y.z
 ```
+
+### Automating step 3 and step 7: `configure-tailscale`
+
+Instead of copying the NAS's Tailscale address from the admin console by hand, create a
+Tailscale **OAuth client** (`https://login.tailscale.com/admin/settings/oauth`, "Devices: Read"
+scope is enough) and let the CLI look it up:
+
+```env
+TAILSCALE_CLIENT_ID=
+TAILSCALE_CLIENT_SECRET=
+```
+
+```bash
+synology-site configure-tailscale
+```
+
+This calls the Tailscale API to list the tailnet's devices and writes `TAILSCALE_ENABLED=true` +
+`TAILSCALE_NAS_HOST=<discovered address>` into `.env`, leaving every other line untouched. Device
+selection: an explicit `--device-name <substring>` always wins; otherwise, if `TAILSCALE_NAS_HOST`
+is already set, the device that currently owns that address is reused (so re-running it later just
+refreshes/confirms the address); a tailnet with only one device is unambiguous either way. Anything
+more ambiguous than that lists the candidate devices and asks for `--device-name` rather than
+guessing which one is the NAS:
+
+```bash
+synology-site configure-tailscale --device-name synology-nas
+synology-site configure-tailscale --dry-run   # look up the device, don't write to .env
+```
+
+`TAILSCALE_CLIENT_ID`/`TAILSCALE_CLIENT_SECRET` are only read by this one command -- they're not
+part of `Settings`/`load_config`, so leaving them blank has no effect on anything else.
+
+### Checking the remote path: `check-nas --remote`
+
+```bash
+synology-site check-nas
+synology-site check-nas --remote
+```
+
+`check-nas` probes `NAS_HOST:NAS_PORT` with a quick raw TCP connection first. If that succeeds,
+it connects directly over the LAN and ignores any Tailscale/Cloudflare Access configuration --
+no reason to route through a remote proxy when the NAS is right there. If the probe fails (e.g.
+running from an office network), it automatically falls back to whichever remote transport is
+configured, with no flag needed. Pass `--remote` to force the remote path even when the LAN probe
+would succeed, which is the way to verify Tailscale/Cloudflare Access actually works without
+having to leave the LAN to find out.
 
 For a workspace-specific NAS:
 
