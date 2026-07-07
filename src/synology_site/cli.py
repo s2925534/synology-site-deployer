@@ -3,6 +3,7 @@ from __future__ import annotations
 import typer
 
 from synology_site.commands import tunnel_fix
+from synology_site.commands.bootstrap_n8n import app as bootstrap_n8n_app
 from synology_site.commands.bootstrap_supabase import app as bootstrap_supabase_app
 from synology_site.commands.bootstrap_uptime_kuma import app as bootstrap_uptime_kuma_app
 from synology_site.commands.check_nas import app as check_nas_app
@@ -21,6 +22,7 @@ app.command(name="create")(create_app)
 app.command(name="deploy")(deploy_app)
 app.command(name="cloudflare-route")(cloudflare_route_app)
 app.command(name="bootstrap-supabase")(bootstrap_supabase_app)
+app.command(name="bootstrap-n8n")(bootstrap_n8n_app)
 app.command(name="bootstrap-uptime-kuma")(bootstrap_uptime_kuma_app)
 app.command(name="check-nas")(check_nas_app)
 app.command(name="list")(list_app)
