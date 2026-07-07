@@ -5,10 +5,10 @@ Every item below was validated with tests or real smoke-testing where the toolin
 
 ## TL;DR
 
-- **Phases 1–8 and Phase 12 are done**. Phase 9 and Phase 10 are partially done in `TODO.md`; the next
-  substantive unfinished work is the remaining deployment lifecycle, observability/backup,
-  and security-hardening items.
-- 253 tests pass, `ruff check` is clean, and the real `.env` on this machine still resolves to
+- **Phases 1–8, Phase 10, and Phase 12 are done**. Phase 9 and Phase 11 are partially done in
+  `TODO.md`; the next substantive unfinished work is health-gated restart and deeper
+  Cloudflare Access/security-hardening.
+- 259 tests pass, `ruff check` is clean, and the real `.env` on this machine still resolves to
   exactly one workspace (`default`) — confirming zero behavior change for the existing
   single-NAS, single-Cloudflare-account setup throughout all of this.
 - **Corrected an earlier finding**: I'd previously reported "no reliable Packagist/npm registry
@@ -77,6 +77,16 @@ Every item below was validated with tests or real smoke-testing where the toolin
 - WireGuard and reverse-SSH-through-a-VPS are documented as fallbacks in
   `docs/remote-nas-access.md`, with their CGNAT/maintenance constraints called out.
 
+### Phase 10 — Observability, backups, and notifications
+- `synology-site backup-plan <domain>` generates a MariaDB dump script, `backup.env.example`,
+  cron example, and Synology Task Scheduler command for `--with-db` sites. S3-compatible upload
+  is supported by the generated script but real verification still needs user-provided bucket
+  credentials.
+- `NOTIFY_WEBHOOK_URL` and `NOTIFY_WEBHOOK_EVENTS` add optional Slack/Discord-compatible
+  deploy/update success/failure notifications. They default off, and webhook delivery failures
+  warn without changing the command result.
+- `synology-site health [--all-targets]` remains the simple aggregated health dashboard.
+
 ## What's still unverified against real infrastructure (unchanged from before)
 
 ### 1. Laravel's Composer/Breeze-dependent Dockerfile steps
@@ -127,17 +137,14 @@ synology-site create test.yourdomain.dev --workspace testnas --dry-run
 
 ## Remaining phases (not started)
 
-- **Phase 9 remainder**: health-gated zero-downtime restarts and registry-based image build docs.
-- **Phase 10 remainder**: scheduled DB backups to S3-compatible storage and Slack/Discord deploy
-  notifications.
-- **Phase 11**: security hardening (Cloudflare Access/Zero Trust integration, Traefik+Let's
-  Encrypt as a documented Cloudflare Tunnel alternative, secrets-manager evaluation).
+- **Phase 9 remainder**: health-gated zero-downtime restarts.
+- **Phase 11 remainder**: Cloudflare Access/Zero Trust API integration for staging/admin routes.
 
 See `TODO.md` for the full per-item breakdown and status of everything above.
 
 ## Validation performed this pass
 
-- `pytest`: 253/253 passing.
+- `pytest`: 259/259 passing.
 - `ruff check .`: clean.
 - Real runtime smoke tests (not just template rendering): FastAPI app under `uvicorn` (index,
   health, and a genuine DB-connection-failure path); Next.js app built and served with `npm run

@@ -1,6 +1,6 @@
 # Synology Site Deployer
 
-Synology Site Deployer is a local Python CLI for deploying containerized apps to a Synology NAS over SSH. `create` scaffolds and deploys a new Flask, Laravel, FastAPI, or Next.js app from scratch (optionally with a MariaDB container); `deploy` uploads and starts an existing project's own Compose file for any framework — it doesn't generate app code, so it isn't limited to what `create` supports. `bootstrap-supabase` stands up Supabase's self-hosted stack. `cloudflare-route` wires a Cloudflare Tunnel route to a fixed port directly. All of them can configure Cloudflare Tunnel routes + DNS via the Cloudflare API when credentials are present, across multiple Cloudflare accounts/domains via workspaces (see below).
+Synology Site Deployer is a local Python CLI for deploying containerized apps to a Synology NAS over SSH. `create` scaffolds and deploys a new Flask, Laravel, FastAPI, or Next.js app from scratch (optionally with a MariaDB container); `deploy` uploads and starts an existing project's own Compose file for any framework — it doesn't generate app code, so it isn't limited to what `create` supports. Bootstrap commands stand up popular self-hosted apps such as Supabase, n8n, Vaultwarden, Umami, and Uptime Kuma. `cloudflare-route` wires a Cloudflare Tunnel route to a fixed port directly. Commands can configure Cloudflare Tunnel routes + DNS via the Cloudflare API when credentials are present, across multiple Cloudflare accounts/domains via workspaces (see below).
 
 The tool is generic. Domains, NAS hosts, Docker paths, Cloudflare zones, tunnel names, and ports come from `.env`, CLI options, or validated defaults.
 
@@ -24,6 +24,8 @@ Contact: `pedro@veloso.dev`
 - `workspaces`: lists configured Cloudflare accounts/NAS targets and flags copy-paste credential mistakes (e.g. a `CF_TUNNEL_ID` accidentally reused across workspaces).
 - `list --all-targets`: aggregates sites across every configured NAS target instead of just the default one.
 - `health --all-targets`: checks every known site's health endpoint where a marker contains a port.
+- `backup-plan`: generates a local MariaDB backup script/env template/scheduler examples for `--with-db` sites.
+- Optional deploy/update webhook notifications for Slack or Discord.
 - Finds a free local NAS port when one is needed.
 - Prints manual Cloudflare Tunnel setup instructions if API credentials are missing; otherwise creates/updates the tunnel ingress rule and proxied DNS record automatically.
 
