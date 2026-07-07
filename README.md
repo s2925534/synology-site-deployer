@@ -412,6 +412,25 @@ NOTIFY_WEBHOOK_EVENTS=success,failure
 Notification delivery failures are reported as warnings and do not change the deploy/update
 result.
 
+## Database Backup Plans
+
+For sites created with `--with-db`, generate a local backup plan:
+
+```bash
+synology-site backup-plan app.example.com --retention-days 14
+```
+
+This writes `backup-plans/app-example-com/` with:
+
+- `backup.sh` — runs `mariadb-dump` inside the site's DB container and writes a compressed dump
+- `backup.env.example` — DB/S3 settings template; copy it to `backup.env` and fill in secrets
+- `crontab.example` — cron entry
+- `synology-task-command.txt` — command to paste into Synology Task Scheduler
+
+S3-compatible upload is optional. Leave `S3_BUCKET` empty for local-only backups, or fill in
+Backblaze B2, Cloudflare R2, MinIO, or another S3-compatible endpoint. The generated script uses
+the AWS CLI for uploads, so install/configure it on whichever host runs the scheduled task.
+
 ### Registry-Based Deploys (Recommended For Production)
 
 For anything beyond a personal or low-traffic app, build images in CI and let the NAS pull them.
