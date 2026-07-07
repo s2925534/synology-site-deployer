@@ -16,6 +16,7 @@ Contact: `pedro@veloso.dev`
 - `deploy`: uploads an existing project's own Compose file (+ optional `.env`) and starts it — any framework, since it doesn't generate app code. `docker compose pull` with a `--build` fallback. Works with a fixed reverse-proxy port (Traefik, etc., no port allocation/Cloudflare/health-check) or a standalone published port (same behavior as `create`).
 - `bootstrap-supabase`: clones and starts Supabase's self-hosted stack, regenerating every security-critical secret properly (including correctly HS256-signed `ANON_KEY`/`SERVICE_ROLE_KEY` JWTs, not random strings), and can upload a Traefik-label override alongside it.
 - `bootstrap-uptime-kuma`: stands up Uptime Kuma (self-hosted status/uptime monitoring), a single official image with no secrets to regenerate.
+- `bootstrap-n8n`: stands up n8n (self-hosted workflow automation), generating and saving its credential-encryption key.
 - `cloudflare-route`: points one hostname at a fixed port via the Cloudflare API directly, no NAS/SSH interaction — for reverse-proxy setups where many hostnames share one port.
 - `workspaces`: lists configured Cloudflare accounts/NAS targets and flags copy-paste credential mistakes (e.g. a `CF_TUNNEL_ID` accidentally reused across workspaces).
 - `list --all-targets`: aggregates sites across every configured NAS target instead of just the default one.
@@ -441,6 +442,36 @@ Wire up public access the same way as any fixed-port service:
 
 ```bash
 synology-site cloudflare-route status.example.com --port <the allocated port>
+```
+
+## Bootstrapping n8n
+
+`bootstrap-n8n` stands up [n8n](https://docs.n8n.io/hosting/), a self-hosted workflow automation
+tool, using the official `n8nio/n8n:1` image with a named Docker volume mounted at
+`/home/node/.n8n` for SQLite data and uploaded files.
+
+```bash
+synology-site bootstrap-n8n
+```
+
+The command generates `N8N_ENCRYPTION_KEY`, uploads it to the NAS as the project's `.env`, and
+writes the same value locally to `secrets/n8n.env`. Keep that file safe: n8n uses this key to
+encrypt stored credentials, so losing it makes existing credentials unrecoverable even if the
+Docker volume still exists.
+
+Options:
+
+- `--project-dir-name NAME` (default `n8n`) — NAS folder name under `NAS_DOCKER_ROOT`, also used as the container name
+- `--hostname HOSTNAME` — sets n8n's public HTTPS editor/webhook URLs (`N8N_HOST`, `N8N_PROTOCOL`, `N8N_EDITOR_BASE_URL`, `WEBHOOK_URL`) for a hostname you will route through Cloudflare
+- `--port N` — request a specific host port instead of auto-allocating one
+- `--force` — tear down and recreate an existing install
+- `--dry-run`
+
+Wire up public access after the command prints the selected port:
+
+```bash
+synology-site bootstrap-n8n --hostname n8n.example.com
+synology-site cloudflare-route n8n.example.com --port <the allocated port>
 ```
 
 ## Manual Cloudflare Route
