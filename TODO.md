@@ -127,7 +127,7 @@ once a site has been running in production for a while.
 | Status | Item |
 |---|---|
 | 🔴 | Scheduled DB backups to S3-compatible storage (Backblaze B2/Cloudflare R2 are the popular cheap choices for self-hosters) instead of the current manual `mariadb-dump` documented in `docs/DATABASE.md` |
-| 🔴 | Slack/Discord webhook notification on deploy success/failure — very common once a tool is used for anything beyond solo experimentation |
+| 🟢 | Slack/Discord webhook notification on deploy/update success/failure — `NOTIFY_WEBHOOK_URL` and `NOTIFY_WEBHOOK_EVENTS` are optional and default off; webhook failures warn without changing the command result. |
 | 🟢 | A simple aggregated health dashboard pairing with `list --all-targets` — implemented as `synology-site health [--all-targets]`, reading site markers and checking `/health` for every site with a stored port while reporting unreachable targets inline. |
 
 ## Phase 11 — Security Hardening & Alternative Ingress (Not Started)
