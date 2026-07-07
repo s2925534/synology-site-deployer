@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import socket
 from collections.abc import Callable
 from dataclasses import dataclass
 from getpass import getpass
@@ -27,6 +28,7 @@ class CheckResult:
 
 
 SSHFactory = Callable[[Settings, str | None], SSHClient]
+LanProbe = Callable[[str, int], bool]
 
 
 def default_ssh_factory(settings: Settings, prompted_password: str | None = None) -> SSHClient:
@@ -48,21 +50,84 @@ def default_ssh_factory(settings: Settings, prompted_password: str | None = None
     )
 
 
+def local_ssh_factory(settings: Settings, prompted_password: str | None = None) -> SSHClient:
+    """Always connects to the plain NAS_HOST/NAS_PORT, ignoring any configured Tailscale/
+    Cloudflare Access remote transport -- used when check-nas has determined the NAS is
+    reachable directly on the LAN, so there's no reason to route through a remote proxy."""
+    password = settings.nas_ssh_password or prompted_password
+    return SSHClient(
+        settings.nas_host,
+        settings.nas_port,
+        settings.nas_user,
+        key_path=settings.nas_ssh_key_path,
+        password=password,
+    )
+
+
+def probe_lan_reachable(host: str, port: int, *, timeout: float = 1.5) -> bool:
+    """Cheap reachability check: can we open a raw TCP connection to host:port right now?
+
+    No authentication attempted -- this only answers "is something listening here," which is
+    enough to tell LAN from off-LAN without needing SSH credentials first.
+    """
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def remote_transport_label(settings: Settings) -> str:
+    if settings.ssh_access_hostname:
+        return f"Cloudflare Access ({settings.ssh_access_hostname})"
+    if settings.tailscale_enabled and settings.tailscale_host:
+        return f"Tailscale ({settings.tailscale_host})"
+    return "no remote transport configured -- falling back to NAS_HOST directly"
+
+
+def resolve_remote_mode(
+    settings: Settings,
+    *,
+    force_remote: bool = False,
+    lan_probe: LanProbe = probe_lan_reachable,
+) -> bool:
+    """Decide whether check-nas should go through the remote path.
+
+    --remote forces it (useful to test Tailscale/Cloudflare Access without leaving the LAN).
+    Otherwise this auto-detects: a quick TCP probe against NAS_HOST:NAS_PORT decides whether
+    we're actually on the NAS's LAN right now, so the remote path only kicks in when it's
+    actually needed -- no flag required when working from an office network, for instance.
+    """
+    if force_remote:
+        return True
+    return not lan_probe(settings.nas_host, settings.nas_port)
+
+
 def run_check_nas(
     settings: Settings,
     *,
     ssh_factory: SSHFactory = default_ssh_factory,
     prompted_password: str | None = None,
+    remote_mode: bool = False,
 ) -> list[CheckResult]:
+    if not remote_mode:
+        connection_detail = f"Connected to {settings.nas_host}:{settings.nas_port} (local LAN)"
+    elif settings.ssh_access_hostname:
+        connection_detail = f"Connected via cloudflared proxy to {settings.ssh_access_hostname}"
+    else:
+        connection_detail = (
+            f"Connected to {settings.nas_connection_host}:{settings.nas_port} (remote)"
+        )
     results = [
         CheckResult("Configuration", True, ".env loaded"),
+        CheckResult(
+            "Network",
+            True,
+            f"remote via {remote_transport_label(settings)}" if remote_mode else "local LAN",
+        ),
     ]
     with ssh_factory(settings, prompted_password) as ssh:
-        results.append(
-            CheckResult(
-                "SSH", True, f"Connected to {settings.nas_connection_host}:{settings.nas_port}"
-            )
-        )
+        results.append(CheckResult("SSH", True, connection_detail))
 
         require_docker(ssh)
         results.append(CheckResult("Docker", True, "docker command found"))
@@ -84,13 +149,29 @@ def run_check_nas(
     return results
 
 
-def app() -> None:
+def app(
+    remote: bool = typer.Option(
+        False,
+        "--remote",
+        help="Force checking via the configured remote path (Tailscale/Cloudflare Access) "
+        "even if the NAS is reachable on the LAN -- useful to verify remote access without "
+        "leaving the LAN. Without this flag, the remote path is used automatically whenever "
+        "the NAS isn't reachable directly, no flag needed.",
+    ),
+) -> None:
     try:
         settings = load_config()
         prompted_password = None
         if not settings.nas_ssh_key_path and not settings.nas_ssh_password:
             prompted_password = getpass("NAS SSH password: ")
-        results = run_check_nas(settings, prompted_password=prompted_password)
+        remote_mode = resolve_remote_mode(settings, force_remote=remote)
+        ssh_factory = default_ssh_factory if remote_mode else local_ssh_factory
+        results = run_check_nas(
+            settings,
+            ssh_factory=ssh_factory,
+            prompted_password=prompted_password,
+            remote_mode=remote_mode,
+        )
     except SynologySiteError as exc:
         error(str(exc))
         raise typer.Exit(1) from exc
