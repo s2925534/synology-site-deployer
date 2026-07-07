@@ -111,7 +111,7 @@ audience this tool serves regularly asks for the same treatment for other popula
 | 🟢 | `bootstrap-umami` — privacy-friendly analytics, common ask for anyone deploying sites with this tool. Ships as a two-container official-shape bootstrap (`ghcr.io/umami-software/umami:latest` + private `postgres:15-alpine`) with generated Postgres password and `APP_SECRET` retained in `secrets/<project>.env`. |
 | 🔴 | Extract the shared "clone + regenerate secrets + wire tunnel" logic out of `bootstrap_supabase.py` into a reusable helper once a bootstrap command that actually needs it exists — `bootstrap-uptime-kuma` didn't need any of that machinery, so there was nothing to share yet. `bootstrap-n8n`/`bootstrap-vaultwarden` (which do have real secrets to generate) are better candidates to trigger this extraction. |
 
-## Phase 9 — Deployment Lifecycle (Not Started)
+## Phase 9 — Deployment Lifecycle (Partially Done)
 
 Every deploy today is "recreate from scratch." Fine for a first deploy, increasingly annoying
 once a site has been running in production for a while.
@@ -122,7 +122,7 @@ once a site has been running in production for a while.
 | 🔴 | Health-gated restart instead of a hard `docker compose down && up` — start the new container, confirm its health check passes, *then* stop the old one, to avoid a visible-downtime window on every redeploy |
 | 🔴 | Registry-based image builds (build once in CI, push to GHCR, `deploy --pull` on the NAS) as the documented recommended path for anything beyond a personal project — building on the NAS itself (today's default for `create`) is fine for low-traffic personal use but doesn't scale to frequent deploys |
 
-## Phase 10 — Observability, Backups & Notifications (Not Started)
+## Phase 10 — Observability, Backups & Notifications (Partially Done)
 
 | Status | Item |
 |---|---|
@@ -138,7 +138,7 @@ once a site has been running in production for a while.
 | 🔴 | Traefik + Let's Encrypt as a documented alternative to Cloudflare Tunnel for anyone who doesn't want a Cloudflare dependency at all — `deploy` already supports the "existing reverse proxy" no-port-allocation mode, but there's no scaffold-side guidance for setting one up from scratch |
 | 🔴 | Secrets stored as plaintext files under `secrets/` today; evaluate age/sops-encrypted secrets or a proper secrets manager (1Password CLI, Doppler) for anyone deploying this from a shared/less-trusted machine |
 
-## Phase 12 — Remote Access to the Home NAS (Not Started)
+## Phase 12 — Remote Access to the Home NAS (Partially Done)
 
 Running `create`/`deploy` from a network that isn't the NAS's own LAN (e.g. an office) requires
 reaching the NAS's SSH port without a paid remote-access tool. The real constraint: most home
