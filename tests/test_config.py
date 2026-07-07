@@ -195,6 +195,24 @@ def test_load_config_reads_cloudflare_access_ssh_proxy_for_default_target(
     assert settings.default_nas_target.ssh_access_local_port == 9210
 
 
+def test_load_config_reads_notification_webhook_settings(tmp_path: Path) -> None:
+    settings = load_config(
+        write_env(
+            tmp_path,
+            "\n".join(
+                [
+                    "NOTIFY_WEBHOOK_URL=https://hooks.example.test/deploy",
+                    "NOTIFY_WEBHOOK_EVENTS=failure",
+                ]
+            ),
+        ),
+        secrets_dir=tmp_path / "secrets",
+    )
+
+    assert settings.notify_webhook_url == "https://hooks.example.test/deploy"
+    assert settings.notify_webhook_events == "failure"
+
+
 def test_load_config_requires_tailscale_host_when_enabled(tmp_path: Path) -> None:
     with pytest.raises(SynologySiteError, match="TAILSCALE_NAS_HOST"):
         load_config(write_env(tmp_path, "TAILSCALE_ENABLED=true"), secrets_dir=tmp_path / "secrets")

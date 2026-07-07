@@ -25,6 +25,7 @@ from synology_site.docker_remote import (
 )
 from synology_site.errors import SynologySiteError
 from synology_site.naming import domain_to_slug
+from synology_site.notifications import send_webhook_notification
 from synology_site.output import console, next_step, ok, warn
 from synology_site.port_allocator import find_available_port
 from synology_site.ssh_client import SSHClient
@@ -328,9 +329,12 @@ def app(
         "see secrets/<name>/)",
     ),
 ) -> None:
+    settings: Settings | None = None
+    domain_for_notification = domain
     try:
         settings = load_config()
         domain = apply_default_site_domain(domain, settings.default_site_domain)
+        domain_for_notification = domain
         target = settings.resolve_target(workspace=workspace)
         prompted_password = None
         if not target.ssh_key_path and not target.ssh_password:
@@ -354,6 +358,14 @@ def app(
             prompted_password=prompted_password,
         )
     except SynologySiteError as exc:
+        if settings is not None:
+            send_webhook_notification(
+                settings,
+                event="failure",
+                command="deploy",
+                title=f"Deploy failed: {domain_for_notification}",
+                detail=str(exc),
+            )
         console.print(f"[ERROR] {exc}")
         raise typer.Exit(1) from exc
 
@@ -407,3 +419,10 @@ def app(
                 )
             )
     next_step(f"Open {result.local_url or 'the domain via your existing reverse proxy route'}")
+    send_webhook_notification(
+        settings,
+        event="success",
+        command="deploy",
+        title=f"Deploy succeeded: {result.domain}",
+        detail=f"Project folder: {result.project_path}",
+    )

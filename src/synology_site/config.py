@@ -53,6 +53,8 @@ class Settings:
     tailscale_host: str | None = None
     ssh_access_hostname: str | None = None
     ssh_access_local_port: int = 0
+    notify_webhook_url: str | None = None
+    notify_webhook_events: str = "success,failure"
     cloudflare_accounts: tuple[CloudflareAccount, ...] = ()
     nas_targets: tuple[NasTarget, ...] = ()
 
@@ -203,6 +205,7 @@ def load_config(path: str | Path = ".env", secrets_dir: str | Path = "secrets") 
         raise SynologySiteError(msg)
     ssh_access_hostname = _optional(values.get("SSH_ACCESS_HOSTNAME"))
     ssh_access_local_port = _int(values, "SSH_ACCESS_LOCAL_PORT", 0)
+    notify_events = values.get("NOTIFY_WEBHOOK_EVENTS", "success,failure").strip().lower()
     default_nas_target = NasTarget(
         name=DEFAULT_TARGET_NAME,
         host=nas_host,
@@ -251,6 +254,8 @@ def load_config(path: str | Path = ".env", secrets_dir: str | Path = "secrets") 
         tailscale_host=tailscale_host,
         ssh_access_hostname=ssh_access_hostname,
         ssh_access_local_port=ssh_access_local_port,
+        notify_webhook_url=_optional(values.get("NOTIFY_WEBHOOK_URL")),
+        notify_webhook_events=notify_events,
         cloudflare_accounts=discover_cloudflare_accounts(secrets_dir),
         nas_targets=discover_nas_targets(secrets_dir, default=default_nas_target),
     )

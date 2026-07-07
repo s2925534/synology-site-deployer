@@ -93,6 +93,8 @@ DEFAULT_SITE_DOMAIN=example.com
 CF_ZONE_DOMAIN=example.com
 CF_TUNNEL_NAME=my-nas-tunnel
 DB_MODE=none
+NOTIFY_WEBHOOK_URL=
+NOTIFY_WEBHOOK_EVENTS=success,failure
 ```
 
 Use `NAS_SSH_KEY_PATH` when possible. If no key or password is set, the CLI prompts securely.
@@ -395,6 +397,20 @@ Options:
 - `--dry-run`
 
 This is an in-place Compose update, not a zero-downtime blue/green deployment.
+
+### Deploy/Update Notifications
+
+Set `NOTIFY_WEBHOOK_URL` to a Slack or Discord incoming webhook URL to receive deploy/update
+success and failure notifications. Notifications are off by default.
+
+```env
+NOTIFY_WEBHOOK_URL=https://hooks.slack.com/services/...
+NOTIFY_WEBHOOK_EVENTS=success,failure
+```
+
+`NOTIFY_WEBHOOK_EVENTS` accepts a comma-separated list: `success`, `failure`, or `all`.
+Notification delivery failures are reported as warnings and do not change the deploy/update
+result.
 
 ### Registry-Based Deploys (Recommended For Production)
 
