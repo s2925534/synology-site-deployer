@@ -117,7 +117,8 @@ def _read_env_file(path: str | Path = ".env") -> dict[str, str]:
 
 def _merged_env(path: str | Path = ".env") -> dict[str, str]:
     values = _read_env_file(path)
-    values.update({key: value for key, value in os.environ.items() if value is not None})
+    if Path(path) == Path(".env"):
+        values.update({key: value for key, value in os.environ.items() if value is not None})
     return values
 
 
