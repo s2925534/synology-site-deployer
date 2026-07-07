@@ -16,12 +16,14 @@ from synology_site.commands.list_sites import app as list_app
 from synology_site.commands.remove import app as remove_app
 from synology_site.commands.start import app as start_app
 from synology_site.commands.stop import app as stop_app
+from synology_site.commands.update import app as update_app
 from synology_site.commands.workspaces import app as workspaces_app
 
 app = typer.Typer(help="Deploy containerized sites to a Synology NAS.")
 
 app.command(name="create")(create_app)
 app.command(name="deploy")(deploy_app)
+app.command(name="update")(update_app)
 app.command(name="cloudflare-route")(cloudflare_route_app)
 app.command(name="bootstrap-supabase")(bootstrap_supabase_app)
 app.command(name="bootstrap-n8n")(bootstrap_n8n_app)
