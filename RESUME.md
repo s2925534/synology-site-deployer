@@ -8,7 +8,7 @@ Every item below was validated with tests or real smoke-testing where the toolin
 - **Phases 1–8, Phase 10, and Phase 12 are done**. Phase 9 and Phase 11 are partially done in
   `TODO.md`; the next substantive unfinished work is health-gated restart and deeper
   Cloudflare Access/security-hardening.
-- 259 tests pass, `ruff check` is clean, and the real `.env` on this machine still resolves to
+- 263 tests pass, `ruff check` is clean, and the real `.env` on this machine still resolves to
   exactly one workspace (`default`) — confirming zero behavior change for the existing
   single-NAS, single-Cloudflare-account setup throughout all of this.
 - **Corrected an earlier finding**: I'd previously reported "no reliable Packagist/npm registry
@@ -144,7 +144,7 @@ See `TODO.md` for the full per-item breakdown and status of everything above.
 
 ## Validation performed this pass
 
-- `pytest`: 259/259 passing.
+- `pytest`: 263/263 passing.
 - `ruff check .`: clean.
 - Real runtime smoke tests (not just template rendering): FastAPI app under `uvicorn` (index,
   health, and a genuine DB-connection-failure path); Next.js app built and served with `npm run
