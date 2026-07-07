@@ -11,6 +11,7 @@ from synology_site.commands.bootstrap_uptime_kuma import app as bootstrap_uptime
 from synology_site.commands.bootstrap_vaultwarden import app as bootstrap_vaultwarden_app
 from synology_site.commands.check_nas import app as check_nas_app
 from synology_site.commands.cloudflare_route import app as cloudflare_route_app
+from synology_site.commands.configure_tailscale import app as configure_tailscale_app
 from synology_site.commands.create import app as create_app
 from synology_site.commands.deploy import app as deploy_app
 from synology_site.commands.health import app as health_app
@@ -33,6 +34,7 @@ app.command(name="bootstrap-umami")(bootstrap_umami_app)
 app.command(name="bootstrap-uptime-kuma")(bootstrap_uptime_kuma_app)
 app.command(name="bootstrap-vaultwarden")(bootstrap_vaultwarden_app)
 app.command(name="check-nas")(check_nas_app)
+app.command(name="configure-tailscale")(configure_tailscale_app)
 app.command(name="health")(health_app)
 app.command(name="backup-plan")(backup_plan_app)
 app.command(name="list")(list_app)
