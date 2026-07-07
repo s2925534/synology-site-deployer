@@ -23,6 +23,7 @@ Contact: `pedro@veloso.dev`
 - `cloudflare-route`: points one hostname at a fixed port via the Cloudflare API directly, no NAS/SSH interaction — for reverse-proxy setups where many hostnames share one port.
 - `workspaces`: lists configured Cloudflare accounts/NAS targets and flags copy-paste credential mistakes (e.g. a `CF_TUNNEL_ID` accidentally reused across workspaces).
 - `list --all-targets`: aggregates sites across every configured NAS target instead of just the default one.
+- `health --all-targets`: checks every known site's health endpoint where a marker contains a port.
 - Finds a free local NAS port when one is needed.
 - Prints manual Cloudflare Tunnel setup instructions if API credentials are missing; otherwise creates/updates the tunnel ingress rule and proxied DNS record automatically.
 
@@ -616,12 +617,19 @@ synology-site tunnel-fix-autostart
 synology-site check-nas
 synology-site list
 synology-site list --all-targets
+synology-site health
+synology-site health --all-targets
 synology-site workspaces
 synology-site start demo.example.com
 synology-site stop demo.example.com
 synology-site set-autostart demo.example.com
 synology-site remove demo.example.com
 ```
+
+`health` reads the same `.synology-site.json` markers as `list` and requests `/health` on each
+site that has a stored port. Use `--path` for a different endpoint, or `--all-targets` to check
+every configured NAS target; an unreachable target is reported inline instead of aborting the
+whole command.
 
 Remove keeps project files and volumes by default. Use explicit flags for destructive cleanup:
 

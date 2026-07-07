@@ -128,7 +128,7 @@ once a site has been running in production for a while.
 |---|---|
 | 🔴 | Scheduled DB backups to S3-compatible storage (Backblaze B2/Cloudflare R2 are the popular cheap choices for self-hosters) instead of the current manual `mariadb-dump` documented in `docs/DATABASE.md` |
 | 🔴 | Slack/Discord webhook notification on deploy success/failure — very common once a tool is used for anything beyond solo experimentation |
-| 🔴 | A simple aggregated health dashboard pairing with `list --all-targets` — one view of every site's `/health` status across every NAS target, instead of curling each one by hand |
+| 🟢 | A simple aggregated health dashboard pairing with `list --all-targets` — implemented as `synology-site health [--all-targets]`, reading site markers and checking `/health` for every site with a stored port while reporting unreachable targets inline. |
 
 ## Phase 11 — Security Hardening & Alternative Ingress (Not Started)
 
