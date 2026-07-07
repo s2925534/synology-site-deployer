@@ -40,6 +40,9 @@ Contact: `pedro@veloso.dev`
 
 On Synology, Docker may be available at `/usr/local/bin/docker` instead of the default shell `PATH`. The tool detects this path automatically. If the SSH user can only access Docker through `sudo`, the tool can use `sudo -S` with the configured SSH password.
 
+When running away from the NAS's LAN, use a private remote-access path such as Tailscale and point
+`NAS_HOST` at the NAS's VPN address. See `docs/remote-nas-access.md`.
+
 ## Install For Development
 
 ```bash
