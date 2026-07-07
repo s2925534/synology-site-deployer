@@ -18,6 +18,7 @@ Contact: `pedro@veloso.dev`
 - `bootstrap-uptime-kuma`: stands up Uptime Kuma (self-hosted status/uptime monitoring), a single official image with no secrets to regenerate.
 - `bootstrap-n8n`: stands up n8n (self-hosted workflow automation), generating and saving its credential-encryption key.
 - `bootstrap-vaultwarden`: stands up Vaultwarden (Bitwarden-compatible password manager), generating and saving its admin token with public signups closed by default.
+- `bootstrap-umami`: stands up Umami (privacy-friendly analytics) with a private Postgres container and generated secrets.
 - `cloudflare-route`: points one hostname at a fixed port via the Cloudflare API directly, no NAS/SSH interaction — for reverse-proxy setups where many hostnames share one port.
 - `workspaces`: lists configured Cloudflare accounts/NAS targets and flags copy-paste credential mistakes (e.g. a `CF_TUNNEL_ID` accidentally reused across workspaces).
 - `list --all-targets`: aggregates sites across every configured NAS target instead of just the default one.
@@ -503,6 +504,34 @@ Wire up public access after the command prints the selected port:
 ```bash
 synology-site bootstrap-vaultwarden --hostname vault.example.com
 synology-site cloudflare-route vault.example.com --port <the allocated port>
+```
+
+## Bootstrapping Umami
+
+`bootstrap-umami` stands up [Umami](https://umami.is/docs/install), a privacy-friendly analytics
+dashboard, using `ghcr.io/umami-software/umami:latest` plus a private
+`postgres:15-alpine` container. The Postgres port is not published to the NAS host.
+
+```bash
+synology-site bootstrap-umami
+```
+
+The command generates `POSTGRES_PASSWORD` and `APP_SECRET`, uploads them to the NAS as the
+project's `.env`, and writes the same values locally to `secrets/umami.env`. Umami's default login
+is `admin` / `umami`; change it immediately after first login.
+
+Options:
+
+- `--project-dir-name NAME` (default `umami`) — NAS folder name under `NAS_DOCKER_ROOT`, also used as the app container name
+- `--port N` — request a specific host port instead of auto-allocating one
+- `--force` — tear down and recreate an existing install
+- `--dry-run`
+
+Wire up public access after the command prints the selected port:
+
+```bash
+synology-site bootstrap-umami
+synology-site cloudflare-route analytics.example.com --port <the allocated port>
 ```
 
 ## Manual Cloudflare Route

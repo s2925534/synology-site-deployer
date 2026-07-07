@@ -8,4 +8,5 @@ def test_cli_help() -> None:
     assert result.exit_code == 0
     assert "Synology" in result.output
     assert "bootstrap-n8n" in result.output
+    assert "bootstrap-umami" in result.output
     assert "bootstrap-vaultwarden" in result.output
