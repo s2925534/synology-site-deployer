@@ -8,7 +8,7 @@ Every item below was validated with tests or real smoke-testing where the toolin
 - **Phases 1–8, Phase 10, and Phase 12 are done**. Phase 9 and Phase 11 are partially done in
   `TODO.md`; the next substantive unfinished work is health-gated restart and deeper
   Cloudflare Access/security-hardening.
-- 263 tests pass, `ruff check` is clean, and the real `.env` on this machine still resolves to
+- 288 tests pass, `ruff check` is clean, and the real `.env` on this machine still resolves to
   exactly one workspace (`default`) — confirming zero behavior change for the existing
   single-NAS, single-Cloudflare-account setup throughout all of this.
 - **Corrected an earlier finding**: I'd previously reported "no reliable Packagist/npm registry
@@ -76,6 +76,16 @@ Every item below was validated with tests or real smoke-testing where the toolin
   route still has to be configured in Cloudflare first.
 - WireGuard and reverse-SSH-through-a-VPS are documented as fallbacks in
   `docs/remote-nas-access.md`, with their CGNAT/maintenance constraints called out.
+- `check-nas --remote` added: a raw TCP probe against `NAS_HOST:NAS_PORT` decides LAN vs. remote
+  automatically, routing through whatever transport is configured only when the probe fails;
+  `--remote` forces the remote path for testing it without leaving the LAN.
+- `configure-tailscale` added: given a Tailscale OAuth client (`TAILSCALE_CLIENT_ID`/
+  `TAILSCALE_CLIENT_SECRET`), calls the real Tailscale API to find the NAS's device and writes
+  `TAILSCALE_ENABLED`/`TAILSCALE_NAS_HOST` into `.env` automatically. **Run for real** against
+  the live Tailscale account on this machine: it found the NAS (device `DS`) and its Tailscale
+  address, which matched what was already manually configured in `.env` — confirms the OAuth
+  token exchange, device listing, and env-file rewrite all work correctly end to end, not just
+  against fakes.
 
 ### Phase 10 — Observability, backups, and notifications
 - `synology-site backup-plan <domain>` generates a MariaDB dump script, `backup.env.example`,
@@ -152,4 +162,6 @@ See `TODO.md` for the full per-item breakdown and status of everything above.
   scaffolding for both `vue` and `react` templates.
 - Loaded the real local `.env` through `load_config()` — still resolves to exactly the `default`
   workspace, confirming no behavior change to the existing setup throughout this entire pass.
-- Current working tree changes are intentionally uncommitted.
+- `configure-tailscale` was run for real against the live Tailscale account and `.env` on this
+  machine (not just against fakes) — see the Phase 12 section above.
+- Every item in this pass was committed and pushed individually as it was completed.
