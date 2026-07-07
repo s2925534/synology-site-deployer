@@ -122,7 +122,7 @@ once a site has been running in production for a while.
 | 🔴 | Health-gated restart instead of a hard `docker compose down && up` — start the new container, confirm its health check passes, *then* stop the old one, to avoid a visible-downtime window on every redeploy |
 | 🟢 | Registry-based image builds (build once in CI, push to GHCR, `deploy --pull` on the NAS) as the documented recommended path for anything beyond a personal project — documented in README with Compose, `deploy`, `update`, GHCR login, and GitHub Actions examples. |
 
-## Phase 10 — Observability, Backups & Notifications (Partially Done)
+## Phase 10 — Observability, Backups & Notifications
 
 | Status | Item |
 |---|---|
@@ -130,7 +130,7 @@ once a site has been running in production for a while.
 | 🟢 | Slack/Discord webhook notification on deploy/update success/failure — `NOTIFY_WEBHOOK_URL` and `NOTIFY_WEBHOOK_EVENTS` are optional and default off; webhook failures warn without changing the command result. |
 | 🟢 | A simple aggregated health dashboard pairing with `list --all-targets` — implemented as `synology-site health [--all-targets]`, reading site markers and checking `/health` for every site with a stored port while reporting unreachable targets inline. |
 
-## Phase 11 — Security Hardening & Alternative Ingress (Not Started)
+## Phase 11 — Security Hardening & Alternative Ingress (Partially Done)
 
 | Status | Item |
 |---|---|
@@ -138,7 +138,7 @@ once a site has been running in production for a while.
 | 🟢 | Traefik + Let's Encrypt as a documented alternative to Cloudflare Tunnel for anyone who doesn't want a Cloudflare dependency at all — documented in `docs/traefik-letsencrypt.md`; `deploy` already supports this via the no-`--port` reverse-proxy mode. |
 | 🟢 | Secrets stored as plaintext files under `secrets/` today; evaluated `sops`/`age`, 1Password CLI, and Doppler in `docs/secrets-management.md`, with plaintext files retained as the default for personal use. |
 
-## Phase 12 — Remote Access to the Home NAS (Partially Done)
+## Phase 12 — Remote Access to the Home NAS
 
 Running `create`/`deploy` from a network that isn't the NAS's own LAN (e.g. an office) requires
 reaching the NAS's SSH port without a paid remote-access tool. The real constraint: most home
@@ -157,5 +157,5 @@ NAS*, not inbound to it — the same principle Cloudflare Tunnel already uses in
 
 Design rationale and phased rollout detail for Phase 4 lives in `docs/laravel-scaffold-options.md`.
 See `RESUME.md` for what's verified vs. what still needs a real build/second NAS to confirm.
-Phases 6-11 are brainstormed candidates, not yet scoped or agreed on — see conversation history
+Phases 9-11 still have remaining candidate work — see conversation history
 for the reasoning behind each pick.

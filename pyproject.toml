@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "synology-site-deployer"
 version = "0.1.0"
-description = "A local CLI for deploying containerized Flask sites to Synology NAS hosts."
+description = "A local CLI for deploying containerized apps and self-hosted services to Synology NAS hosts."
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
