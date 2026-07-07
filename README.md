@@ -537,6 +537,9 @@ synology-site cloudflare-route studio.example.com --port 80
 
 Each call routes that hostname to `http://LOCAL_BASE_URL_HOST:80` (i.e. Traefik), leaving the others untouched. Use `--service-host` to point at a different host than `LOCAL_BASE_URL_HOST`. Requires the same Cloudflare API credentials as `create`/`deploy`.
 
+If you do not want Cloudflare Tunnel at all, see `docs/traefik-letsencrypt.md` for a Traefik +
+Let's Encrypt setup that uses normal inbound ports `80`/`443`.
+
 ## Bootstrapping Self-Hosted Supabase
 
 `bootstrap-supabase` automates standing up [Supabase's self-hosted stack](https://supabase.com/docs/guides/self-hosting/docker) (Postgres, Auth, Storage, Realtime, Kong, Studio) on the NAS:

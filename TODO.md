@@ -135,7 +135,7 @@ once a site has been running in production for a while.
 | Status | Item |
 |---|---|
 | 🔴 | Cloudflare Access (Zero Trust) integration — password/SSO-gate a staging site or admin route via the Cloudflare API, natural extension of the tunnel/DNS automation already built |
-| 🔴 | Traefik + Let's Encrypt as a documented alternative to Cloudflare Tunnel for anyone who doesn't want a Cloudflare dependency at all — `deploy` already supports the "existing reverse proxy" no-port-allocation mode, but there's no scaffold-side guidance for setting one up from scratch |
+| 🟢 | Traefik + Let's Encrypt as a documented alternative to Cloudflare Tunnel for anyone who doesn't want a Cloudflare dependency at all — documented in `docs/traefik-letsencrypt.md`; `deploy` already supports this via the no-`--port` reverse-proxy mode. |
 | 🔴 | Secrets stored as plaintext files under `secrets/` today; evaluate age/sops-encrypted secrets or a proper secrets manager (1Password CLI, Doppler) for anyone deploying this from a shared/less-trusted machine |
 
 ## Phase 12 — Remote Access to the Home NAS (Partially Done)
