@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 import pytest
 
 from synology_site.commands.update import update_site
 from synology_site.config import Settings
 from synology_site.errors import SynologySiteError
+from synology_site.nas.target import NasTarget
 from synology_site.ssh_client import RemoteCommandResult
 
 
@@ -227,3 +229,39 @@ def test_update_site_requires_existing_project_folder() -> None:
             settings=settings(),
             ssh_factory=lambda _settings, _password: fake,
         )
+
+
+def test_update_passes_cloudflare_access_ssh_settings_from_workspace() -> None:
+    fake = FakeSSH()
+    captured_settings: list[Settings] = []
+
+    def capturing_ssh_factory(passed_settings: Settings, _password: object) -> FakeSSH:
+        captured_settings.append(passed_settings)
+        return fake
+
+    clienta_target = NasTarget(
+        name="clienta",
+        host="192.0.2.50",
+        port=22,
+        user="clienta-deploy",
+        ssh_key_path=None,
+        ssh_password="clienta-secret",
+        docker_root="/volume1/docker",
+        local_base_url_host="192.0.2.10",
+        default_start_port=5050,
+        default_end_port=5999,
+        ssh_access_hostname="nas-ssh.example.com",
+        ssh_access_local_port=9210,
+    )
+
+    update_site(
+        "app.example.com",
+        settings=replace(settings(), nas_targets=(clienta_target,)),
+        workspace="clienta",
+        ssh_factory=capturing_ssh_factory,
+        health_get=lambda _url, timeout: FakeResponse(),
+    )
+
+    assert captured_settings[0].nas_host == "192.0.2.50"
+    assert captured_settings[0].ssh_access_hostname == "nas-ssh.example.com"
+    assert captured_settings[0].ssh_access_local_port == 9210

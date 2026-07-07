@@ -384,3 +384,42 @@ def test_deploy_uses_resolved_nas_target_for_ssh_connection(tmp_path: Path) -> N
     assert captured_settings[0].nas_host == "203.0.113.5"
     assert captured_settings[0].nas_port == 2222
     assert captured_settings[0].nas_user == "clienta-deploy"
+
+
+def test_deploy_passes_cloudflare_access_ssh_settings_from_workspace(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    fake = FakeSSH()
+    captured_settings: list[Settings] = []
+
+    def capturing_ssh_factory(passed_settings: Settings, _password: object) -> FakeSSH:
+        captured_settings.append(passed_settings)
+        return fake
+
+    clienta_target = NasTarget(
+        name="clienta",
+        host="192.0.2.50",
+        port=22,
+        user="clienta-deploy",
+        ssh_key_path=None,
+        ssh_password="clienta-secret",
+        docker_root="/volume1/docker",
+        local_base_url_host="192.0.2.10",
+        default_start_port=5050,
+        default_end_port=5999,
+        ssh_access_hostname="nas-ssh.example.com",
+        ssh_access_local_port=9210,
+    )
+    multi_nas_settings = replace(settings(), nas_targets=(clienta_target,))
+
+    deploy_existing_project(
+        "app.example.com",
+        compose_file=_compose_file(tmp_path),
+        settings=multi_nas_settings,
+        workspace="clienta",
+        ssh_factory=capturing_ssh_factory,
+    )
+
+    assert captured_settings[0].nas_host == "192.0.2.50"
+    assert captured_settings[0].ssh_access_hostname == "nas-ssh.example.com"
+    assert captured_settings[0].ssh_access_local_port == 9210
