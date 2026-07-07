@@ -48,16 +48,19 @@ class FakeSFTP:
 
 
 class FakeSSH:
-    def __init__(self) -> None:
+    def __init__(self, *, connect_error: Exception | None = None) -> None:
         self.connected_kwargs: dict[str, Any] | None = None
         self.closed = False
         self.commands: list[str] = []
         self.sftp = FakeSFTP()
+        self.connect_error = connect_error
 
     def set_missing_host_key_policy(self, _policy: object) -> None:
         pass
 
     def connect(self, **kwargs: Any) -> None:
+        if self.connect_error is not None:
+            raise self.connect_error
         self.connected_kwargs = kwargs
 
     def exec_command(
@@ -205,4 +208,41 @@ def test_cloudflare_access_ssh_client_starts_proxy_and_connects(
     assert fake_ssh.connected_kwargs is not None
     assert fake_ssh.connected_kwargs["hostname"] == "127.0.0.1"
     assert fake_ssh.connected_kwargs["port"] == 9210
+    assert fake_process.terminated is True
+
+
+def test_cloudflare_access_ssh_client_stops_proxy_when_ssh_connect_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_ssh = FakeSSH(connect_error=OSError("refused"))
+    fake_process = FakeProcess()
+
+    def process_factory(command: list[str], **_kwargs: object) -> FakeProcess:
+        del command
+        return fake_process
+
+    class FakeSocket:
+        def __enter__(self) -> FakeSocket:
+            return self
+
+        def __exit__(self, *_exc: object) -> None:
+            pass
+
+    monkeypatch.setattr(
+        "synology_site.ssh_client.socket.create_connection",
+        lambda _address, timeout: FakeSocket(),
+    )
+
+    client = CloudflareAccessSSHClient(
+        "nas-ssh.example.com",
+        9210,
+        "deploy",
+        cloudflared_path="/usr/local/bin/cloudflared",
+        client_factory=lambda: fake_ssh,
+        process_factory=process_factory,
+    )
+
+    with pytest.raises(SynologySiteError, match="SSH connection"):
+        client.connect()
+
     assert fake_process.terminated is True

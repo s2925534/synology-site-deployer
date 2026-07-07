@@ -124,3 +124,38 @@ def test_list_sites_across_targets_isolates_unreachable_target() -> None:
 
     assert results["default"] == []
     assert "unreachable" in results["broken"]
+
+
+def test_list_sites_passes_cloudflare_access_ssh_settings_from_target() -> None:
+    captured_settings: list[Settings] = []
+
+    def ssh_factory(passed_settings: Settings, _password: object) -> FakeSSH:
+        captured_settings.append(passed_settings)
+        return FakeSSH(passed_settings.nas_host, [])
+
+    target = NasTarget(
+        name="remote",
+        host="192.0.2.50",
+        port=22,
+        user="deploy",
+        ssh_key_path=None,
+        ssh_password="secret",
+        docker_root="/volume1/docker",
+        local_base_url_host="192.0.2.10",
+        default_start_port=5050,
+        default_end_port=5999,
+        ssh_access_hostname="nas-ssh.example.com",
+        ssh_access_local_port=9210,
+    )
+
+    results = list_sites_across_targets(
+        settings(),
+        (target,),
+        ssh_factory=ssh_factory,
+        password_prompt=lambda _target: None,
+    )
+
+    assert results["remote"] == []
+    assert captured_settings[0].nas_host == "192.0.2.50"
+    assert captured_settings[0].ssh_access_hostname == "nas-ssh.example.com"
+    assert captured_settings[0].ssh_access_local_port == 9210
