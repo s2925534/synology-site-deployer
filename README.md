@@ -164,6 +164,9 @@ different physical NAS) or both. `secrets/` is already gitignored in full, so wo
 added or removed just by adding or removing a folder — there's no separate manifest to keep in
 sync, and no limit to how many can exist.
 
+For shared machines or team workflows, see `docs/secrets-management.md` for `sops`/`age`,
+1Password CLI, and Doppler options. Plain `.env` files remain the default for personal use.
+
 When `create`/`deploy`/`cloudflare-route`/`cloudflare-instructions` run, the domain is matched
 against every known workspace's `CF_ZONE_DOMAIN` (longest match wins) to pick the Cloudflare
 account, falling back to the default workspace if nothing matches. The **NAS target** is looked
