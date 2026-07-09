@@ -159,22 +159,22 @@ NAS*, not inbound to it — the same principle Cloudflare Tunnel already uses in
 ## Phase 13 — Lightsail-to-NAS Site Migration (planned)
 
 New goal: move an existing site off a paid AWS Lightsail instance onto this NAS instead, starting
-with `veloso.dev` (WordPress + MySQL/MariaDB, no S3 — confirmed no offload plugin, media is a
+with `example.com` (WordPress + MySQL/MariaDB, no S3 — confirmed no offload plugin, media is a
 plain local `wp-content/uploads`) as the first real source. Two real targets share the same
-extraction step: **(1)** veloso.dev keeps its own hosting, moved to a brand-new NAS Compose stack
-(`--target-mode new-site`), and **(2)** a full clone of veloso.dev's DB/files/plugins lands on
-`systemsnotsilos.com`, an already-running-but-empty NAS WordPress site (`--target-mode
+extraction step: **(1)** example.com keeps its own hosting, moved to a brand-new NAS Compose stack
+(`--target-mode new-site`), and **(2)** a full clone of example.com's DB/files/plugins lands on
+`newsite.example`, an already-running-but-empty NAS WordPress site (`--target-mode
 existing-site-replace`), which the user will then manually diverge into a separate tech-focused
-site. MVP is scoped to exactly what veloso.dev uses; broader source types (EC2, other web
+site. MVP is scoped to exactly what example.com uses; broader source types (EC2, other web
 servers/databases) are follow-up flags once this path is proven. Full plan, required access, and
 known hurdles are in `docs/lightsail-migration-mvp.md`.
 
 | Status | Item |
 |---|---|
-| 🔴 | `migrate-from-lightsail --source-domain <x> --target-domain <y> --dry-run` — read-only discovery over SSH + AWS API + Cloudflare API; produces a migration-readiness report, no writes anywhere. Parametrized on source/target domain from the start rather than hardcoded, even though the MVP itself only handles the Lightsail+Nginx+WordPress+MySQL shape veloso.dev actually runs. |
+| 🔴 | `migrate-from-lightsail --source-domain <x> --target-domain <y> --dry-run` — read-only discovery over SSH + AWS API + Cloudflare API; produces a migration-readiness report, no writes anywhere. Parametrized on source/target domain from the start rather than hardcoded, even though the MVP itself only handles the Lightsail+Nginx+WordPress+MySQL shape example.com actually runs. |
 | 🔴 | `migrate-from-lightsail --source-domain <x> --target-domain <y> --execute` — DB dump/restore, `wp-content` sync (rsync for local files, `aws s3 sync` for offloaded media), WordPress+MariaDB Compose scaffold on the NAS, Cloudflare DNS cutover, post-migration verification. |
-| 🟢 | Access setup in `secrets/veloso-dev/` — Cloudflare covered by the default workspace; SSH now working (`secrets/veloso-dev/lightsail.env` corrected to the real instance — the address in `~/.ssh/config` was stale); AWS S3 access confirmed unnecessary for the MVP (no offload plugin on the instance, media is a plain local `wp-content/uploads`). |
-| 🟡 | Read-only SSH discovery done for the instance's shape (nginx vhost, doc root, PHP version, plugin inventory, no WP-CLI) — see `docs/lightsail-migration-mvp.md`. Still open: DB engine/credentials (not yet read from `wp-config.php`), NAS target workspace decision, and this is a **shared instance** (also serves other third-party sites) so all future steps must stay scoped to veloso.dev's own paths. |
+| 🟢 | Access setup in `secrets/example-com/` — Cloudflare covered by the default workspace; SSH now working (`secrets/example-com/lightsail.env` corrected to the real instance — the address in `~/.ssh/config` was stale); AWS S3 access confirmed unnecessary for the MVP (no offload plugin on the instance, media is a plain local `wp-content/uploads`). |
+| 🟡 | Read-only SSH discovery done for the instance's shape (nginx vhost, doc root, PHP version, plugin inventory, no WP-CLI) — see `docs/lightsail-migration-mvp.md`. Still open: DB engine/credentials (not yet read from `wp-config.php`), NAS target workspace decision, and this is a **shared instance** (also serves other third-party sites) so all future steps must stay scoped to example.com's own paths. |
 
 ---
 

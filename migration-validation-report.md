@@ -23,11 +23,11 @@ Container Manager export/import.
 - **Live containers** (`docker ps -a`, still all on `/volume1/docker`, none touched): all 20
   expected containers exist and are `Up`, **except `realtime-dev.supabase-realtime`, which is
   currently `Exited (0)`** — not running.
-- **Compose files** found under `/volume1/docker/`: `systemsnotsilos-com`, `supabase` (12 compose
+- **Compose files** found under `/volume1/docker/`: `newsite-example`, `supabase` (12 compose
   files — base + dev/caddy/envoy/logs/nginx/pg15/pg17/rustfs/s3/override/tests),
-  `resilinked-api-veloso-dev`, `resilinked-app-veloso-dev`, `proxy-resilinked-veloso-dev`,
-  `resilinked-watchtower-veloso-dev`, `health-veloso-dev`, `test-veloso-dev`. Each
-  `resilinked-*-veloso-dev` folder also contains a full nested git clone (`repo/`) with its own
+  `resilinked-api-example-com`, `resilinked-app-example-com`, `proxy-resilinked-example-com`,
+  `resilinked-watchtower-example-com`, `health-example-com`, `test-example-com`. Each
+  `resilinked-*-example-com` folder also contains a full nested git clone (`repo/`) with its own
   `infra/*/docker-compose.*.yml` files — these are **not** the ones actually running (see D10).
 - **`/volume2/DockerSSD` actual layout**: `archive/copied-from-docker-ssd/{apps,compose,web,databases,logs,notes}`,
   `backups/{...}`, and an empty `ssd-deploy/`. **`apps/` directly under `DockerSSD/` does not exist.**
@@ -45,7 +45,7 @@ Container Manager export/import.
 - **`cloudflared`** is running as a standalone container — not defined in any compose file
   anywhere (only found in unused `config.yml.example` reference files inside the two
   `resilinked-*` repo clones).
-- **`systemsnotsilos-com`** has a second, separate legacy backup mechanism (`backup.sh` +
+- **`newsite-example`** has a second, separate legacy backup mechanism (`backup.sh` +
   `backup.env`, S3-based) alongside the new centralized `backup-databases.sh`.
 
 ### Secrets inventory (paths and variable names only — no values read or printed)
@@ -53,10 +53,10 @@ Container Manager export/import.
 | File | Variable names (sample) | Back up? | Protect? | Include in CM export planning? |
 |---|---|---|---|---|
 | `/volume1/docker/supabase/.env` | `POSTGRES_PASSWORD`, `JWT_SECRET`, `ANON_KEY`, `SERVICE_ROLE_KEY`, `DASHBOARD_PASSWORD`, `SMTP_PASS`, `OPENAI_API_KEY`, +~65 more | Yes | Yes (currently `600`-equivalent, fine) | Yes — must travel with the project |
-| `/volume1/docker/resilinked-api-veloso-dev/.env` | `DATABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `RESEND_API_KEY`, `SENTRY_DSN` | Yes | Yes | Yes |
-| `/volume1/docker/resilinked-app-veloso-dev/.env` | `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SENTRY_DSN` | Yes | Lower sensitivity (client-exposed anyway) | Yes |
-| `/volume1/docker/systemsnotsilos-com/.env` | `MARIADB_ROOT_PASSWORD`, `WORDPRESS_DB_PASSWORD`, `GITHUB_SYNC_TOKEN`, `GITHUB_SYNC_WEBHOOK_SECRET` | Yes | Yes (currently `600`) | Yes |
-| `/volume1/docker/systemsnotsilos-com/backup.env` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `DB_PASSWORD`, `S3_BUCKET` | Yes | **Flagged — see D8** | Only if legacy script stays in use |
+| `/volume1/docker/resilinked-api-example-com/.env` | `DATABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `RESEND_API_KEY`, `SENTRY_DSN` | Yes | Yes | Yes |
+| `/volume1/docker/resilinked-app-example-com/.env` | `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SENTRY_DSN` | Yes | Lower sensitivity (client-exposed anyway) | Yes |
+| `/volume1/docker/newsite-example/.env` | `MARIADB_ROOT_PASSWORD`, `WORDPRESS_DB_PASSWORD`, `GITHUB_SYNC_TOKEN`, `GITHUB_SYNC_WEBHOOK_SECRET` | Yes | Yes (currently `600`) | Yes |
+| `/volume1/docker/newsite-example/backup.env` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `DB_PASSWORD`, `S3_BUCKET` | Yes | **Flagged — see D8** | Only if legacy script stays in use |
 
 The archive copy at `/volume2/DockerSSD/archive/copied-from-docker-ssd/apps/*` has the same
 `.env`/`backup.env` files mirrored — same handling applies.
@@ -104,7 +104,7 @@ The archive copy at `/volume2/DockerSSD/archive/copied-from-docker-ssd/apps/*` h
 6. **No interlock between the two nightly jobs.** The 1:45 AM dump and 2:00 AM `/volume2` rsync
    rely on a fixed 15-minute gap with no dependency check — a slow dump run could get captured
    mid-write by the rsync snapshot.
-7. **Two parallel backup mechanisms for `systemsnotsilos-com`**: legacy `backup.sh`/`backup.env`
+7. **Two parallel backup mechanisms for `newsite-example`**: legacy `backup.sh`/`backup.env`
    (S3) alongside the new centralized script — unclear which is authoritative.
 8. **`backup.env` (AWS keys + DB password) shows POSIX bits `-rwxrwxrwx+`** (world read/write),
    versus `.env` in the same folder correctly showing `-rw-------`. The trailing `+` means a
@@ -113,7 +113,7 @@ The archive copy at `/volume2/DockerSSD/archive/copied-from-docker-ssd/apps/*` h
 9. **This repo's own deploy tool still targets `/volume1/docker`** (`NAS_DOCKER_ROOT` in `.env`)
    — expected for now, but will need updating once containers actually cut over, or future
    `deploy`/`update` runs will keep hitting the old path.
-10. **`resilinked-api-veloso-dev`/`resilinked-app-veloso-dev`'s running compose files use
+10. **`resilinked-api-example-com`/`resilinked-app-example-com`'s running compose files use
     `build.context: ../..`**, a path pattern that only resolves correctly two directories inside
     a repo checkout (matching the *unused* nested `repo/infra/*` files, not the actual top-level
     file's location). Harmless today since normal deploys pull prebuilt GHCR images (`build:` is
@@ -128,7 +128,7 @@ The archive copy at `/volume2/DockerSSD/archive/copied-from-docker-ssd/apps/*` h
 - Add a minimum-size assertion on each `.sql.gz` before the script declares success.
 - Add an explicit dependency/wait between the two Task Scheduler jobs rather than a fixed time
   offset.
-- Decide which `systemsnotsilos-com` backup path is authoritative; retire or clearly separate the
+- Decide which `newsite-example` backup path is authoritative; retire or clearly separate the
   other.
 - Verify `backup.env`'s real effective permissions via DSM File Station → Properties →
   Permission; tighten if the ACL isn't already restrictive.
@@ -141,9 +141,9 @@ The archive copy at `/volume2/DockerSSD/archive/copied-from-docker-ssd/apps/*` h
 
 - [ ] Settle the canonical `/volume2/DockerSSD/apps` path (D1/E1) before anything else.
 - [ ] Export each compose project via Container Manager's **Project** export (captures compose
-      file + bind-mounted folder): `systemsnotsilos-com`, `supabase`, `resilinked-api-veloso-dev`,
-      `resilinked-app-veloso-dev`, `proxy-resilinked-veloso-dev`,
-      `resilinked-watchtower-veloso-dev`, `health-veloso-dev`, `test-veloso-dev`.
+      file + bind-mounted folder): `newsite-example`, `supabase`, `resilinked-api-example-com`,
+      `resilinked-app-example-com`, `proxy-resilinked-example-com`,
+      `resilinked-watchtower-example-com`, `health-example-com`, `test-example-com`.
 - [ ] Handle `cloudflared` separately — it's not a compose project; give it one before or during
       migration.
 - [ ] Remap bind mounts: `/volume1/docker/<project>` → final canonical
@@ -153,16 +153,16 @@ The archive copy at `/volume2/DockerSSD/archive/copied-from-docker-ssd/apps/*` h
 - [ ] Remap `/volume1/web` → `/volume2/DockerSSD/web` — nothing found actually bind-mounts
       `/volume1/web` into a container today (WordPress uses a named volume), but re-confirm DSM
       Web Station / Cloudflare Tunnel service URLs before decommissioning it.
-- [ ] Confirm named Docker volumes (`systemsnotsilos-com-wp-content`, `systemsnotsilos-com-db-data`,
+- [ ] Confirm named Docker volumes (`newsite-example-wp-content`, `newsite-example-db-data`,
       `db-config`, `deno-cache`) survive the project import intact.
-- [ ] `supabase_default` is `external: true` and depended on by `systemsnotsilos-com`,
-      `resilinked-api-veloso-dev`, `resilinked-app-veloso-dev`, `proxy-resilinked-veloso-dev` —
+- [ ] `supabase_default` is `external: true` and depended on by `newsite-example`,
+      `resilinked-api-example-com`, `resilinked-app-example-com`, `proxy-resilinked-example-com` —
       `supabase` must be imported/started first.
-- [ ] Start order: **1)** `supabase` → **2)** `systemsnotsilos-com`, `resilinked-api-veloso-dev`,
-      `resilinked-app-veloso-dev` → **3)** `proxy-resilinked-veloso-dev` → **4)**
-      `resilinked-watchtower-veloso-dev`, `health-veloso-dev`, `test-veloso-dev` (no dependencies)
+- [ ] Start order: **1)** `supabase` → **2)** `newsite-example`, `resilinked-api-example-com`,
+      `resilinked-app-example-com` → **3)** `proxy-resilinked-example-com` → **4)**
+      `resilinked-watchtower-example-com`, `health-example-com`, `test-example-com` (no dependencies)
       → **5)** `cloudflared` last, once backends are reachable.
-- [ ] `resilinked-api-veloso-dev`/`resilinked-app-veloso-dev`/`proxy-resilinked-veloso-dev` are
+- [ ] `resilinked-api-example-com`/`resilinked-app-example-com`/`proxy-resilinked-example-com` are
       simple enough to just redeploy as fresh compose projects from their moved directories rather
       than reconstructing via per-container import. `supabase`'s 12-file compose set is more
       complex — prefer Container Manager's native project import there.
@@ -204,7 +204,7 @@ live outside any per-project path).
    overlapping compose files — two different snapshots, or intentional duplication?
 3. Is `realtime-dev.supabase-realtime` expected to be exited right now, or is that an active,
    unrelated problem?
-4. Is the legacy `systemsnotsilos-com/backup.sh` + `backup.env` (S3) still in active use, or fully
+4. Is the legacy `newsite-example/backup.sh` + `backup.env` (S3) still in active use, or fully
    superseded?
 5. Was `cloudflared` deliberately deployed outside compose, or should it be wrapped in a compose
    file before migration?
