@@ -156,6 +156,26 @@ NAS*, not inbound to it — the same principle Cloudflare Tunnel already uses in
 | 🟢 | `configure-tailscale` — automates the last manual step in the Tailscale setup (copying the NAS's `100.x.y.z` address out of the admin console). Given a Tailscale OAuth client (`TAILSCALE_CLIENT_ID`/`TAILSCALE_CLIENT_SECRET`), calls the Tailscale API to list the tailnet's devices and writes `TAILSCALE_ENABLED=true`/`TAILSCALE_NAS_HOST=<discovered address>` into `.env`, leaving every other line untouched. Device selection prefers an explicit `--device-name`, then the currently configured `TAILSCALE_NAS_HOST` (refreshing/confirming an existing setup on re-run), then a single-device tailnet; genuine ambiguity lists candidates and asks rather than guessing. **Run for real** against the live account: found the NAS (`DS`) and its Tailscale address, which matched the address already configured — confirms both the OAuth flow and the existing manual setup were correct. |
 | 🔴 | `deploy`/`create` do not yet share `check-nas`'s LAN-vs-remote auto-detection — they always use whatever `default_ssh_factory` resolves to (Tailscale/Cloudflare Access if configured, even from on the LAN). Worth revisiting only if that turns out to add noticeable latency in practice; `check-nas` was the requested starting point since it's the lowest-risk command to get this right on first. |
 
+## Phase 13 — Lightsail-to-NAS Site Migration (planned)
+
+New goal: move an existing site off a paid AWS Lightsail instance onto this NAS instead, starting
+with `veloso.dev` (WordPress + MySQL/MariaDB, no S3 — confirmed no offload plugin, media is a
+plain local `wp-content/uploads`) as the first real source. Two real targets share the same
+extraction step: **(1)** veloso.dev keeps its own hosting, moved to a brand-new NAS Compose stack
+(`--target-mode new-site`), and **(2)** a full clone of veloso.dev's DB/files/plugins lands on
+`systemsnotsilos.com`, an already-running-but-empty NAS WordPress site (`--target-mode
+existing-site-replace`), which the user will then manually diverge into a separate tech-focused
+site. MVP is scoped to exactly what veloso.dev uses; broader source types (EC2, other web
+servers/databases) are follow-up flags once this path is proven. Full plan, required access, and
+known hurdles are in `docs/lightsail-migration-mvp.md`.
+
+| Status | Item |
+|---|---|
+| 🔴 | `migrate-from-lightsail --source-domain <x> --target-domain <y> --dry-run` — read-only discovery over SSH + AWS API + Cloudflare API; produces a migration-readiness report, no writes anywhere. Parametrized on source/target domain from the start rather than hardcoded, even though the MVP itself only handles the Lightsail+Nginx+WordPress+MySQL shape veloso.dev actually runs. |
+| 🔴 | `migrate-from-lightsail --source-domain <x> --target-domain <y> --execute` — DB dump/restore, `wp-content` sync (rsync for local files, `aws s3 sync` for offloaded media), WordPress+MariaDB Compose scaffold on the NAS, Cloudflare DNS cutover, post-migration verification. |
+| 🟢 | Access setup in `secrets/veloso-dev/` — Cloudflare covered by the default workspace; SSH now working (`secrets/veloso-dev/lightsail.env` corrected to the real instance — the address in `~/.ssh/config` was stale); AWS S3 access confirmed unnecessary for the MVP (no offload plugin on the instance, media is a plain local `wp-content/uploads`). |
+| 🟡 | Read-only SSH discovery done for the instance's shape (nginx vhost, doc root, PHP version, plugin inventory, no WP-CLI) — see `docs/lightsail-migration-mvp.md`. Still open: DB engine/credentials (not yet read from `wp-config.php`), NAS target workspace decision, and this is a **shared instance** (also serves other third-party sites) so all future steps must stay scoped to veloso.dev's own paths. |
+
 ---
 
 Design rationale and phased rollout detail for Phase 4 lives in `docs/laravel-scaffold-options.md`.
