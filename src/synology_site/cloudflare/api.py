@@ -34,6 +34,12 @@ class CloudflareAPI:
             "Content-Type": "application/json",
         }
 
+    def get_dns_records(self, hostname: str) -> list[dict[str, Any]]:
+        """Read-only lookup of existing DNS records for a hostname. Never writes anything."""
+        list_endpoint = f"{CLOUDFLARE_API_BASE}/zones/{self.account.zone_id}/dns_records"
+        current = self._request("GET", list_endpoint, params={"name": hostname})
+        return list(current.get("result") or [])
+
     def configure_tunnel_route(self, hostname: str, service_url: str) -> CloudflareRouteResult:
         self._update_tunnel_ingress(hostname, service_url)
         dns_record_id = self._ensure_dns_record(hostname)

@@ -25,6 +25,7 @@ Contact: `pedro@veloso.dev`
 - `list --all-targets`: aggregates sites across every configured NAS target instead of just the default one.
 - `health --all-targets`: checks every known site's health endpoint where a marker contains a port.
 - `backup-plan`: generates a local MariaDB backup script/env template/scheduler examples for `--with-db` sites.
+- `migrate-from-lightsail --dry-run`: read-only discovery of a WordPress site on an AWS Lightsail instance, producing a migration-readiness report (no writes anywhere). `--execute` (the actual migration) is not implemented yet.
 - Optional deploy/update webhook notifications for Slack or Discord.
 - Finds a free local NAS port when one is needed.
 - Prints manual Cloudflare Tunnel setup instructions if API credentials are missing; otherwise creates/updates the tunnel ingress rule and proxied DNS record automatically.
@@ -446,6 +447,52 @@ S3-compatible upload is optional. Leave `S3_BUCKET` empty for local-only backups
 Backblaze B2, Cloudflare R2, MinIO, or another S3-compatible endpoint. The generated script uses
 the AWS CLI for uploads, so install/configure it on whichever host runs the scheduled task.
 
+## Migrating A Site Off Lightsail (Dry Run)
+
+`migrate-from-lightsail --dry-run` is the read-only discovery half of moving an existing
+WordPress site off an AWS Lightsail instance onto this NAS (see
+`docs/lightsail-migration-mvp.md` for the full plan). It connects to the Lightsail instance over
+SSH and inspects it — nothing is written, no DB is touched, no DNS record changes:
+
+```bash
+synology-site migrate-from-lightsail \
+  --source-domain example.com \
+  --target-domain example.com \
+  --target-mode new-site \
+  --dry-run
+```
+
+`--target-mode` is either `new-site` (the domain keeps its own hosting, just moved off
+Lightsail) or `existing-site-replace` (clone the source onto a different, already-running-but-
+empty NAS WordPress site — e.g. `--target-domain newsite.example`).
+
+Source credentials come from `secrets/<source-domain-slug>/lightsail.env` (a workspace named
+after the source domain, same directory-scan convention as `cloudflare.env`/`nas.env`):
+
+```env
+# secrets/example-com/lightsail.env
+LIGHTSAIL_HOST=203.0.113.9
+LIGHTSAIL_PORT=22
+LIGHTSAIL_USER=ubuntu
+LIGHTSAIL_SSH_KEY_PATH=/Users/you/.ssh/example-com-migration
+```
+
+Pass `--source-workspace` to use a differently-named folder. If no SSH key or password is
+configured, the CLI prompts for one.
+
+The dry run detects: Bitnami vs. stock Nginx/WordPress layout, the document root, other live
+hostnames sharing the instance (so later steps stay scoped to just the source domain), PHP
+version, whether WP-CLI is installed, the WordPress version, the DB name/user/host from
+`wp-config.php` (only whether a password is defined, never its value), the plugin and theme
+inventory, whether a known S3 offload plugin is present, `wp-content/uploads` size, WP-Cron
+configuration, and the source domain's current Cloudflare DNS record(s) (skipped if that
+workspace has no Cloudflare API credentials configured). It writes a Markdown report to
+`migration-reports/<source>-to-<target>-dry-run.md` (override the directory with
+`--output-dir`).
+
+`--execute` (the actual DB dump/restore, `wp-content` sync, NAS Compose scaffold, and Cloudflare
+cutover) is not implemented yet and exits with an error explaining that.
+
 ### Registry-Based Deploys (Recommended For Production)
 
 For anything beyond a personal or low-traffic app, build images in CI and let the NAS pull them.
@@ -762,6 +809,7 @@ synology-site start demo.example.com
 synology-site stop demo.example.com
 synology-site set-autostart demo.example.com
 synology-site remove demo.example.com
+synology-site migrate-from-lightsail --source-domain example.com --target-domain example.com --target-mode new-site --dry-run
 ```
 
 `check-nas` auto-detects whether the NAS is reachable directly on the LAN; if not, it falls back
