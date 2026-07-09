@@ -57,6 +57,7 @@ guessing which one is the NAS:
 ```bash
 synology-site configure-tailscale --device-name synology-nas
 synology-site configure-tailscale --dry-run   # look up the device, don't write to .env
+synology-site configure-tailscale --env-file .env.workspace   # write somewhere other than .env
 ```
 
 `TAILSCALE_CLIENT_ID`/`TAILSCALE_CLIENT_SECRET` are only read by this one command -- they're not
