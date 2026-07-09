@@ -253,6 +253,10 @@ This adds:
 
 MariaDB port `3306` is not published by default. Do not expose MariaDB to the public internet.
 
+`--with-db` is a shortcut for `--db-mode container`; the two are equivalent and `--with-db` wins
+if both are passed. `--db-mode` exists for scripting against the underlying value directly (only
+`none` and `container` are valid today).
+
 ## Deploy Laravel
 
 ```bash
@@ -430,7 +434,8 @@ For sites created with `--with-db`, generate a local backup plan:
 synology-site backup-plan app.example.com --retention-days 14
 ```
 
-This writes `backup-plans/app-example-com/` with:
+Pass `--output-dir` to write somewhere other than the default `backup-plans/` directory. This
+writes `backup-plans/app-example-com/` with:
 
 - `backup.sh` — runs `mariadb-dump` inside the site's DB container and writes a compressed dump
 - `backup.env.example` — DB/S3 settings template; copy it to `backup.env` and fill in secrets
@@ -764,7 +769,9 @@ to whichever remote transport is configured (Tailscale/Cloudflare Access) automa
 `--remote` to force that remote path even from inside the LAN, to verify it actually works.
 `configure-tailscale` requires `TAILSCALE_CLIENT_ID`/`TAILSCALE_CLIENT_SECRET` (an OAuth client
 from the Tailscale admin console) and writes `TAILSCALE_ENABLED`/`TAILSCALE_NAS_HOST` into `.env`
-automatically -- see `docs/remote-nas-access.md`.
+automatically. Pass `--device-name <substring>` to pick the NAS when the tailnet has more than one
+device, `--dry-run` to look the device up without writing to the env file, or `--env-file` to
+target a file other than `.env` -- see `docs/remote-nas-access.md`.
 
 `health` reads the same `.synology-site.json` markers as `list` and requests `/health` on each
 site that has a stored port. Use `--path` for a different endpoint, or `--all-targets` to check
@@ -777,6 +784,9 @@ Remove keeps project files and volumes by default. Use explicit flags for destru
 synology-site remove demo.example.com --delete-files
 synology-site remove demo.example.com --delete-volumes
 ```
+
+`remove` asks for confirmation before tearing anything down; pass `--force` to skip the prompt
+(e.g. for scripting).
 
 ## Docker Commands On The NAS
 
