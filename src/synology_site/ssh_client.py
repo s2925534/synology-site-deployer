@@ -92,13 +92,28 @@ class SSHClient:
         *,
         check: bool = False,
         timeout: int | None = None,
+        stdin: str | None = None,
     ) -> RemoteCommandResult:
+        """Runs command over SSH.
+
+        If the command contains "sudo -S" and a password is configured, the
+        password is written first, as a login answer. `stdin` (e.g. a token
+        for `docker login --password-stdin`) is written after that and the
+        write side is then closed, signaling EOF -- required for commands
+        that block reading stdin until it's closed. Without an explicit
+        `stdin`, the write side is left open as before, since existing
+        sudo-only callers don't expect EOF to be signaled.
+        """
         client = self._require_client()
         try:
             _stdin, stdout_stream, stderr_stream = client.exec_command(command, timeout=timeout)
             if self.password and "sudo -S" in command:
                 _stdin.write(f"{self.password}\n")
                 _stdin.flush()
+            if stdin is not None:
+                _stdin.write(stdin if stdin.endswith("\n") else f"{stdin}\n")
+                _stdin.flush()
+                _stdin.channel.shutdown_write()
             exit_code = stdout_stream.channel.recv_exit_status()
             stdout = stdout_stream.read().decode("utf-8", errors="replace")
             stderr = stderr_stream.read().decode("utf-8", errors="replace")

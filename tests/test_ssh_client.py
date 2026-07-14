@@ -12,15 +12,25 @@ from synology_site.ssh_client import CloudflareAccessSSHClient, SSHClient
 class FakeChannel:
     def __init__(self, exit_code: int) -> None:
         self.exit_code = exit_code
+        self.write_shutdown = False
 
     def recv_exit_status(self) -> int:
         return self.exit_code
+
+    def shutdown_write(self) -> None:
+        self.write_shutdown = True
 
 
 class FakeStream(BytesIO):
     def __init__(self, text: str, exit_code: int = 0) -> None:
         super().__init__(text.encode())
         self.channel = FakeChannel(exit_code)
+
+
+class FakeStdin(StringIO):
+    def __init__(self) -> None:
+        super().__init__()
+        self.channel = FakeChannel(0)
 
 
 class FakeSFTP:
@@ -52,6 +62,7 @@ class FakeSSH:
         self.connected_kwargs: dict[str, Any] | None = None
         self.closed = False
         self.commands: list[str] = []
+        self.stdins: list[FakeStdin] = []
         self.sftp = FakeSFTP()
         self.connect_error = connect_error
 
@@ -67,10 +78,12 @@ class FakeSSH:
         self,
         command: str,
         timeout: int | None = None,
-    ) -> tuple[None, FakeStream, FakeStream]:
+    ) -> tuple[FakeStdin, FakeStream, FakeStream]:
         del timeout
         self.commands.append(command)
-        return None, FakeStream("hello\n", 0), FakeStream("", 0)
+        stdin = FakeStdin()
+        self.stdins.append(stdin)
+        return stdin, FakeStream("hello\n", 0), FakeStream("", 0)
 
     def open_sftp(self) -> FakeSFTP:
         return self.sftp
@@ -149,6 +162,42 @@ def test_ssh_client_runs_command() -> None:
     assert result.stdout == "hello\n"
     assert result.stderr == ""
     assert fake.commands == ["docker ps"]
+
+
+def test_ssh_client_writes_stdin_and_closes_write_side() -> None:
+    fake = FakeSSH()
+    client = SSHClient("nas.local", 22, "deploy", client_factory=lambda: fake)
+    client.connect()
+
+    client.run("docker login ghcr.io -u me --password-stdin", stdin="my-token")
+
+    assert fake.stdins[0].getvalue() == "my-token\n"
+    assert fake.stdins[0].channel.write_shutdown is True
+
+
+def test_ssh_client_writes_sudo_password_before_explicit_stdin() -> None:
+    fake = FakeSSH()
+    client = SSHClient(
+        "nas.local", 22, "deploy", password="sudopass", client_factory=lambda: fake
+    )
+    client.connect()
+
+    client.run("sudo -S -p '' docker login ghcr.io --password-stdin", stdin="my-token")
+
+    assert fake.stdins[0].getvalue() == "sudopass\nmy-token\n"
+
+
+def test_ssh_client_leaves_stdin_open_without_explicit_stdin() -> None:
+    fake = FakeSSH()
+    client = SSHClient(
+        "nas.local", 22, "deploy", password="sudopass", client_factory=lambda: fake
+    )
+    client.connect()
+
+    client.run("sudo -S -p '' docker compose up -d")
+
+    assert fake.stdins[0].getvalue() == "sudopass\n"
+    assert fake.stdins[0].channel.write_shutdown is False
 
 
 def test_ssh_client_uploads_text() -> None:

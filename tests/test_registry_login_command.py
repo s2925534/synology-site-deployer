@@ -42,7 +42,7 @@ class FakeSSH:
     def __init__(self, failures: dict[str, int] | None = None) -> None:
         self.failures = failures or {}
         self.commands: list[str] = []
-        self.uploaded: dict[str, str] = {}
+        self.stdins: dict[str, str] = {}
 
     def __enter__(self) -> FakeSSH:
         return self
@@ -50,18 +50,18 @@ class FakeSSH:
     def __exit__(self, *_exc: object) -> None:
         pass
 
-    def upload_text(self, remote_path: str, content: str) -> None:
-        self.uploaded[remote_path] = content
-
     def run(
         self,
         command: str,
         *,
         check: bool = False,
         timeout: int | None = None,
+        stdin: str | None = None,
     ) -> RemoteCommandResult:
         del timeout
         self.commands.append(command)
+        if stdin is not None:
+            self.stdins[command] = stdin
         exit_code = self.failures.get(command, 0)
         stdout = "docker\n" if command == "command -v docker" else ""
         stderr = "" if exit_code == 0 else "login failed\n"
@@ -71,7 +71,10 @@ class FakeSSH:
         return result
 
 
-def test_registry_login_uploads_token_and_logs_in() -> None:
+LOGIN_COMMAND = "docker login ghcr.io -u zqxdeveloper --password-stdin"
+
+
+def test_registry_login_pipes_token_via_stdin_not_command_string() -> None:
     fake = FakeSSH()
 
     result = registry_login(
@@ -84,23 +87,14 @@ def test_registry_login_uploads_token_and_logs_in() -> None:
 
     assert result.registry == "ghcr.io"
     assert result.username == "zqxdeveloper"
-    assert fake.uploaded["/tmp/.synology-site-registry-token"] == "sekret-token"
-    assert any(
-        "docker login ghcr.io -u zqxdeveloper --password-stdin" in c for c in fake.commands
-    )
+    assert fake.stdins[LOGIN_COMMAND] == "sekret-token"
+    assert LOGIN_COMMAND in fake.commands
     # the token itself must never appear in a command string
     assert not any("sekret-token" in c for c in fake.commands)
-    # temp file removed afterwards
-    assert any(c.startswith("rm -f") for c in fake.commands)
 
 
 def test_registry_login_raises_on_docker_login_failure() -> None:
-    fake = FakeSSH(
-        {
-            "docker login ghcr.io -u zqxdeveloper --password-stdin "
-            "< /tmp/.synology-site-registry-token": 1
-        }
-    )
+    fake = FakeSSH({LOGIN_COMMAND: 1})
 
     with pytest.raises(SynologySiteError, match="docker login to ghcr.io failed"):
         registry_login(
@@ -110,23 +104,3 @@ def test_registry_login_raises_on_docker_login_failure() -> None:
             registry="ghcr.io",
             ssh_factory=lambda _settings, _password: fake,
         )
-
-
-def test_registry_login_removes_temp_file_even_on_failure() -> None:
-    fake = FakeSSH(
-        {
-            "docker login ghcr.io -u zqxdeveloper --password-stdin "
-            "< /tmp/.synology-site-registry-token": 1
-        }
-    )
-
-    with pytest.raises(SynologySiteError):
-        registry_login(
-            "zqxdeveloper",
-            "sekret-token",
-            settings=settings(),
-            registry="ghcr.io",
-            ssh_factory=lambda _settings, _password: fake,
-        )
-
-    assert any(c.startswith("rm -f") for c in fake.commands)

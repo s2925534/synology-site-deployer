@@ -17,8 +17,6 @@ from synology_site.ssh_client import SSHClient
 
 SSHFactory = Callable[[Settings, str | None], SSHClient]
 
-REMOTE_TOKEN_PATH = "/tmp/.synology-site-registry-token"
-
 
 @dataclass(frozen=True)
 class RegistryLoginResult:
@@ -38,10 +36,11 @@ def registry_login(
 ) -> RegistryLoginResult:
     """Logs the NAS's Docker daemon in to a container registry.
 
-    The token is uploaded to a 0600 temp file and piped into
-    `docker login --password-stdin`, then the temp file is removed --
-    the token is never passed as a command-line argument (so it can't
-    leak through `ps` on the NAS) and never stored on disk afterwards.
+    The token is piped straight into `docker login --password-stdin` over
+    the SSH channel's own stdin (chained after the sudo password when the
+    NAS's docker needs sudo) -- it is never passed as a command-line
+    argument (so it can't leak through `ps` on the NAS) and never written
+    to a file on the NAS at all.
     """
     target = settings.resolve_target(workspace=workspace)
     connection_settings = replace(
@@ -57,16 +56,10 @@ def registry_login(
 
     with ssh_factory(connection_settings, prompted_password) as ssh:
         docker = require_docker(ssh)
-        quoted_path = shlex.quote(REMOTE_TOKEN_PATH)
-        ssh.upload_text(REMOTE_TOKEN_PATH, token)
-        ssh.run(f"chmod 600 {quoted_path}", check=True)
-        try:
-            result = ssh.run(
-                f"{docker} login {shlex.quote(registry)} "
-                f"-u {shlex.quote(username)} --password-stdin < {quoted_path}"
-            )
-        finally:
-            ssh.run(f"rm -f {quoted_path}")
+        result = ssh.run(
+            f"{docker} login {shlex.quote(registry)} -u {shlex.quote(username)} --password-stdin",
+            stdin=token,
+        )
         if not result.ok:
             detail = result.stderr.strip() or result.stdout.strip()
             msg = f"docker login to {registry} failed: {detail}"
