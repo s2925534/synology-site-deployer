@@ -15,6 +15,7 @@ Contact: `pedro@veloso.dev`
 - `create`: scaffolds and deploys a new Flask, Laravel, FastAPI, or Next.js app (`--framework`) to a Synology NAS using Docker Compose, optionally with a MariaDB 11 container (private network + persistent volume), a non-secret project README, `docs/DATABASE.md`, and `/health`/`/db-health` checks. `--frontend` pairs a Vue/React/Angular/Inertia/Livewire frontend with the Laravel backend (see "Backend + Frontend Roadmap").
 - `deploy`: uploads an existing project's own Compose file (+ optional `.env`) and starts it — any framework, since it doesn't generate app code. `docker compose pull` with a `--build` fallback. Works with a fixed reverse-proxy port (Traefik, etc., no port allocation/Cloudflare/health-check) or a standalone published port (same behavior as `create`).
 - `update`: refreshes an existing deployed site's Compose project in place (`pull` + `up -d`, with build fallback) without re-uploading or recreating the scaffold.
+- `registry-login`: one-time Docker login on the NAS for a private registry (GHCR by default), so `deploy`/`update` can pull private images. Token goes in over stdin via a temp file, never as a CLI argument.
 - `bootstrap-supabase`: clones and starts Supabase's self-hosted stack, regenerating every security-critical secret properly (including correctly HS256-signed `ANON_KEY`/`SERVICE_ROLE_KEY` JWTs, not random strings), and can upload a Traefik-label override alongside it.
 - `bootstrap-uptime-kuma`: stands up Uptime Kuma (self-hosted status/uptime monitoring), a single official image with no secrets to regenerate.
 - `bootstrap-n8n`: stands up n8n (self-hosted workflow automation), generating and saving its credential-encryption key.
@@ -529,12 +530,18 @@ synology-site update app.example.com --container-name your-app --health-path /he
 ```
 
 For GHCR, the NAS must be able to pull the image. Public images need no extra setup. Private
-images require a one-time Docker login on the NAS with a GitHub token that has package read
-access:
+images require a one-time Docker login on the NAS with a token that has package read access:
 
 ```bash
-echo "<github-token>" | docker login ghcr.io -u <github-username> --password-stdin
+synology-site registry-login --username <github-username>
 ```
+
+This prompts for the token (or reads it from `SYNOLOGY_SITE_REGISTRY_TOKEN`) and uploads it to a
+`0600` temp file on the NAS, pipes it into `docker login --password-stdin` there, then deletes the
+temp file -- the token is never passed as a command-line argument (so it can't leak through `ps`
+on the NAS) and never stored on disk afterwards. Pass `--registry` for a non-GHCR registry, or
+`--workspace` to log in on a specific NAS target. Doing this by hand with a raw
+`docker login --password-stdin` still works too, if you'd rather not use the CLI for it.
 
 A minimal GitHub Actions build/push workflow looks like:
 
