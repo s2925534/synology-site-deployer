@@ -40,6 +40,18 @@ class CloudflareAPI:
         current = self._request("GET", list_endpoint, params={"name": hostname})
         return list(current.get("result") or [])
 
+    def get_tunnel_ingress(self) -> list[dict[str, Any]]:
+        """Read-only lookup of the tunnel's full ingress rule list. Never writes anything.
+
+        Useful for diagnosing `cloudflare-route` issues -- this tunnel is commonly shared
+        across multiple workspaces/zones (one Cloudflare account, several domains, one NAS),
+        so its ingress list holds entries for every hostname across all of them, not just one
+        workspace's own.
+        """
+        current = self._request("GET", self._tunnel_config_endpoint)
+        config = current.get("result", {}).get("config") or {}
+        return list(config.get("ingress") or [])
+
     def configure_tunnel_route(self, hostname: str, service_url: str) -> CloudflareRouteResult:
         self._update_tunnel_ingress(hostname, service_url)
         dns_record_id = self._ensure_dns_record(hostname)
@@ -51,14 +63,16 @@ class CloudflareAPI:
             dns_configured=True,
         )
 
-    def _update_tunnel_ingress(self, hostname: str, service_url: str) -> None:
-        endpoint = (
+    @property
+    def _tunnel_config_endpoint(self) -> str:
+        return (
             f"{CLOUDFLARE_API_BASE}/accounts/{self.account.account_id}"
             f"/cfd_tunnel/{self.account.tunnel_id}/configurations"
         )
-        current = self._request("GET", endpoint)
-        config = current.get("result", {}).get("config") or {}
-        ingress = list(config.get("ingress") or [])
+
+    def _update_tunnel_ingress(self, hostname: str, service_url: str) -> None:
+        endpoint = self._tunnel_config_endpoint
+        ingress = self.get_tunnel_ingress()
         catch_all = [
             item for item in ingress if item.get("service", "").startswith("http_status:")
         ]

@@ -14,11 +14,14 @@ from synology_site.commands.cloudflare_route import app as cloudflare_route_app
 from synology_site.commands.configure_tailscale import app as configure_tailscale_app
 from synology_site.commands.create import app as create_app
 from synology_site.commands.deploy import app as deploy_app
+from synology_site.commands.ensure_network import app as ensure_network_app
 from synology_site.commands.health import app as health_app
+from synology_site.commands.inspect_containers import logs_app, ps_app
 from synology_site.commands.list_sites import app as list_app
 from synology_site.commands.migrate_from_lightsail import app as migrate_from_lightsail_app
 from synology_site.commands.registry_login import app as registry_login_app
 from synology_site.commands.remove import app as remove_app
+from synology_site.commands.show_tunnel import app as show_tunnel_app
 from synology_site.commands.start import app as start_app
 from synology_site.commands.stop import app as stop_app
 from synology_site.commands.update import app as update_app
@@ -31,12 +34,16 @@ app.command(name="deploy")(deploy_app)
 app.command(name="update")(update_app)
 app.command(name="registry-login")(registry_login_app)
 app.command(name="cloudflare-route")(cloudflare_route_app)
+app.command(name="show-tunnel")(show_tunnel_app)
+app.command(name="ps")(ps_app)
+app.command(name="logs")(logs_app)
 app.command(name="bootstrap-supabase")(bootstrap_supabase_app)
 app.command(name="bootstrap-n8n")(bootstrap_n8n_app)
 app.command(name="bootstrap-umami")(bootstrap_umami_app)
 app.command(name="bootstrap-uptime-kuma")(bootstrap_uptime_kuma_app)
 app.command(name="bootstrap-vaultwarden")(bootstrap_vaultwarden_app)
 app.command(name="check-nas")(check_nas_app)
+app.command(name="ensure-network")(ensure_network_app)
 app.command(name="configure-tailscale")(configure_tailscale_app)
 app.command(name="health")(health_app)
 app.command(name="backup-plan")(backup_plan_app)

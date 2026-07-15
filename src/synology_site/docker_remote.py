@@ -59,10 +59,11 @@ def ensure_remote_directory(ssh: SSHClient, path: str) -> None:
         raise SynologySiteError(msg)
 
 
-def list_containers(ssh: SSHClient) -> str:
+def list_containers(ssh: SSHClient, *, all_containers: bool = False) -> str:
     docker = docker_command(ssh)
+    flag = " -a" if all_containers else ""
     return ssh.run(
-        f"{docker} ps --format '{{{{.Names}}}}\\t{{{{.Image}}}}\\t{{{{.Status}}}}'",
+        f"{docker} ps{flag} --format '{{{{.Names}}}}\\t{{{{.Image}}}}\\t{{{{.Status}}}}'",
         check=True,
     ).stdout
 
@@ -70,3 +71,11 @@ def list_containers(ssh: SSHClient) -> str:
 def list_published_ports(ssh: SSHClient) -> str:
     docker = docker_command(ssh)
     return ssh.run(f"{docker} ps --format '{{{{.Ports}}}}'", check=True).stdout
+
+
+def container_logs(ssh: SSHClient, name: str, *, tail: int = 100) -> str:
+    """Read-only: the last `tail` lines of a container's logs (stdout+stderr combined)."""
+    docker = docker_command(ssh)
+    quoted = shlex.quote(name)
+    result = ssh.run(f"{docker} logs --tail {int(tail)} {quoted} 2>&1", check=True)
+    return result.stdout

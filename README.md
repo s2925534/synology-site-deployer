@@ -360,6 +360,8 @@ This uploads the Compose file and `.env` (permission `600`) to `/volume1/docker/
 
 If the service in your Compose file is fronted by a reverse proxy already running on the NAS (Traefik, Nginx Proxy Manager) and doesn't publish a host port — as with ResiLinked's `infra/web/docker-compose.web.yml`, which joins the shared `supabase_default` network and routes by Traefik `Host()` label — omit `--port`. Cloudflare automation and the health check are both skipped, since routing is handled by the existing proxy/tunnel setup rather than a per-app port.
 
+If the route is an API with no human-facing pages (no meta tags to add `noindex` to), see `docs/api-only-noindex-routes.md` for the equivalent Traefik header-middleware recipe.
+
 If the service does publish its own host port, pass `--port` to get the same behavior as `create`: port availability is checked on the NAS, and the Cloudflare tunnel route is configured automatically (or manual instructions are printed) exactly as described above.
 
 ```bash

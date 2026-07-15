@@ -47,9 +47,18 @@ class FakeResponse:
 
 
 class FakeSSH:
-    def __init__(self, *, project_exists: bool = False, pull_ok: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        project_exists: bool = False,
+        pull_ok: bool = True,
+        up_ok: bool = True,
+        up_stderr: str = "",
+    ) -> None:
         self.project_exists = project_exists
         self.pull_ok = pull_ok
+        self.up_ok = up_ok
+        self.up_stderr = up_stderr
         self.commands: list[str] = []
         self.uploads: dict[str, str] = {}
 
@@ -70,17 +79,26 @@ class FakeSSH:
         self.commands.append(command)
         exit_code = 0
         stdout = ""
+        stderr = ""
         if command == "command -v docker":
             stdout = "docker\n"
         elif command == "test -e /volume1/docker/app-example-com":
             exit_code = 0 if self.project_exists else 1
         elif command.endswith("pull"):
             exit_code = 0 if self.pull_ok else 1
+        elif " up -d" in command:
+            exit_code = 0 if self.up_ok else 1
+            if not self.up_ok:
+                stderr = (
+                    "sh: docker-compose: command not found"
+                    if "docker-compose -f" in command
+                    else self.up_stderr
+                )
         elif command == "docker inspect -f '{{.State.Running}}' resilinked-web":
             stdout = "true\n"
         elif command == "docker ps --format '{{.Ports}}'":
             stdout = ""
-        result = RemoteCommandResult(command, exit_code, stdout, "")
+        result = RemoteCommandResult(command, exit_code, stdout, stderr)
         if check and not result.ok:
             raise SynologySiteError("command failed")
         return result
@@ -106,6 +124,28 @@ def _compose_file(tmp_path: Path) -> Path:
     compose = tmp_path / "docker-compose.web.yml"
     compose.write_text("services:\n  web:\n    image: ghcr.io/example/web:latest\n")
     return compose
+
+
+def test_deploy_existing_project_surfaces_compose_failure_detail(tmp_path: Path) -> None:
+    fake = FakeSSH(
+        up_ok=False,
+        up_stderr="network shared-services declared as external, but could not be found",
+    )
+
+    with pytest.raises(SynologySiteError) as exc_info:
+        deploy_existing_project(
+            "app.example.com",
+            compose_file=_compose_file(tmp_path),
+            settings=settings(),
+            ssh_factory=lambda _settings, _password: fake,
+        )
+
+    message = str(exc_info.value)
+    assert "network shared-services declared as external" in message
+    # The primary `docker compose` error must win -- the fallback
+    # `docker-compose` binary not existing on modern hosts is expected and
+    # must not mask the real reason `docker compose` itself failed.
+    assert message.index("network shared-services") < message.index("command not found")
 
 
 def test_deploy_existing_project_without_port_skips_health_and_cloudflare(

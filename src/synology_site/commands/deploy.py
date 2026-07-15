@@ -254,13 +254,29 @@ def _start_compose(
     if result.ok:
         return
     fallback_compose = "docker-compose" if compose != "docker-compose" else None
+    fallback = None
     if fallback_compose:
         fallback = ssh.run(
             f"cd {quoted_project} && {fallback_compose} -f {quoted_file}{up_flags}"
         )
         if fallback.ok:
             return
-    raise SynologySiteError("Docker Compose failed to start the project")
+    # Surface the actual remote output -- a bare "failed to start" previously
+    # discarded the one thing needed to diagnose it (e.g. a missing external
+    # network, a build error, a port conflict), forcing a manual SSH session
+    # to find out why. The primary (`docker compose`) result is almost always
+    # the informative one -- the fallback exists for older Synology DSM
+    # setups lacking the `docker compose` plugin, so on modern hosts it just
+    # fails with "command not found" and would otherwise mask the real error.
+    detail = (result.stderr or result.stdout or "").strip()
+    message = "Docker Compose failed to start the project"
+    if detail:
+        message = f"{message}:\n{detail}"
+    if fallback is not None:
+        fallback_detail = (fallback.stderr or fallback.stdout or "").strip()
+        if fallback_detail and fallback_detail != detail:
+            message = f"{message}\n\n(fallback `docker-compose` also failed: {fallback_detail})"
+    raise SynologySiteError(message)
 
 
 def _confirm_container(ssh: SSHClient, name: str, docker: str = "docker") -> None:
