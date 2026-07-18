@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -64,12 +65,16 @@ class FakeSSH:
             "container": "app-example-com",
         }
         self.commands: list[str] = []
+        self.uploaded_text: dict[str, str] = {}
 
     def __enter__(self) -> FakeSSH:
         return self
 
     def __exit__(self, *_exc: object) -> None:
         pass
+
+    def upload_text(self, remote_path: str, content: str) -> None:
+        self.uploaded_text[remote_path] = content
 
     def run(
         self,
@@ -229,6 +234,87 @@ def test_update_site_requires_existing_project_folder() -> None:
             settings=settings(),
             ssh_factory=lambda _settings, _password: fake,
         )
+
+
+def test_update_site_uploads_new_compose_file_before_pull_and_restart(tmp_path: Path) -> None:
+    fake = FakeSSH(
+        marker={
+            "mode": "deploy",
+            "domain": "app.example.com",
+            "slug": "app-example-com",
+            "port": 5050,
+            "compose_file": "docker-compose.yml",
+            "container": "app-example-com",
+        }
+    )
+    local_compose = tmp_path / "docker-compose.local.yml"
+    local_compose.write_text("services:\n  web:\n    image: example\n", encoding="utf-8")
+
+    result = update_site(
+        "app.example.com",
+        settings=settings(),
+        compose_file=local_compose,
+        ssh_factory=lambda _settings, _password: fake,
+        health_get=lambda _url, timeout: FakeResponse(),
+    )
+
+    assert result.compose_uploaded is True
+    assert result.compose_file == "docker-compose.yml"
+    uploaded_path = "/volume1/docker/app-example-com/docker-compose.yml"
+    assert fake.uploaded_text[uploaded_path] == local_compose.read_text(encoding="utf-8")
+    # Upload happens before pull/up -d, not instead of it.
+    assert (
+        "cd /volume1/docker/app-example-com && docker compose -f docker-compose.yml pull"
+        in fake.commands
+    )
+    assert (
+        "cd /volume1/docker/app-example-com && docker compose -f docker-compose.yml up -d"
+        in fake.commands
+    )
+
+
+def test_update_site_without_compose_file_does_not_upload() -> None:
+    fake = FakeSSH()
+
+    result = update_site(
+        "app.example.com",
+        settings=settings(),
+        ssh_factory=lambda _settings, _password: fake,
+        health_get=lambda _url, timeout: FakeResponse(),
+    )
+
+    assert result.compose_uploaded is False
+    assert fake.uploaded_text == {}
+
+
+def test_update_site_rejects_missing_local_compose_file(tmp_path: Path) -> None:
+    fake = FakeSSH()
+    missing = tmp_path / "does-not-exist.yml"
+
+    with pytest.raises(SynologySiteError, match="Compose file not found"):
+        update_site(
+            "app.example.com",
+            settings=settings(),
+            compose_file=missing,
+            ssh_factory=lambda _settings, _password: fake,
+        )
+
+
+def test_update_site_dry_run_does_not_upload_compose_file(tmp_path: Path) -> None:
+    fake = FakeSSH()
+    local_compose = tmp_path / "docker-compose.local.yml"
+    local_compose.write_text("services: {}\n", encoding="utf-8")
+
+    result = update_site(
+        "app.example.com",
+        settings=settings(),
+        compose_file=local_compose,
+        dry_run=True,
+        ssh_factory=lambda _settings, _password: fake,
+    )
+
+    assert result.compose_uploaded is False
+    assert fake.uploaded_text == {}
 
 
 def test_update_passes_cloudflare_access_ssh_settings_from_workspace() -> None:

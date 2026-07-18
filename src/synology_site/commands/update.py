@@ -6,6 +6,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from getpass import getpass
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -32,6 +33,7 @@ class UpdateResult:
     built: bool
     container_name: str | None
     health_url: str | None
+    compose_uploaded: bool = False
 
 
 SSHFactory = Callable[[Settings, str | None], SSHClient]
@@ -42,6 +44,7 @@ def update_site(
     domain: str,
     *,
     settings: Settings,
+    compose_file: Path | None = None,
     pull: bool = True,
     build: bool = False,
     health_path: str | None = None,
@@ -52,6 +55,15 @@ def update_site(
     health_get: HealthGetter = requests.get,
     prompted_password: str | None = None,
 ) -> UpdateResult:
+    # `compose_file`, if given, is a *local* file re-uploaded to the same
+    # remote path already recorded for this site (from `.synology-site.json`)
+    # before pull/up -d run -- letting a compose-only change (e.g. a new
+    # label) reach an already-running, port-bound site without going through
+    # `deploy`'s create-style flow (which re-checks port availability and
+    # rejects the site's own already-held port as a collision).
+    if compose_file is not None and not compose_file.is_file():
+        msg = f"Compose file not found: {compose_file}"
+        raise SynologySiteError(msg)
     domain = validate_domain(domain)
     target = settings.resolve_target(workspace=workspace)
     connection_settings = settings.resolved_for(target)
@@ -71,7 +83,7 @@ def update_site(
         marker_result = ssh.run(f"cat {quoted_project}/.synology-site.json")
         if marker_result.ok:
             marker = json.loads(marker_result.stdout)
-        compose_file = str(marker.get("compose_file") or "docker-compose.yml")
+        remote_compose_file = str(marker.get("compose_file") or "docker-compose.yml")
         resolved_container_name = container_name or marker.get("container")
         port = marker.get("port")
         resolved_health_path = health_path
@@ -88,15 +100,27 @@ def update_site(
                 domain=domain,
                 slug=slug,
                 project_path=project_path,
-                compose_file=compose_file,
+                compose_file=remote_compose_file,
                 pulled=False,
                 built=build,
                 container_name=resolved_container_name,
                 health_url=health_url,
+                compose_uploaded=False,
             )
 
+        compose_uploaded = False
+        if compose_file is not None:
+            # Overwrite the exact remote path this site already runs from --
+            # same file, new content. Doesn't touch the marker (port/container
+            # name/mode are unchanged), so no `deploy`-style port re-check.
+            ssh.upload_text(
+                f"{project_path}/{remote_compose_file}",
+                compose_file.read_text(encoding="utf-8"),
+            )
+            compose_uploaded = True
+
         pulled = False
-        quoted_file = shlex.quote(compose_file)
+        quoted_file = shlex.quote(remote_compose_file)
         base = f"cd {quoted_project} && {compose} -f {quoted_file}"
         if pull and not build:
             pull_result = ssh.run(f"{base} pull")
@@ -121,11 +145,12 @@ def update_site(
         domain=domain,
         slug=slug,
         project_path=project_path,
-        compose_file=compose_file,
+        compose_file=remote_compose_file,
         pulled=pulled,
         built=build,
         container_name=resolved_container_name,
         health_url=health_url,
+        compose_uploaded=compose_uploaded,
     )
 
 
@@ -158,6 +183,18 @@ def _confirm_health(health_get: HealthGetter, url: str) -> None:
 
 def app(
     domain: str,
+    compose_file: Path | None = typer.Option(  # noqa: B008
+        None,
+        "--compose-file",
+        exists=True,
+        dir_okay=False,
+        help="Local compose file to upload before pulling/restarting, overwriting the file at "
+        "this site's already-recorded remote path (from .synology-site.json). Use this to apply "
+        "a compose-only change (e.g. a new label) to a site that's already deployed and holding "
+        "its port -- `deploy --force` can't do this in place, since it re-checks port "
+        "availability and treats the site's own already-held port as a collision. Omit to just "
+        "pull/restart with the compose file already on the NAS (existing behavior).",
+    ),
     pull: bool = typer.Option(True, "--pull/--no-pull"),
     build: bool = typer.Option(False, "--build/--no-build"),
     health_path: str | None = typer.Option(
@@ -190,6 +227,7 @@ def app(
         result = update_site(
             domain,
             settings=settings,
+            compose_file=compose_file,
             pull=pull,
             build=build,
             health_path=health_path,
@@ -212,6 +250,8 @@ def app(
 
     ok(f"Updated {result.domain}")
     ok(f"Project folder: {result.project_path}")
+    if result.compose_uploaded:
+        ok(f"Uploaded new compose file: {result.compose_file}")
     if result.pulled:
         ok("Pulled latest images")
     if result.built:

@@ -411,6 +411,8 @@ synology-site update app.example.com --health-path /health --container-name app-
 
 Options:
 
+- `--compose-file PATH` — re-upload this local Compose file to the site's already-recorded
+  remote path before pulling/restarting (see "Applying A Compose-Only Change" below)
 - `--pull/--no-pull` — pull images before restarting (default `--pull`)
 - `--build/--no-build` — force a rebuild during `up -d`
 - `--health-path PATH` — health path to check after update
@@ -419,6 +421,35 @@ Options:
 - `--dry-run`
 
 This is an in-place Compose update, not a zero-downtime blue/green deployment.
+
+### Applying A Compose-Only Change To An Already-Deployed Site
+
+Plain `update` (no `--compose-file`) never re-uploads or re-reads the local Compose file at all —
+it just runs `pull`/`up -d` on whatever Compose content is already sitting on the NAS at the
+recorded path. That's correct for the common case (a new image tag published by CI), but it means
+a Compose-only edit — a new label, an added health check, a changed restart policy — never
+reaches an already-running site through `update` alone.
+
+Re-running `deploy --force` isn't the fix either: for a site that publishes a host port (the
+common case, `--port`), `deploy` treats any requested `--port` already seen in `docker ps`/`ss` as
+a collision, including the port the very container being replaced is already holding open. It has
+no way to distinguish "some other, unrelated service is using this port" from "this is the site
+I'm about to replace" — so it's structurally a create-style command for a fresh port, not an
+in-place redeploy of an already-bound one.
+
+`update --compose-file` closes that gap without touching `deploy`'s port-allocation logic at all:
+it uploads the given local file to the exact remote path already recorded in
+`.synology-site.json` (overwriting the file the site already runs from), then does its normal
+`pull`/`up -d`. The marker itself (port, container name, mode) is untouched.
+
+```bash
+synology-site update app.example.com \
+  --compose-file ./docker-compose.local.yml \
+  --container-name app-web \
+  --health-path /health
+```
+
+Nothing else about `update`'s behavior changes when `--compose-file` is omitted.
 
 ### Deploy/Update Notifications
 
