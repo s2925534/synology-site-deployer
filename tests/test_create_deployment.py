@@ -454,7 +454,7 @@ def test_create_site_uses_resolved_nas_target_for_ssh_connection() -> None:
     assert captured_settings[0].nas_ssh_password == "clienta-secret"
 
 
-def test_create_site_uses_tailscale_host_for_workspace_ssh_only() -> None:
+def test_create_site_propagates_workspace_tailscale_settings_for_ssh_factory() -> None:
     from dataclasses import replace
 
     fake = FakeSSH()
@@ -489,7 +489,11 @@ def test_create_site_uses_tailscale_host_for_workspace_ssh_only() -> None:
         health_get=lambda url, timeout: health_urls.append(url) or FakeResponse(),
     )
 
-    assert captured_settings[0].nas_host == "100.64.1.50"
+    # nas_host stays the raw LAN host -- deciding LAN vs. Tailscale is the ssh_factory's
+    # job (see smart_ssh_factory), not something baked in before it ever sees the settings.
+    assert captured_settings[0].nas_host == "192.0.2.50"
+    assert captured_settings[0].tailscale_enabled is True
+    assert captured_settings[0].tailscale_host == "100.64.1.50"
     assert result.local_url == "http://192.0.2.10:5051"
     assert health_urls == ["http://192.0.2.10:5051/health"]
 

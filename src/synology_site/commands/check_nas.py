@@ -77,6 +77,29 @@ def probe_lan_reachable(host: str, port: int, *, timeout: float = 1.5) -> bool:
         return False
 
 
+def smart_ssh_factory(
+    settings: Settings,
+    prompted_password: str | None = None,
+    *,
+    lan_probe: LanProbe = probe_lan_reachable,
+) -> SSHClient:
+    """Auto-detects LAN vs remote before connecting, then delegates to the matching factory.
+
+    This is the same "try the LAN first, only use Tailscale/Cloudflare Access if that
+    fails" decision `check-nas` already makes for itself (see `resolve_remote_mode`) --
+    but usable as a drop-in default `ssh_factory` for any command, not just check-nas's
+    own explicit --remote handling. Without this, a command whose default `ssh_factory`
+    is `default_ssh_factory` always goes through the configured remote transport whenever
+    one is configured (e.g. TAILSCALE_ENABLED=true), even from right there on the LAN.
+
+    Requires `settings.nas_host` to be the target's actual raw LAN host, not an
+    already-resolved Tailscale/Cloudflare Access address -- see Settings.resolved_for().
+    """
+    if lan_probe(settings.nas_host, settings.nas_port):
+        return local_ssh_factory(settings, prompted_password)
+    return default_ssh_factory(settings, prompted_password)
+
+
 def remote_transport_label(settings: Settings) -> str:
     if settings.ssh_access_hostname:
         return f"Cloudflare Access ({settings.ssh_access_hostname})"

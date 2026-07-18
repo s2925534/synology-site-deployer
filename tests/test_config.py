@@ -251,6 +251,48 @@ def test_nas_target_can_use_tailscale_for_ssh_without_changing_service_host(
     assert target.local_base_url_host == "192.0.2.10"
 
 
+def test_resolved_for_keeps_raw_host_not_the_precollapsed_tailscale_address(
+    tmp_path: Path,
+) -> None:
+    write_nas_target(
+        tmp_path,
+        "clienta",
+        NAS_HOST="192.0.2.50",
+        TAILSCALE_ENABLED="true",
+        TAILSCALE_NAS_HOST="100.64.1.50",
+    )
+
+    settings = load_config(write_env(tmp_path), secrets_dir=tmp_path / "secrets")
+    target = settings.resolve_target(workspace="clienta")
+    connection_settings = settings.resolved_for(target)
+
+    # nas_host stays the target's raw LAN host so a LAN-first ssh_factory can still probe
+    # it -- target.connection_host would have already thrown that away.
+    assert connection_settings.nas_host == "192.0.2.50"
+    assert connection_settings.tailscale_enabled is True
+    assert connection_settings.tailscale_host == "100.64.1.50"
+    assert connection_settings.nas_user == target.user
+    assert connection_settings.nas_port == target.port
+
+
+def test_resolved_for_default_target_does_not_leak_a_workspaces_tailscale_settings(
+    tmp_path: Path,
+) -> None:
+    write_nas_target(tmp_path, "clienta", NAS_HOST="203.0.113.5")
+
+    extra_env = "\n".join(["TAILSCALE_ENABLED=true", "TAILSCALE_NAS_HOST=100.64.1.10"])
+    settings = load_config(
+        write_env(tmp_path, extra_env),
+        secrets_dir=tmp_path / "secrets",
+    )
+    default_target = settings.resolve_target()
+    connection_settings = settings.resolved_for(default_target)
+
+    assert connection_settings.nas_host == "192.0.2.10"
+    assert connection_settings.tailscale_enabled is True
+    assert connection_settings.tailscale_host == "100.64.1.10"
+
+
 def test_nas_target_with_own_host_does_not_inherit_default_tailscale_host(
     tmp_path: Path,
 ) -> None:

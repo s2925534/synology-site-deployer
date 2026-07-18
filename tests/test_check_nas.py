@@ -11,6 +11,7 @@ from synology_site.commands.check_nas import (
     remote_transport_label,
     resolve_remote_mode,
     run_check_nas,
+    smart_ssh_factory,
 )
 from synology_site.config import Settings
 from synology_site.errors import SynologySiteError
@@ -187,6 +188,56 @@ def test_probe_lan_reachable_returns_false_on_connection_refused() -> None:
     # Port 1 on the TEST-NET-1 documentation range (RFC 5737) is never reachable, so this
     # exercises the real socket path without depending on any actual network being up.
     assert probe_lan_reachable("192.0.2.10", 1, timeout=0.2) is False
+
+
+def test_smart_ssh_factory_uses_local_connection_when_lan_reachable() -> None:
+    ssh = smart_ssh_factory(
+        replace(settings(), tailscale_enabled=True, tailscale_host="100.64.1.2"),
+        lan_probe=lambda host, port: True,
+    )
+
+    assert isinstance(ssh, SSHClient)
+    assert not isinstance(ssh, CloudflareAccessSSHClient)
+    assert ssh.host == "192.0.2.10"
+
+
+def test_smart_ssh_factory_falls_back_to_tailscale_when_lan_unreachable() -> None:
+    ssh = smart_ssh_factory(
+        replace(settings(), tailscale_enabled=True, tailscale_host="100.64.1.2"),
+        lan_probe=lambda host, port: False,
+    )
+
+    assert isinstance(ssh, SSHClient)
+    assert ssh.host == "100.64.1.2"
+
+
+def test_smart_ssh_factory_falls_back_to_cloudflare_access_when_lan_unreachable() -> None:
+    ssh = smart_ssh_factory(
+        replace(
+            settings(),
+            ssh_access_hostname="nas-ssh.example.com",
+            ssh_access_local_port=9210,
+        ),
+        lan_probe=lambda host, port: False,
+    )
+
+    assert isinstance(ssh, CloudflareAccessSSHClient)
+    assert ssh.access_hostname == "nas-ssh.example.com"
+
+
+def test_smart_ssh_factory_probes_the_raw_nas_host_not_a_remote_address() -> None:
+    probed: list[tuple[str, int]] = []
+
+    def probe(host: str, port: int) -> bool:
+        probed.append((host, port))
+        return True
+
+    smart_ssh_factory(
+        replace(settings(), tailscale_enabled=True, tailscale_host="100.64.1.2"),
+        lan_probe=probe,
+    )
+
+    assert probed == [("192.0.2.10", 22)]
 
 
 def test_remote_transport_label_prefers_cloudflare_access_over_tailscale() -> None:

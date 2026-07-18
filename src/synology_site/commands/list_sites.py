@@ -3,13 +3,12 @@ from __future__ import annotations
 import json
 import shlex
 from collections.abc import Callable
-from dataclasses import replace
 from getpass import getpass
 from typing import Any
 
 import typer
 
-from synology_site.commands.check_nas import default_ssh_factory
+from synology_site.commands.check_nas import smart_ssh_factory
 from synology_site.config import Settings, load_config
 from synology_site.errors import SynologySiteError
 from synology_site.nas.target import NasTarget
@@ -23,19 +22,10 @@ def list_markers_for_target(
     settings: Settings,
     target: NasTarget,
     *,
-    ssh_factory: SSHFactory = default_ssh_factory,
+    ssh_factory: SSHFactory = smart_ssh_factory,
     prompted_password: str | None = None,
 ) -> list[dict[str, Any]]:
-    connection_settings = replace(
-        settings,
-        nas_host=target.connection_host,
-        nas_port=target.port,
-        nas_user=target.user,
-        nas_ssh_key_path=target.ssh_key_path,
-        nas_ssh_password=target.ssh_password,
-        ssh_access_hostname=target.ssh_access_hostname,
-        ssh_access_local_port=target.ssh_access_local_port,
-    )
+    connection_settings = settings.resolved_for(target)
     with ssh_factory(connection_settings, prompted_password) as ssh:
         quoted_root = shlex.quote(target.docker_root)
         result = ssh.run(
@@ -56,7 +46,7 @@ def list_sites_across_targets(
     settings: Settings,
     targets: tuple[NasTarget, ...],
     *,
-    ssh_factory: SSHFactory = default_ssh_factory,
+    ssh_factory: SSHFactory = smart_ssh_factory,
     password_prompt: PasswordPrompt = lambda target: getpass(
         f"NAS SSH password ({target.name}): "
     ),

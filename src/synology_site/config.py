@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from dotenv import dotenv_values
@@ -126,6 +126,31 @@ class Settings:
             self.default_nas_target,
             self.nas_targets,
             workspace=workspace,
+        )
+
+    def resolved_for(self, target: NasTarget) -> Settings:
+        """Builds a Settings copy pointed at `target`'s own connection details.
+
+        Deliberately keeps `nas_host` as the target's raw LAN host (`target.host`), not
+        the already-decided `target.connection_host` -- collapsing to that early would
+        throw away the information a LAN-first ssh_factory (see
+        commands/check_nas.py:smart_ssh_factory) needs to probe the real LAN address
+        before deciding whether to fall back to Tailscale/Cloudflare Access. Also carries
+        over the target's own tailscale_enabled/tailscale_host rather than leaving the
+        root config's values in place, so a workspace with its own nas.env resolves its
+        own remote transport instead of the default workspace's.
+        """
+        return replace(
+            self,
+            nas_host=target.host,
+            nas_port=target.port,
+            nas_user=target.user,
+            nas_ssh_key_path=target.ssh_key_path,
+            nas_ssh_password=target.ssh_password,
+            tailscale_enabled=target.tailscale_enabled,
+            tailscale_host=target.tailscale_host,
+            ssh_access_hostname=target.ssh_access_hostname,
+            ssh_access_local_port=target.ssh_access_local_port,
         )
 
 

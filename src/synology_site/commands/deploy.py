@@ -4,7 +4,7 @@ import json
 import shlex
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from getpass import getpass
 from pathlib import Path
 from typing import Any
@@ -15,7 +15,7 @@ import typer
 from synology_site import __version__
 from synology_site.cloudflare.api import configure_cloudflare_route
 from synology_site.cloudflare.manual_instructions import build_manual_instructions
-from synology_site.commands.check_nas import default_ssh_factory
+from synology_site.commands.check_nas import smart_ssh_factory
 from synology_site.config import Settings, load_config
 from synology_site.docker_remote import (
     detect_compose_command,
@@ -72,7 +72,7 @@ def deploy_existing_project(
     dry_run: bool = False,
     strict_cloudflare: bool = False,
     workspace: str | None = None,
-    ssh_factory: SSHFactory = default_ssh_factory,
+    ssh_factory: SSHFactory = smart_ssh_factory,
     health_get: HealthGetter = requests.get,
     prompted_password: str | None = None,
 ) -> DeployResult:
@@ -99,16 +99,7 @@ def deploy_existing_project(
         pull = False
 
     target = settings.resolve_target(workspace=workspace)
-    connection_settings = replace(
-        settings,
-        nas_host=target.connection_host,
-        nas_port=target.port,
-        nas_user=target.user,
-        nas_ssh_key_path=target.ssh_key_path,
-        nas_ssh_password=target.ssh_password,
-        ssh_access_hostname=target.ssh_access_hostname,
-        ssh_access_local_port=target.ssh_access_local_port,
-    )
+    connection_settings = settings.resolved_for(target)
 
     slug = domain_to_slug(domain)
     project_path = f"{target.docker_root.rstrip('/')}/{slug}"

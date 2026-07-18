@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import shlex
-from dataclasses import replace
 from getpass import getpass
 
 import typer
 
-from synology_site.commands.check_nas import SSHFactory, default_ssh_factory
+from synology_site.commands.check_nas import SSHFactory, smart_ssh_factory
 from synology_site.config import Settings, load_config
 from synology_site.docker_remote import docker_command
 from synology_site.errors import SynologySiteError
@@ -18,7 +17,7 @@ def ensure_network(
     *,
     settings: Settings,
     workspace: str | None = None,
-    ssh_factory: SSHFactory = default_ssh_factory,
+    ssh_factory: SSHFactory = smart_ssh_factory,
     prompted_password: str | None = None,
 ) -> bool:
     """Creates a Docker network on the NAS if it doesn't already exist.
@@ -36,16 +35,7 @@ def ensure_network(
     Returns True if the network was newly created, False if it already existed.
     """
     target = settings.resolve_target(workspace=workspace)
-    connection_settings = replace(
-        settings,
-        nas_host=target.connection_host,
-        nas_port=target.port,
-        nas_user=target.user,
-        nas_ssh_key_path=target.ssh_key_path,
-        nas_ssh_password=target.ssh_password,
-        ssh_access_hostname=target.ssh_access_hostname,
-        ssh_access_local_port=target.ssh_access_local_port,
-    )
+    connection_settings = settings.resolved_for(target)
     with ssh_factory(connection_settings, prompted_password) as ssh:
         docker = docker_command(ssh)
         existing = ssh.run(f"{docker} network inspect {shlex.quote(name)}")
