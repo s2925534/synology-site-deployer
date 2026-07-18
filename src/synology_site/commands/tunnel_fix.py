@@ -10,7 +10,7 @@ import typer
 from rich.prompt import Confirm
 
 from synology_site.cloudflare.manual_instructions import build_manual_instructions
-from synology_site.commands.check_nas import default_ssh_factory
+from synology_site.commands.check_nas import smart_ssh_factory
 from synology_site.config import Settings, load_config
 from synology_site.docker_remote import docker_command
 from synology_site.errors import SynologySiteError
@@ -71,7 +71,7 @@ def parse_cloudflared_containers(output: str) -> list[CloudflaredContainer]:
 def run_tunnel_fix_autostart(
     settings: Settings,
     *,
-    ssh_factory: SSHFactory = default_ssh_factory,
+    ssh_factory: SSHFactory = smart_ssh_factory,
     prompted_password: str | None = None,
     rename_random: bool = False,
 ) -> list[CloudflaredContainer]:
@@ -132,7 +132,7 @@ def set_autostart(domain: str) -> None:
         slug = domain_to_slug(domain)
         project_path = f"{settings.nas_docker_root.rstrip('/')}/{slug}"
         containers = [slug]
-        with default_ssh_factory(settings, prompted_password) as ssh:
+        with smart_ssh_factory(settings, prompted_password) as ssh:
             docker = docker_command(ssh)
             marker = ssh.run(f"cat {shlex.quote(project_path)}/.synology-site.json")
             if marker.ok:

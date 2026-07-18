@@ -39,7 +39,13 @@ def check_health_for_targets(
     ssh_factory: SSHFactory,
     health_get: HealthGetter = requests.get,
     password_prompt: PasswordPrompt = lambda _target: None,
+    proxy_port: int | None = None,
 ) -> list[SiteHealth]:
+    """`proxy_port`, when given, is a fallback for markers with no port of their own -- sites
+    routed through a shared reverse proxy (e.g. Traefik) rather than published on their own host
+    port. Instead of reporting "no port in marker" outright, this probes the proxy port with a
+    `Host:` header matching the site's domain, the same way an external request would actually
+    reach it. Without `proxy_port`, behavior is unchanged."""
     results: list[SiteHealth] = []
     for target in targets:
         target_password = None
@@ -67,20 +73,28 @@ def check_health_for_targets(
         for marker in markers:
             domain = str(marker.get("domain") or marker.get("slug") or "unknown")
             port = marker.get("port")
+            headers: dict[str, str] | None = None
             if not port:
-                results.append(
-                    SiteHealth(
-                        target_name=target.name,
-                        domain=domain,
-                        url=None,
-                        ok=False,
-                        error="no port in marker",
+                if proxy_port is None:
+                    results.append(
+                        SiteHealth(
+                            target_name=target.name,
+                            domain=domain,
+                            url=None,
+                            ok=False,
+                            error="no port in marker",
+                        )
                     )
-                )
-                continue
+                    continue
+                port = proxy_port
+                headers = {"Host": domain}
             url = f"http://{target.local_base_url_host}:{port}{path}"
             try:
-                response = health_get(url, timeout=10)
+                response = (
+                    health_get(url, timeout=10, headers=headers)
+                    if headers is not None
+                    else health_get(url, timeout=10)
+                )
             except requests.RequestException as exc:
                 results.append(
                     SiteHealth(
@@ -112,10 +126,16 @@ def app(
         None, "--workspace", help="Check health on a specific NAS target only"
     ),
     path: str = typer.Option("/health", "--path", help="Health path to request"),
+    proxy_port: int | None = typer.Option(
+        None,
+        "--proxy-port",
+        help="Check markers with no port of their own via this shared reverse-proxy port "
+        "instead, using a Host header matching the site's domain (e.g. Traefik on 8080)",
+    ),
 ) -> None:
     from getpass import getpass
 
-    from synology_site.commands.check_nas import default_ssh_factory
+    from synology_site.commands.check_nas import smart_ssh_factory
 
     try:
         settings = load_config()
@@ -128,8 +148,9 @@ def app(
             settings,
             targets,
             path=path,
-            ssh_factory=default_ssh_factory,
+            ssh_factory=smart_ssh_factory,
             password_prompt=lambda target: getpass(f"NAS SSH password ({target.name}): "),
+            proxy_port=proxy_port,
         )
     except SynologySiteError as exc:
         console.print(f"[ERROR] {exc}")

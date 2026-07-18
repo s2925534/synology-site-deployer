@@ -115,6 +115,7 @@ once a site has been running in production for a while.
 - [Planned] Cloudflare Access (Zero Trust) integration — password/SSO-gate a staging site or admin route via the Cloudflare API, natural extension of the tunnel/DNS automation already built
 - [Done] Traefik + Let's Encrypt as a documented alternative to Cloudflare Tunnel for anyone who doesn't want a Cloudflare dependency at all — documented in `docs/traefik-letsencrypt.md`; `deploy` already supports this via the no-`--port` reverse-proxy mode.
 - [Done] Secrets stored as plaintext files under `secrets/` today; evaluated `sops`/`age`, 1Password CLI, and Doppler in `docs/secrets-management.md`, with plaintext files retained as the default for personal use.
+- [Done] **Confirmed: apps that implement their own OIDC client against a self-hosted IdP (e.g. `../wordpress-ai-publisher` against `../nas-sso-gateway`'s authentik) need zero changes in this tool.** `deploy --env-file` already passes arbitrary new env vars (issuer URL/client ID/secret) through with no code change, and Cloudflare Tunnel ingress keeps routing straight to the app's existing port — no reverse proxy or new component required in front of it. This is a lighter-weight alternative to the `[Planned]` Cloudflare Access line above for anyone who already runs their own OIDC provider instead of wanting Cloudflare's own Zero Trust policies.
 
 ## Phase 12 — Remote Access to the Home NAS
 
@@ -149,6 +150,54 @@ known hurdles are in `docs/lightsail-migration-mvp.md`.
 - [Planned] `migrate-from-lightsail --source-domain <x> --target-domain <y> --execute` — DB dump/restore, `wp-content` sync (rsync for local files, `aws s3 sync` for offloaded media), WordPress+MariaDB Compose scaffold on the NAS, Cloudflare DNS cutover, post-migration verification.
 - [Done] Access setup in `secrets/example-com/` — Cloudflare covered by the default workspace; SSH now working (`secrets/example-com/lightsail.env` corrected to the real instance — the address in `~/.ssh/config` was stale); AWS S3 access confirmed unnecessary for the MVP (no offload plugin on the instance, media is a plain local `wp-content/uploads`).
 - [Partial] Read-only SSH discovery done for the instance's shape (nginx vhost, doc root, PHP version, plugin inventory, no WP-CLI) — see `docs/lightsail-migration-mvp.md`. Still open: DB engine/credentials (not yet read from `wp-config.php`), NAS target workspace decision, and this is a **shared instance** (also serves other third-party sites) so all future steps must stay scoped to example.com's own paths.
+
+## Phase 14 — Fleet Health & Safe Bulk Recovery
+
+Direct fallout from a real incident: manually restarting every project on a live fleet (~30
+containers across ~10 Compose projects, including a full self-hosted Supabase stack) pushed load
+average to 75 and took the Docker daemon down hard enough to need a physical power cycle. Recovery
+itself surfaced several gaps this tool had no way to detect on its own: sites that were configured
+(marker + Cloudflare route) but never actually had a container created, containers silently missing
+an auto-restart policy, a non-default Compose filename that made a plain `compose up -d` fail with
+no useful error, and three unrelated projects colliding on Compose's default project name because
+they all happened to be checked out into a directory literally called `repo`.
+
+- [Done] `smart_ssh_factory` (LAN-probe-first, falling back to Tailscale/Cloudflare Access) rolled
+  out to every command that previously defaulted to `default_ssh_factory` (which always preferred
+  the configured remote transport even from on the LAN) — `start`, `stop`, `health`,
+  `inspect_containers` (`ps`/`logs`), `remove`, `tunnel_fix`, and all four `bootstrap-*` commands.
+  `create`/`deploy`/`update`/`registry-login`/`ensure-network`/`list` already used it.
+- [Done] `docker_remote.py` additions: `list_containers_with_projects` (every container's Compose
+  project/working dir/service/restart policy, batched via one `docker inspect` call for all names
+  rather than one call per container), `read_system_load`/`read_memory_info` (parsed from
+  `uptime`/`free -m`, tolerant of DSM's non-standard `uptime` output), and `compose_services`
+  (always passes an explicit `-f <file>`, so non-default Compose filenames like
+  `docker-compose.admin.yml` work the same as the default).
+- [Done] `doctor [--all-targets] [--workspace]` — read-only. Reports never-started sites (a marker
+  exists but no container was ever created at its expected working directory — resolved correctly
+  even for nested `compose_file` paths like `repo/docker-compose.yml`), containers without
+  `restart: unless-stopped`/`always`/`on-failure`, Compose project-name collisions (multiple
+  distinct working directories resolving to the same default project name), and load/memory/swap
+  pressure against thresholds picked directly from the incident (load ≥25 or swap ≥80% is
+  critical; ≥10 / ≥50% is a warning). Exits non-zero if any critical finding exists.
+- [Done] `restart-all [--all-targets] [--workspace] [--only <domain-or-slug>] [--stagger-seconds]
+  [--max-load] [--dry-run]` — brings a fleet up one Compose *service* at a time (not one project,
+  and never a bulk sweep of an entire multi-container stack, which is what caused the incident),
+  pausing between each and checking load average before every single start; aborts the whole run
+  immediately if load crosses `--max-load` and reports exactly where it stopped rather than
+  ploughing on. Covers both already-existing (running or stopped) projects and never-started ones
+  `doctor` flags, from the same project-discovery logic. `--only` (repeatable) restricts to named
+  projects — recovering a fleet in a deliberate order (light/critical sites first, heavy stacks
+  like Supabase last) is both safer and easier to reason about than one all-or-nothing command.
+- [Done] `health --proxy-port <port>` — sites with no port of their own (fronted by a shared
+  reverse proxy like Traefik instead of a published host port) are checked via a `Host:`-header
+  request against the proxy port, the same way an external request actually reaches them, instead
+  of just reporting "no port in marker" unconditionally.
+- [Done] README: new "Fleet Health & Recovery" section; "Rebooting The NAS" now points at
+  `doctor`/`restart-all` instead of a manual `docker ps` eyeball-check.
+- [Done] Tests for every addition above, following the existing `FakeSSH` convention (no real NAS
+  needed) — `test_docker_remote.py` additions, `test_doctor_command.py`,
+  `test_restart_all_command.py`, `test_health_command.py` additions.
 
 ---
 

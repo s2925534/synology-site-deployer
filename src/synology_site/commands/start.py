@@ -5,7 +5,7 @@ from getpass import getpass
 
 import typer
 
-from synology_site.commands.check_nas import default_ssh_factory
+from synology_site.commands.check_nas import smart_ssh_factory
 from synology_site.config import load_config
 from synology_site.docker_remote import detect_compose_command
 from synology_site.errors import SynologySiteError
@@ -21,7 +21,7 @@ def app(domain: str) -> None:
             prompted_password = getpass("NAS SSH password: ")
         slug = domain_to_slug(domain)
         project_path = f"{settings.nas_docker_root.rstrip('/')}/{slug}"
-        with default_ssh_factory(settings, prompted_password) as ssh:
+        with smart_ssh_factory(settings, prompted_password) as ssh:
             compose = detect_compose_command(ssh)
             ssh.run(f"cd {shlex.quote(project_path)} && {compose} up -d", check=True)
     except SynologySiteError as exc:

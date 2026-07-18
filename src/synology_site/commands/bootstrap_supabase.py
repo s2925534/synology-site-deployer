@@ -10,7 +10,7 @@ from pathlib import Path
 
 import typer
 
-from synology_site.commands.check_nas import default_ssh_factory
+from synology_site.commands.check_nas import smart_ssh_factory
 from synology_site.config import Settings, load_config
 from synology_site.database.passwords import generate_password
 from synology_site.docker_remote import (
@@ -53,7 +53,7 @@ def bootstrap_supabase(
     traefik_override_file: Path | None = None,
     force: bool = False,
     dry_run: bool = False,
-    ssh_factory: SSHFactory = default_ssh_factory,
+    ssh_factory: SSHFactory = smart_ssh_factory,
     secrets_dir: Path = Path("secrets"),
     now: int | None = None,
     prompted_password: str | None = None,

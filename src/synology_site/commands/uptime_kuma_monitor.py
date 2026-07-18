@@ -39,7 +39,8 @@ def build_uptime_kuma_monitor_instructions(
         "This needs the Docker socket mounted into the Uptime Kuma container "
         "(`/var/run/docker.sock:/var/run/docker.sock:ro` in its compose file), which gives "
         "Uptime Kuma root-equivalent access to the NAS's Docker daemon -- it's a real tradeoff, "
-        "so it's opt-in and not done automatically. Skip it if the HTTPS monitor above is enough.\n\n"
+        "so it's opt-in and not done automatically. Skip it if the HTTPS monitor above is "
+        "enough.\n\n"
         "Either way, set a notification channel (Settings > Notifications in Uptime Kuma) so a "
         "failing check pages you instead of sitting silent in the dashboard.\n"
     )

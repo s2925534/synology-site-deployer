@@ -4,7 +4,7 @@ from getpass import getpass
 
 import typer
 
-from synology_site.commands.check_nas import default_ssh_factory
+from synology_site.commands.check_nas import smart_ssh_factory
 from synology_site.config import load_config
 from synology_site.docker_remote import container_logs, list_containers
 from synology_site.errors import SynologySiteError
@@ -28,7 +28,7 @@ def ps_app(
         prompted_password = None
         if not target.ssh_key_path and not target.ssh_password:
             prompted_password = getpass("NAS SSH password: ")
-        with default_ssh_factory(settings, prompted_password) as ssh:
+        with smart_ssh_factory(settings, prompted_password) as ssh:
             output = list_containers(ssh, all_containers=all_containers)
     except SynologySiteError as exc:
         console.print(f"[ERROR] {exc}")
@@ -50,7 +50,7 @@ def logs_app(
         prompted_password = None
         if not target.ssh_key_path and not target.ssh_password:
             prompted_password = getpass("NAS SSH password: ")
-        with default_ssh_factory(settings, prompted_password) as ssh:
+        with smart_ssh_factory(settings, prompted_password) as ssh:
             output = container_logs(ssh, name, tail=tail)
     except SynologySiteError as exc:
         console.print(f"[ERROR] {exc}")

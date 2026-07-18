@@ -24,7 +24,9 @@ Contact: `pedro@veloso.dev`
 - `cloudflare-route`: points one hostname at a fixed port via the Cloudflare API directly, no NAS/SSH interaction — for reverse-proxy setups where many hostnames share one port.
 - `workspaces`: lists configured Cloudflare accounts/NAS targets and flags copy-paste credential mistakes (e.g. a `CF_TUNNEL_ID` accidentally reused across workspaces).
 - `list --all-targets`: aggregates sites across every configured NAS target instead of just the default one.
-- `health --all-targets`: checks every known site's health endpoint where a marker contains a port.
+- `health --all-targets`: checks every known site's health endpoint where a marker contains a port. `--proxy-port` also checks sites with no port of their own (fronted by a shared reverse proxy) via a `Host:`-header request.
+- `doctor --all-targets`: read-only fleet audit — never-started sites, containers missing an auto-restart policy, Compose project-name collisions, and load/memory pressure.
+- `restart-all --all-targets`: safely brings a whole fleet up, one Compose service at a time with a pause between each and a load-based abort — the safe alternative to a bulk `docker compose up -d` sweep. `--only <domain-or-slug>` (repeatable) and `--dry-run` supported.
 - `backup-plan`: generates a local MariaDB backup script/env template/scheduler examples for `--with-db` sites.
 - `tunnel-fix-plan`: generates a self-contained script (+ DSM Task Scheduler/crontab examples) that keeps the `cloudflared` container alive on its own schedule, directly on the NAS.
 - `uptime-kuma-monitor-instructions`: prints step-by-step Uptime Kuma monitor setup for a hostname behind the Cloudflare Tunnel.
@@ -885,6 +887,53 @@ synology-site remove demo.example.com --delete-volumes
 `remove` asks for confirmation before tearing anything down; pass `--force` to skip the prompt
 (e.g. for scripting).
 
+## Fleet Health & Recovery (`doctor`, `restart-all`)
+
+```bash
+synology-site doctor
+synology-site doctor --all-targets
+synology-site restart-all --dry-run
+synology-site restart-all --only lofas.org --only reslk.com
+synology-site restart-all
+```
+
+These two commands exist because of a real incident: restarting every project on a fleet by
+hand, one `docker compose up -d` per project (or worse, all at once), pushed a NAS's load average
+to 75 and took its Docker daemon down hard enough to need a physical power cycle.
+
+`doctor` is read-only and reports four things, each traced back to a real failure from that
+incident:
+
+- **Never-started sites** -- a `.synology-site.json` marker and Compose file exist, but no
+  container was ever created for them. `create`/`deploy` can leave a site in this state (e.g. the
+  Cloudflare route succeeded but the container never actually started); `list`/`health` alone
+  won't catch it since they only report what's already tracked as configured, not whether it's
+  running.
+- **Missing restart policies** -- any container without `restart: unless-stopped` (or
+  `always`/`on-failure`) won't come back on its own after a crash or host reboot. This is why a
+  fleet can go from "5 containers survived a reboot" to "everything else stayed down until someone
+  SSHed in and started them by hand."
+- **Compose project-name collisions** -- Compose derives a project's default name from its working
+  directory's basename when no explicit `name:` is set in the Compose file. Two unrelated projects
+  both checked out into a directory literally called `repo` (a common convention for "existing
+  project" deploys) collide on the same default name, which makes each one's `up`/`down` see the
+  other's containers as orphans -- harmless by itself, but a real risk if `--remove-orphans` is
+  ever used.
+- **Resource pressure** -- load average and memory/swap usage, flagged at thresholds picked from
+  the incident itself (load average ≥25 or swap ≥80% is "critical"; ≥10 / ≥50% is "warn").
+
+`restart-all` is the safe way to actually bring a fleet back (or finish sites `doctor` found were
+never started): one Compose *service* at a time, not one project at a time and never a bulk sweep
+across an entire stack -- the original incident happened specifically because starting an entire
+multi-container project (a full self-hosted Supabase stack) in one `compose up -d` overloaded the
+NAS. Load average is checked before every single service start; if it's crossed `--max-load`
+(default 20), the run aborts immediately and reports exactly where it stopped, rather than
+continuing to pile on. `--stagger-seconds` (default 15) pauses between each service regardless.
+Use `--only <domain-or-slug>` (repeatable) to restrict a run to specific projects -- recovering a
+fleet in a deliberate order (lightweight/critical sites first, heavy stacks like Supabase last) is
+both safer and easier to reason about than restarting everything in one command. `--dry-run` shows
+the plan (which projects, in what order) without touching anything.
+
 ## Docker Commands On The NAS
 
 ```bash
@@ -919,16 +968,29 @@ docker exec demo-example-com-db mariadb-dump -uroot -p demo_example_com > demo_e
 
 ## Rebooting The NAS
 
-Containers use `restart: unless-stopped`. Before rebooting, confirm important containers are running:
+Containers use `restart: unless-stopped`, so most come back on their own after a reboot -- Docker
+only skips auto-restarting a container that was explicitly `docker stop`'d before the reboot, or
+one that never had a restart policy set in the first place. Before rebooting, confirm important
+containers are running:
 
 ```bash
 docker ps
 ```
 
-After reboot, check:
+After reboot, run `doctor` rather than eyeballing `docker ps` -- it directly reports any container
+that didn't come back on its own, plus load/memory pressure that might still be settling down from
+the reboot itself:
 
 ```bash
-docker ps
+synology-site doctor --all-targets
+```
+
+If `doctor` finds sites that didn't come back, use `restart-all` rather than restarting everything
+by hand -- see [Fleet Health & Recovery](#fleet-health--recovery-doctor-restart-all) above for why
+a bulk `docker compose up -d` sweep is itself a risk on a loaded NAS:
+
+```bash
+synology-site restart-all --all-targets
 curl http://LOCAL_BASE_URL_HOST:PORT/health
 ```
 

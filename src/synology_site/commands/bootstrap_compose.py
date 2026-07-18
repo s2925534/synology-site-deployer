@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from synology_site.commands.check_nas import default_ssh_factory
+from synology_site.commands.check_nas import smart_ssh_factory
 from synology_site.config import Settings
 from synology_site.docker_remote import (
     detect_compose_command,
@@ -39,7 +39,7 @@ def deploy_generated_compose_app(
     port: int | None = None,
     force: bool = False,
     dry_run: bool = False,
-    ssh_factory: SSHFactory = default_ssh_factory,
+    ssh_factory: SSHFactory = smart_ssh_factory,
     secrets_dir: Path = Path("secrets"),
     prompted_password: str | None = None,
 ) -> ComposeBootstrapResult:

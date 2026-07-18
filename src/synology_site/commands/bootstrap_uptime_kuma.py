@@ -7,7 +7,7 @@ from getpass import getpass
 
 import typer
 
-from synology_site.commands.check_nas import default_ssh_factory
+from synology_site.commands.check_nas import smart_ssh_factory
 from synology_site.config import Settings, load_config
 from synology_site.docker_remote import (
     detect_compose_command,
@@ -63,7 +63,7 @@ def bootstrap_uptime_kuma(
     port: int | None = None,
     force: bool = False,
     dry_run: bool = False,
-    ssh_factory: SSHFactory = default_ssh_factory,
+    ssh_factory: SSHFactory = smart_ssh_factory,
     prompted_password: str | None = None,
 ) -> BootstrapUptimeKumaResult:
     project_path = f"{settings.nas_docker_root.rstrip('/')}/{project_dir_name}"

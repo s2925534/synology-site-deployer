@@ -170,3 +170,77 @@ def test_check_health_for_targets_keeps_going_when_target_unreachable() -> None:
     assert results[1].target_name == "other"
     assert results[1].domain == "*"
     assert "target unreachable" in str(results[1].error)
+
+
+def test_check_health_for_targets_falls_back_to_proxy_port_with_host_header() -> None:
+    fake = FakeSSH([{"domain": "proxy.example.com", "port": None}])
+    captured: dict[str, object] = {}
+
+    def health_get(url: str, timeout: int, headers: dict[str, str] | None = None) -> FakeResponse:
+        del timeout
+        captured["url"] = url
+        captured["headers"] = headers
+        return FakeResponse(200)
+
+    results = check_health_for_targets(
+        settings(),
+        (settings().default_nas_target,),
+        ssh_factory=lambda _settings, _password: fake,
+        health_get=health_get,
+        proxy_port=8080,
+    )
+
+    assert results[0].ok is True
+    assert results[0].url == "http://192.0.2.10:8080/health"
+    assert captured["headers"] == {"Host": "proxy.example.com"}
+
+
+def test_check_health_for_targets_still_reports_no_port_when_proxy_port_not_given() -> None:
+    fake = FakeSSH([{"domain": "proxy.example.com", "port": None}])
+
+    results = check_health_for_targets(
+        settings(),
+        (settings().default_nas_target,),
+        ssh_factory=lambda _settings, _password: fake,
+    )
+
+    assert results[0].error == "no port in marker"
+
+
+def test_check_health_for_targets_proxy_fallback_reports_connection_errors() -> None:
+    fake = FakeSSH([{"domain": "proxy.example.com", "port": None}])
+
+    def health_get(url: str, timeout: int, headers: dict[str, str] | None = None) -> FakeResponse:
+        del url, timeout, headers
+        raise requests.ConnectionError("refused")
+
+    results = check_health_for_targets(
+        settings(),
+        (settings().default_nas_target,),
+        ssh_factory=lambda _settings, _password: fake,
+        health_get=health_get,
+        proxy_port=8080,
+    )
+
+    assert results[0].ok is False
+    assert "refused" in str(results[0].error)
+
+
+def test_check_health_for_targets_direct_port_unaffected_by_proxy_port() -> None:
+    fake = FakeSSH([{"domain": "direct.example.com", "port": 5050}])
+
+    def health_get(url: str, timeout: int) -> FakeResponse:
+        del timeout
+        assert ":5050" in url
+        return FakeResponse(200)
+
+    results = check_health_for_targets(
+        settings(),
+        (settings().default_nas_target,),
+        ssh_factory=lambda _settings, _password: fake,
+        health_get=health_get,
+        proxy_port=8080,
+    )
+
+    assert results[0].ok is True
+    assert results[0].url == "http://192.0.2.10:5050/health"

@@ -13,3 +13,5 @@ def test_cli_help() -> None:
     assert "bootstrap-umami" in result.output
     assert "bootstrap-vaultwarden" in result.output
     assert "backup-plan" in result.output
+    assert "doctor" in result.output
+    assert "restart-all" in result.output

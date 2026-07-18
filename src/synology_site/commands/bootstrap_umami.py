@@ -8,7 +8,7 @@ from pathlib import Path
 import typer
 
 from synology_site.commands.bootstrap_compose import deploy_generated_compose_app
-from synology_site.commands.check_nas import default_ssh_factory
+from synology_site.commands.check_nas import smart_ssh_factory
 from synology_site.config import Settings, load_config
 from synology_site.database.passwords import generate_password
 from synology_site.errors import SynologySiteError
@@ -94,7 +94,7 @@ def bootstrap_umami(
     port: int | None = None,
     force: bool = False,
     dry_run: bool = False,
-    ssh_factory: SSHFactory = default_ssh_factory,
+    ssh_factory: SSHFactory = smart_ssh_factory,
     secrets_dir: Path = Path("secrets"),
     prompted_password: str | None = None,
 ) -> BootstrapUmamiResult:
