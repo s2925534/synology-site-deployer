@@ -26,6 +26,8 @@ Contact: `pedro@veloso.dev`
 - `list --all-targets`: aggregates sites across every configured NAS target instead of just the default one.
 - `health --all-targets`: checks every known site's health endpoint where a marker contains a port.
 - `backup-plan`: generates a local MariaDB backup script/env template/scheduler examples for `--with-db` sites.
+- `tunnel-fix-plan`: generates a self-contained script (+ DSM Task Scheduler/crontab examples) that keeps the `cloudflared` container alive on its own schedule, directly on the NAS.
+- `uptime-kuma-monitor-instructions`: prints step-by-step Uptime Kuma monitor setup for a hostname behind the Cloudflare Tunnel.
 - `migrate-from-lightsail --dry-run`: read-only discovery of a WordPress site on an AWS Lightsail instance, producing a migration-readiness report (no writes anywhere). `--execute` (the actual migration) is not implemented yet.
 - Optional deploy/update webhook notifications for Slack or Discord.
 - Finds a free local NAS port when one is needed.
@@ -802,6 +804,44 @@ Or run:
 ```bash
 synology-site tunnel-fix-autostart
 ```
+
+## Tunnel Recovery Safety Net
+
+`tunnel-fix-autostart` above is something you run by hand, over SSH, while you're watching. For
+unattended recovery -- so a crashed `cloudflared` container or a NAS reboot doesn't require you to
+notice and SSH in -- generate a scheduled safety net instead:
+
+```bash
+synology-site tunnel-fix-plan --output-dir tunnel-fix-plan --interval-minutes 15
+```
+
+This writes `tunnel-fix.sh` plus `README.md`/`crontab.example`/`synology-task-command.txt` into
+`tunnel-fix-plan/`. Copy `tunnel-fix.sh` to the NAS and schedule it with DSM Task Scheduler
+(recommended) or crontab -- see the generated `README.md` for both. The script itself:
+
+- Runs directly on the NAS against the local Docker socket -- no SSH hop, no Python, no
+  Cloudflare credentials, so it can't cause a Cloudflare-side outage.
+- Sets the `cloudflared` container's restart policy to `unless-stopped`.
+- Starts it if something left it stopped.
+- Never renames containers -- that's a deliberate one-time cleanup step for
+  `tunnel-fix-autostart`, not something to do unattended.
+
+`cloudflared`'s own reconnect/backoff logic to Cloudflare's edge is automatic already; this only
+covers the case where the container itself is down.
+
+### Uptime Kuma Monitor
+
+`tunnel-fix-plan` only sees the NAS side. To catch failures anywhere along the path -- DNS,
+Cloudflare's edge, or the origin container, not just the connector -- add an external check:
+
+```bash
+synology-site uptime-kuma-monitor-instructions demo.example.com --kuma-port 5051
+```
+
+Prints copy-paste steps for an HTTP(s) monitor against the domain in [Uptime Kuma](#bootstrapping-uptime-kuma),
+plus an optional Docker-container monitor for `cloudflared` itself (documented, not automated,
+since it requires mounting the Docker socket into Uptime Kuma). Omit `--kuma-port` if you don't
+know it yet -- run `synology-site list` to find it.
 
 ## Operations
 
