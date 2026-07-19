@@ -18,6 +18,7 @@ from synology_site.docker_remote import (
     compose_services,
     detect_compose_command,
     list_containers_with_projects,
+    read_memory_info,
     read_system_load,
 )
 from synology_site.errors import SynologySiteError
@@ -35,6 +36,7 @@ Sleep = Callable[[float], None]
 # pause between each, and a hard abort if load climbs into dangerous territory mid-run.
 DEFAULT_STAGGER_SECONDS = 15.0
 DEFAULT_MAX_LOAD = 20.0
+DEFAULT_MAX_MEMORY_PERCENT = 90.0
 
 
 @dataclass(frozen=True)
@@ -103,6 +105,7 @@ def restart_all(
     only: list[str] | None = None,
     stagger_seconds: float = DEFAULT_STAGGER_SECONDS,
     max_load: float = DEFAULT_MAX_LOAD,
+    max_memory_percent: float = DEFAULT_MAX_MEMORY_PERCENT,
     dry_run: bool = False,
     sleep: Sleep = time.sleep,
 ) -> list[RestartStep]:
@@ -189,6 +192,25 @@ def restart_all(
                             aborted = True
                             break
 
+                        memory = read_memory_info(ssh)
+                        if memory.total_mb > 0:
+                            used_percent = (
+                                (memory.total_mb - memory.available_mb) / memory.total_mb
+                            ) * 100
+                            if used_percent >= max_memory_percent:
+                                steps.append(
+                                    RestartStep(
+                                        target.name,
+                                        plan.working_dir,
+                                        service,
+                                        False,
+                                        f"aborted: memory usage is {used_percent:.0f}%, "
+                                        f">= --max-memory-percent {max_memory_percent:g}%",
+                                    )
+                                )
+                                aborted = True
+                                break
+
                         quoted_dir = shlex.quote(plan.working_dir)
                         quoted_file = shlex.quote(plan.compose_file)
                         quoted_service = shlex.quote(service)
@@ -237,6 +259,11 @@ def app(
         "--max-load",
         help="Abort the run if 1-minute load average reaches this before starting a service",
     ),
+    max_memory_percent: float = typer.Option(
+        DEFAULT_MAX_MEMORY_PERCENT,
+        "--max-memory-percent",
+        help="Abort the run if memory usage reaches this percent before starting a service",
+    ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Show what would be restarted without doing it"
     ),
@@ -260,6 +287,7 @@ def app(
             only=list(only) if only else None,
             stagger_seconds=stagger_seconds,
             max_load=max_load,
+            max_memory_percent=max_memory_percent,
             dry_run=dry_run or settings.dry_run,
         )
     except SynologySiteError as exc:

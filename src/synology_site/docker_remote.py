@@ -113,7 +113,7 @@ def container_restart_policies(ssh: SSHClient, names: list[str]) -> dict[str, st
     quoted_names = " ".join(shlex.quote(name) for name in names)
     result = ssh.run(
         f"{docker} inspect --format "
-        "'{{{{.Name}}}}\\t{{{{.HostConfig.RestartPolicy.Name}}}}' "
+        "'{{.Name}}\\t{{.HostConfig.RestartPolicy.Name}}' "
         f"{quoted_names}"
     )
     policies: dict[str, str] = {}
@@ -133,11 +133,11 @@ def list_containers_with_projects(ssh: SSHClient) -> list[ContainerInfo]:
     """
     docker = docker_command(ssh)
     fmt = (
-        "{{{{.Names}}}}\\t"
-        '{{{{.Label "com.docker.compose.project"}}}}\\t'
-        '{{{{.Label "com.docker.compose.project.working_dir"}}}}\\t'
-        '{{{{.Label "com.docker.compose.service"}}}}\\t'
-        "{{{{.Status}}}}"
+        "{{.Names}}\\t"
+        '{{.Label "com.docker.compose.project"}}\\t'
+        '{{.Label "com.docker.compose.project.working_dir"}}\\t'
+        '{{.Label "com.docker.compose.service"}}\\t'
+        "{{.Status}}"
     )
     result = ssh.run(f"{docker} ps -a --format '{fmt}'", check=True)
     rows: list[tuple[str, str, str, str, str]] = []

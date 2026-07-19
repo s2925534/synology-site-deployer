@@ -111,11 +111,20 @@ class FakeSSH:
         *,
         services_by_dir: dict[str, str] | None = None,
         load_sequence: list[str] | None = None,
+        memory_sequence: list[str] | None = None,
     ) -> None:
         self.markers = markers
         self.containers_output = containers_output
         self.services_by_dir = services_by_dir or {}
         self.load_sequence = list(load_sequence or ["load average: 2.0, 1.0, 1.0\n"])
+        self.memory_sequence = list(
+            memory_sequence
+            or [
+                "              total        used        free      shared  buff/cache   available\n"
+                "Mem:           8000        2000        4000         100        2000        6000\n"
+                "Swap:          2000           0        2000\n"
+            ]
+        )
         self.commands: list[str] = []
 
     def __enter__(self) -> FakeSSH:
@@ -162,6 +171,10 @@ class FakeSSH:
             if len(self.load_sequence) > 1:
                 return RemoteCommandResult(command, 0, self.load_sequence.pop(0), "")
             return RemoteCommandResult(command, 0, self.load_sequence[0], "")
+        if command == "free -m":
+            if len(self.memory_sequence) > 1:
+                return RemoteCommandResult(command, 0, self.memory_sequence.pop(0), "")
+            return RemoteCommandResult(command, 0, self.memory_sequence[0], "")
         if "config --services" in command:
             for working_dir, services in self.services_by_dir.items():
                 if f"cd {working_dir}" in command:
@@ -218,6 +231,40 @@ def test_restart_all_aborts_remaining_work_when_load_is_too_high() -> None:
     aborted = [step for step in steps if step.detail.startswith("aborted")]
     skipped = [step for step in steps if step.detail.startswith("skipped")]
     assert len(aborted) == 1
+    assert len(skipped) == 1
+    assert not any(" up -d " in command for command in fake.commands)
+
+
+def test_restart_all_aborts_remaining_work_when_memory_is_too_high() -> None:
+    fake = FakeSSH(
+        markers=[],
+        containers_output=(
+            "web\tmyproj\t/volume1/docker/myproj\tweb\tUp 2 minutes\n"
+            "web2\tother\t/volume1/docker/other\tweb\tUp 2 minutes\n"
+        ),
+        services_by_dir={
+            "/volume1/docker/myproj": "web\n",
+            "/volume1/docker/other": "web\n",
+        },
+        memory_sequence=[
+            "              total        used        free      shared  buff/cache   available\n"
+            "Mem:           8000        7300         200         100         400         700\n"
+            "Swap:          2000           0        2000\n"
+        ],
+    )
+
+    steps = restart_all(
+        settings(),
+        (settings().default_nas_target,),
+        ssh_factory=lambda _settings, _password: fake,
+        max_memory_percent=90.0,
+        sleep=lambda _seconds: None,
+    )
+
+    aborted = [step for step in steps if step.detail.startswith("aborted")]
+    skipped = [step for step in steps if step.detail.startswith("skipped")]
+    assert len(aborted) == 1
+    assert "memory usage" in aborted[0].detail
     assert len(skipped) == 1
     assert not any(" up -d " in command for command in fake.commands)
 
