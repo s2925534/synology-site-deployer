@@ -25,6 +25,7 @@ from synology_site.commands.remove import app as remove_app
 from synology_site.commands.restart_all import app as restart_all_app
 from synology_site.commands.show_tunnel import app as show_tunnel_app
 from synology_site.commands.start import app as start_app
+from synology_site.commands.start_resilinked_api import app as start_resilinked_api_app
 from synology_site.commands.stop import app as stop_app
 from synology_site.commands.tunnel_fix_plan import app as tunnel_fix_plan_app
 from synology_site.commands.update import app as update_app
@@ -55,6 +56,7 @@ app.command(name="restart-all")(restart_all_app)
 app.command(name="backup-plan")(backup_plan_app)
 app.command(name="list")(list_app)
 app.command(name="start")(start_app)
+app.command(name="start-resilinked-api")(start_resilinked_api_app)
 app.command(name="stop")(stop_app)
 app.command(name="remove")(remove_app)
 app.command(name="cloudflare-instructions")(tunnel_fix.cloudflare_instructions)
