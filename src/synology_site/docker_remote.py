@@ -111,9 +111,13 @@ def container_restart_policies(ssh: SSHClient, names: list[str]) -> dict[str, st
         return {}
     docker = docker_command(ssh)
     quoted_names = " ".join(shlex.quote(name) for name in names)
+    # A real tab, not the two-character "\t" -- Docker's --format is a Go template, and
+    # neither bash's single quotes nor Go's text/template do backslash-escape processing on
+    # plain template text, so a literal two-character "\t" here reaches `docker inspect`
+    # unchanged and comes back in the output unchanged too, instead of becoming a separator.
     result = ssh.run(
         f"{docker} inspect --format "
-        "'{{.Name}}\\t{{.HostConfig.RestartPolicy.Name}}' "
+        "'{{.Name}}\t{{.HostConfig.RestartPolicy.Name}}' "
         f"{quoted_names}"
     )
     policies: dict[str, str] = {}

@@ -112,6 +112,30 @@ def test_container_restart_policies_returns_empty_for_no_names() -> None:
     assert container_restart_policies(FakeSSH(), []) == {}
 
 
+def test_container_restart_policies_uses_a_real_tab_separator() -> None:
+    """Regression test: `docker inspect --format` is a Go template, and neither bash's single
+    quotes nor Go's text/template interpret backslash escapes in plain template text -- a
+    literal two-character "\\t" in the format string reaches Docker unchanged and comes back
+    in the output unchanged too, so it can never actually separate the two fields. This fake
+    mimics that real pass-through behavior (echoing back whatever separator sits between the
+    two `{{...}}` tokens in the command it receives) instead of assuming a well-formed
+    response, which is what let the "\\t"-vs-real-tab bug ship undetected originally.
+    """
+
+    class LiteralInspectSSH(FakeSSH):
+        def run(self, command, *, check=False, timeout=None):  # noqa: ANN001, ANN201
+            if command.startswith("/usr/local/bin/docker inspect --format"):
+                start = command.index("'{{.Name}}") + len("'{{.Name}}")
+                end = command.index("{{.HostConfig.RestartPolicy.Name}}")
+                separator = command[start:end]
+                return RemoteCommandResult(command, 0, f"/web{separator}unless-stopped\n", "")
+            return super().run(command, check=check, timeout=timeout)
+
+    from synology_site.docker_remote import container_restart_policies
+
+    assert container_restart_policies(LiteralInspectSSH(), ["web"]) == {"web": "unless-stopped"}
+
+
 def test_list_containers_with_projects_joins_status_and_restart_policy() -> None:
     class ProjectsSSH(FakeSSH):
         def run(self, command, *, check=False, timeout=None):  # noqa: ANN001, ANN201
