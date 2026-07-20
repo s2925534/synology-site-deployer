@@ -118,6 +118,8 @@ def create_site(
             start=target.default_start_port,
             end=target.default_end_port,
             requested=port,
+            docker_root=target.docker_root,
+            domain=domain,
         )
         resolved_local_url = local_url.format(port=selected_port)
         db_enabled = db_mode == "container"

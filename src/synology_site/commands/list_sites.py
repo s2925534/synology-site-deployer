@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import shlex
 from collections.abc import Callable
 from getpass import getpass
 from typing import Any
@@ -13,6 +12,7 @@ from synology_site.config import Settings, load_config
 from synology_site.errors import SynologySiteError
 from synology_site.nas.target import NasTarget
 from synology_site.output import console, warn
+from synology_site.site_registry import fetch_markers
 from synology_site.ssh_client import SSHClient
 
 SSHFactory = Callable[[Settings, str | None], SSHClient]
@@ -27,16 +27,7 @@ def list_markers_for_target(
 ) -> list[dict[str, Any]]:
     connection_settings = settings.resolved_for(target)
     with ssh_factory(connection_settings, prompted_password) as ssh:
-        quoted_root = shlex.quote(target.docker_root)
-        result = ssh.run(
-            f"find {quoted_root} -maxdepth 2 -name .synology-site.json -print",
-            check=True,
-        )
-        markers = []
-        for marker_path in result.stdout.splitlines():
-            content = ssh.run(f"cat {shlex.quote(marker_path)}", check=True).stdout
-            markers.append(json.loads(content))
-        return markers
+        return fetch_markers(ssh, target.docker_root)
 
 
 PasswordPrompt = Callable[[NasTarget], "str | None"]

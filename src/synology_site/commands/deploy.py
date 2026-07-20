@@ -123,6 +123,8 @@ def deploy_existing_project(
                 start=target.default_start_port,
                 end=target.default_end_port,
                 requested=port,
+                docker_root=target.docker_root,
+                domain=domain,
             )
             resolved_local_url = f"http://{target.local_base_url_host}:{selected_port}"
 
