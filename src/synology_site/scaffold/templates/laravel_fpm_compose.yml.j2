@@ -9,9 +9,9 @@ services:
     env_file:
       - ./app/.env
 {% endif %}
-{% if db_enabled or redis_enabled %}
+{% if db_mode == "container" or redis_enabled %}
     depends_on:
-{% if db_enabled %}
+{% if db_mode == "container" %}
       {{ db_container }}:
         condition: service_healthy
 {% endif %}
@@ -19,8 +19,15 @@ services:
       {{ redis_container }}:
         condition: service_healthy
 {% endif %}
+{% endif %}
+{% if needs_private_network or needs_shared_network %}
     networks:
+{% if needs_private_network %}
       - {{ db_network }}
+{% endif %}
+{% if needs_shared_network %}
+      - {{ shared_db_network }}
+{% endif %}
       - default
 {% endif %}
 
@@ -34,11 +41,11 @@ services:
       - "{{ port }}:80"
     depends_on:
       - {{ slug }}
-{% if db_enabled or redis_enabled %}
+{% if needs_private_network or needs_shared_network %}
     networks:
       - default
 {% endif %}
-{% if db_enabled %}
+{% if db_mode == "container" %}
 
   {{ db_container }}:
     image: {{ db_image }}
@@ -91,12 +98,15 @@ services:
     depends_on:
       {{ redis_container }}:
         condition: service_healthy
-{% if db_enabled %}
+{% if db_mode == "container" %}
       {{ db_container }}:
         condition: service_healthy
 {% endif %}
     networks:
       - {{ db_network }}
+{% if needs_shared_network %}
+      - {{ shared_db_network }}
+{% endif %}
       - default
 {% endif %}
 {% if scheduler_enabled %}
@@ -108,9 +118,9 @@ services:
     container_name: {{ slug }}-scheduler
     restart: {{ restart_policy }}
     command: ["sh", "-c", "while true; do php artisan schedule:run --verbose --no-interaction; sleep 60; done"]
-{% if db_enabled or redis_enabled %}
+{% if db_mode == "container" or redis_enabled %}
     depends_on:
-{% if db_enabled %}
+{% if db_mode == "container" %}
       {{ db_container }}:
         condition: service_healthy
 {% endif %}
@@ -118,22 +128,37 @@ services:
       {{ redis_container }}:
         condition: service_healthy
 {% endif %}
+{% endif %}
+{% if needs_private_network or needs_shared_network %}
     networks:
+{% if needs_private_network %}
       - {{ db_network }}
+{% endif %}
+{% if needs_shared_network %}
+      - {{ shared_db_network }}
+{% endif %}
       - default
 {% endif %}
 {% endif %}
-{% if db_enabled or redis_enabled %}
+{% if needs_private_network %}
 
 volumes:
-{% if db_enabled %}
+{% if db_mode == "container" %}
   {{ db_volume }}:
 {% endif %}
 {% if redis_enabled %}
   {{ redis_volume }}:
 {% endif %}
+{% endif %}
+{% if needs_private_network or needs_shared_network %}
 
 networks:
+{% if needs_private_network %}
   {{ db_network }}:
+{% endif %}
+{% if needs_shared_network %}
+  {{ shared_db_network }}:
+    external: true
+{% endif %}
   default:
 {% endif %}

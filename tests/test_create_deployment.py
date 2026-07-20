@@ -77,6 +77,7 @@ class FakeSSH:
             "docker inspect -f '{{.State.Running}}' demo-example-com-redis",
             "docker inspect -f '{{.State.Running}}' demo-example-com-queue",
             "docker inspect -f '{{.State.Running}}' demo-example-com-scheduler",
+            "docker inspect -f '{{.State.Running}}' shared-mariadb",
         }:
             stdout = "true\n"
         elif command == "docker ps --format '{{.Ports}}'":
@@ -592,3 +593,62 @@ def test_create_site_deploys_flask_with_db() -> None:
     assert "chmod 600 /volume1/docker/demo-example-com/docs/DATABASE.md" in fake.commands
     assert "http://192.0.2.10:5051/health" in health_urls
     assert "http://192.0.2.10:5051/db-health" in health_urls
+
+
+def test_create_site_with_external_db_mode_provisions_scoped_grant(tmp_path) -> None:
+    (tmp_path / "mariadb.env").write_text("MARIADB_ROOT_PASSWORD=rootpw\n", encoding="utf-8")
+    fake = FakeSSH()
+
+    result = create_site(
+        "demo.example.com",
+        settings=settings(),
+        db_mode="external",
+        ssh_factory=lambda _settings, _password: fake,
+        health_get=lambda _url, timeout: FakeResponse(),
+        secrets_dir=tmp_path,
+    )
+
+    assert result.db_enabled is True
+    provision_commands = [c for c in fake.commands if "mariadb -uroot" in c]
+    assert len(provision_commands) == 1
+    assert "-prootpw" in provision_commands[0]
+    assert "demo_example_com_user" in provision_commands[0]
+    assert "ON *.*" not in provision_commands[0]
+
+    compose = fake.uploads["/volume1/docker/demo-example-com/docker-compose.yml"]
+    assert "demo-example-com-db" not in compose
+    assert "shared-mariadb-network" in compose
+
+    env = fake.uploads["/volume1/docker/demo-example-com/app/.env"]
+    assert "DB_HOST=shared-mariadb" in env
+
+
+def test_create_site_with_external_db_mode_requires_shared_mariadb_env(tmp_path) -> None:
+    fake = FakeSSH()
+
+    with pytest.raises(SynologySiteError, match="bootstrap-mariadb"):
+        create_site(
+            "demo.example.com",
+            settings=settings(),
+            db_mode="external",
+            ssh_factory=lambda _settings, _password: fake,
+            health_get=lambda _url, timeout: FakeResponse(),
+            secrets_dir=tmp_path,
+        )
+
+
+def test_create_site_dry_run_with_external_db_mode_skips_provisioning(tmp_path) -> None:
+    fake = FakeSSH()
+
+    result = create_site(
+        "demo.example.com",
+        settings=settings(),
+        db_mode="external",
+        dry_run=True,
+        ssh_factory=lambda _settings, _password: fake,
+        health_get=lambda _url, timeout: FakeResponse(),
+        secrets_dir=tmp_path,
+    )
+
+    assert result.db_enabled is True
+    assert not any("mariadb -uroot" in c for c in fake.commands)

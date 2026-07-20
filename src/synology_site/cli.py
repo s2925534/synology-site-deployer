@@ -4,6 +4,7 @@ import typer
 
 from synology_site.commands import tunnel_fix
 from synology_site.commands.backup_plan import app as backup_plan_app
+from synology_site.commands.bootstrap_mariadb import app as bootstrap_mariadb_app
 from synology_site.commands.bootstrap_n8n import app as bootstrap_n8n_app
 from synology_site.commands.bootstrap_supabase import app as bootstrap_supabase_app
 from synology_site.commands.bootstrap_umami import app as bootstrap_umami_app
@@ -43,6 +44,7 @@ app.command(name="show-tunnel")(show_tunnel_app)
 app.command(name="ps")(ps_app)
 app.command(name="logs")(logs_app)
 app.command(name="bootstrap-supabase")(bootstrap_supabase_app)
+app.command(name="bootstrap-mariadb")(bootstrap_mariadb_app)
 app.command(name="bootstrap-n8n")(bootstrap_n8n_app)
 app.command(name="bootstrap-umami")(bootstrap_umami_app)
 app.command(name="bootstrap-uptime-kuma")(bootstrap_uptime_kuma_app)

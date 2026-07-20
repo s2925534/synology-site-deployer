@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from synology_site import __version__
 from synology_site.database.naming import database_name, database_user
+from synology_site.database.shared_mariadb import SHARED_MARIADB_CONTAINER, SHARED_MARIADB_NETWORK
 from synology_site.naming import (
     db_container_name,
     db_volume_name,
@@ -61,10 +62,26 @@ class ScaffoldContext:
 
 
 def common_template_values(context: ScaffoldContext, *, internal_port: int) -> dict[str, object]:
-    """Template values shared by every scaffold, independent of the target framework."""
+    """Template values shared by every scaffold, independent of the target framework.
+
+    `db_mode` is one of "none" (no database), "container" (this site gets its own
+    dedicated MariaDB container, the original/default behavior), or "external" (the app
+    instead connects to the single shared MariaDB instance bootstrapped once via
+    `bootstrap-mariadb` -- no per-site db service is generated, and the app additionally
+    joins `shared_db_network` alongside its own private `db_network`).
+    """
     db_name = context.db_name or database_name(context.domain)
     db_user = context.db_user or database_user(context.domain)
-    db_container = db_container_name(context.domain)
+    db_container = (
+        SHARED_MARIADB_CONTAINER
+        if context.db_mode == "external"
+        else db_container_name(context.domain)
+    )
+    # Whether this site's own private network (db_network) is actually needed:
+    # true for a dedicated db container or redis, but a pure external-db site with no
+    # redis needs only the shared network, so it doesn't get an unused empty network.
+    needs_private_network = context.db_mode == "container" or context.redis_enabled
+    needs_shared_network = context.db_mode == "external"
     return {
         "version": __version__,
         "domain": context.domain,
@@ -88,6 +105,9 @@ def common_template_values(context: ScaffoldContext, *, internal_port: int) -> d
         "db_root_password": context.db_root_password or "",
         "db_volume": db_volume_name(context.domain),
         "db_network": network_name(context.domain),
+        "shared_db_network": SHARED_MARIADB_NETWORK,
+        "needs_private_network": needs_private_network,
+        "needs_shared_network": needs_shared_network,
         "db_publish_port": context.db_publish_port,
         "db_host_port": context.db_host_port,
         "redis_enabled": context.redis_enabled,
