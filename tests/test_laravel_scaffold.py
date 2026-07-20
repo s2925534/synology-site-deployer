@@ -14,7 +14,9 @@ def context(
     redis_enabled: bool = False,
     queue_enabled: bool = False,
     scheduler_enabled: bool = False,
+    db_mode: str | None = None,
 ) -> ScaffoldContext:
+    resolved_db_mode = db_mode if db_mode is not None else ("container" if db_enabled else "none")
     return ScaffoldContext(
         domain="demo.example.com",
         slug="demo-example-com",
@@ -23,8 +25,8 @@ def context(
         project_path="/volume1/docker/demo-example-com",
         local_base_url_host="192.0.2.10",
         restart_policy="unless-stopped",
-        db_enabled=db_enabled,
-        db_mode="container" if db_enabled else "none",
+        db_enabled=db_enabled or resolved_db_mode != "none",
+        db_mode=resolved_db_mode,
         db_name="demo_example_com",
         db_user="demo_example_com_user",
         db_password="user_password_1234567890",
@@ -44,12 +46,19 @@ def generated_files(
     redis_enabled: bool = False,
     queue_enabled: bool = False,
     scheduler_enabled: bool = False,
+    db_mode: str | None = None,
 ) -> dict[str, str]:
     return {
         item.path: item.content
         for item in LaravelScaffold().generate(
             context(
-                db_enabled, php_server, frontend, redis_enabled, queue_enabled, scheduler_enabled
+                db_enabled,
+                php_server,
+                frontend,
+                redis_enabled,
+                queue_enabled,
+                scheduler_enabled,
+                db_mode,
             )
         )
     }
@@ -402,6 +411,26 @@ def test_scheduler_container_name_included_in_container_names() -> None:
     names = LaravelScaffold().container_names(context(scheduler_enabled=True))
 
     assert names == ["demo-example-com", "demo-example-com-scheduler"]
+
+
+def test_external_db_mode_with_fpm_nginx_and_redis_joins_shared_and_private_networks() -> None:
+    compose = yaml.safe_load(
+        generated_files(php_server="fpm-nginx", db_mode="external", redis_enabled=True)[
+            "docker-compose.yml"
+        ]
+    )
+
+    app_service = compose["services"]["demo-example-com"]
+    redis_service = compose["services"]["demo-example-com-redis"]
+    assert set(app_service["networks"]) == {
+        "demo-example-com-network",
+        "shared-mariadb-network",
+        "default",
+    }
+    assert redis_service["networks"] == ["demo-example-com-network"]
+    assert "demo-example-com-db" not in compose["services"]
+    assert compose["networks"]["shared-mariadb-network"]["external"] is True
+    assert "demo-example-com-network" in compose["networks"]
 
 
 def test_scheduler_and_queue_coexist() -> None:

@@ -5,6 +5,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from getpass import getpass
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -17,6 +18,11 @@ from synology_site.commands.check_nas import smart_ssh_factory
 from synology_site.config import Settings, load_config
 from synology_site.database.naming import database_name, database_user
 from synology_site.database.passwords import generate_password
+from synology_site.database.shared_mariadb import (
+    ensure_shared_mariadb_running,
+    provision_scoped_database,
+    read_shared_root_password,
+)
 from synology_site.docker_remote import (
     detect_compose_command,
     docker_command,
@@ -75,9 +81,10 @@ def create_site(
     ssh_factory: SSHFactory = smart_ssh_factory,
     health_get: HealthGetter = requests.get,
     prompted_password: str | None = None,
+    secrets_dir: Path = Path("secrets"),
 ) -> CreateResult:
-    if db_mode not in {"none", "container"}:
-        raise SynologySiteError("Only DB mode none or container is supported")
+    if db_mode not in {"none", "container", "external"}:
+        raise SynologySiteError("Only DB mode none, container, or external is supported")
     if redis_enabled and framework != "laravel":
         raise SynologySiteError("--with-redis is only applicable to --framework laravel")
     if queue_enabled and framework != "laravel":
@@ -122,9 +129,14 @@ def create_site(
             domain=domain,
         )
         resolved_local_url = local_url.format(port=selected_port)
-        db_enabled = db_mode == "container"
+        db_enabled = db_mode in {"container", "external"}
         db_password = generate_password(settings.db_password_length) if db_enabled else None
-        db_root_password = generate_password(settings.db_password_length) if db_enabled else None
+        # Only a dedicated per-site container has its own root password to generate --
+        # "external" sites authenticate with a scoped user/password on the shared
+        # instance, provisioned below, and never see its root credential.
+        db_root_password = (
+            generate_password(settings.db_password_length) if db_mode == "container" else None
+        )
         context = ScaffoldContext(
             domain=domain,
             slug=slug,
@@ -164,13 +176,23 @@ def create_site(
                 db_health_url=f"{resolved_local_url}/db-health" if context.db_enabled else None,
             )
 
+        if context.db_mode == "external":
+            ensure_shared_mariadb_running(ssh)
+            provision_scoped_database(
+                ssh,
+                root_password=read_shared_root_password(secrets_dir),
+                db_name=context.db_name,
+                db_user=context.db_user,
+                db_password=context.db_password,
+            )
+
         _prepare_remote_project(ssh, project_path, force=force)
         _upload_files(ssh, project_path, files)
         _start_compose(ssh, project_path, compose)
         docker = docker_command(ssh)
         for container_name in scaffold.container_names(context):
             _confirm_container(ssh, container_name, docker)
-        if context.db_enabled:
+        if context.db_mode == "container":
             _confirm_container(ssh, db_container_name(domain), docker)
         if context.redis_enabled:
             _confirm_container(ssh, redis_container_name(domain), docker)
@@ -252,7 +274,13 @@ def app(
     framework: str = typer.Option("flask", "--framework"),
     port: int | None = typer.Option(None, "--port"),
     with_db: bool = typer.Option(False, "--with-db"),
-    db_mode: str = typer.Option("none", "--db-mode"),
+    db_mode: str = typer.Option(
+        "none",
+        "--db-mode",
+        help="'none' (default), 'container' (dedicated MariaDB container for this site, "
+        "same as --with-db), or 'external' (join the shared MariaDB instance from "
+        "`bootstrap-mariadb` instead, with a database/user scoped to just this site).",
+    ),
     with_redis: bool = typer.Option(
         False,
         "--with-redis",
