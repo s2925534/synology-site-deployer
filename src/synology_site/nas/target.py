@@ -43,6 +43,22 @@ class NasTarget:
             return self.tailscale_host
         return self.host
 
+    @property
+    def health_check_host(self) -> str:
+        """Host used to reach a Docker-published port for an active health-check request.
+
+        Docker publishes ports on 0.0.0.0, so they're reachable on every interface the NAS
+        has, including its Tailscale one -- unlike `local_base_url_host` (a fixed LAN address
+        used for Cloudflare tunnel origins and human-facing "here's your local URL" messages,
+        which stay LAN-scoped on purpose), a *gating* health check needs to succeed from
+        wherever the deploy is actually running from. Mirrors `connection_host`'s SSH fallback
+        so update/deploy don't fail their own post-deploy verification when the caller is off
+        the NAS's LAN and only reachable via Tailscale.
+        """
+        if self.tailscale_enabled and self.tailscale_host:
+            return self.tailscale_host
+        return self.local_base_url_host
+
 
 def _optional(value: str | None) -> str | None:
     if value is None or value.strip() == "":

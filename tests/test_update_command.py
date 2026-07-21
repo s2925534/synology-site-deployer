@@ -317,6 +317,34 @@ def test_update_site_dry_run_does_not_upload_compose_file(tmp_path: Path) -> Non
     assert fake.uploaded_text == {}
 
 
+def test_update_site_health_check_uses_tailscale_host_when_enabled() -> None:
+    fake = FakeSSH()
+    health_urls: list[str] = []
+
+    def health_get(url: str, timeout: int) -> FakeResponse:
+        del timeout
+        health_urls.append(url)
+        return FakeResponse()
+
+    result = update_site(
+        "app.example.com",
+        settings=replace(
+            settings(),
+            tailscale_enabled=True,
+            tailscale_host="100.64.1.2",
+        ),
+        ssh_factory=lambda _settings, _password: fake,
+        health_get=health_get,
+    )
+
+    # Docker publishes on 0.0.0.0, so the health check should follow the same
+    # host the SSH connection itself would use when Tailscale is the active
+    # transport, not the fixed LAN address -- otherwise a deploy run from off
+    # the NAS's LAN succeeds but always fails its own health verification.
+    assert result.health_url == "http://100.64.1.2:5050/health"
+    assert health_urls == ["http://100.64.1.2:5050/health"]
+
+
 def test_update_passes_cloudflare_access_ssh_settings_from_workspace() -> None:
     fake = FakeSSH()
     captured_settings: list[Settings] = []

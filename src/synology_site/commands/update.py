@@ -90,7 +90,7 @@ def update_site(
         if resolved_health_path is None and marker.get("mode") != "deploy" and port:
             resolved_health_path = "/health"
         health_url = (
-            f"http://{target.local_base_url_host}:{port}{resolved_health_path}"
+            f"http://{target.health_check_host}:{port}{resolved_health_path}"
             if port and resolved_health_path
             else None
         )

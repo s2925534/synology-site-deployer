@@ -88,7 +88,7 @@ def check_health_for_targets(
                     continue
                 port = proxy_port
                 headers = {"Host": domain}
-            url = f"http://{target.local_base_url_host}:{port}{path}"
+            url = f"http://{target.health_check_host}:{port}{path}"
             try:
                 response = (
                     health_get(url, timeout=10, headers=headers)

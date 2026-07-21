@@ -126,7 +126,7 @@ def deploy_existing_project(
                 docker_root=target.docker_root,
                 domain=domain,
             )
-            resolved_local_url = f"http://{target.local_base_url_host}:{selected_port}"
+            resolved_local_url = f"http://{target.health_check_host}:{selected_port}"
 
         if dry_run:
             return DeployResult(
