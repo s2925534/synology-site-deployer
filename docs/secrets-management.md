@@ -5,6 +5,8 @@ Today, `synology-site` reads plaintext `.env` files:
 - Root `.env` for the default workspace
 - `secrets/<workspace>/cloudflare.env`
 - `secrets/<workspace>/nas.env`
+- `secrets/<workspace>/lightsail.env`
+- `secrets/<workspace>/godaddy.env`
 - Generated recovery files such as `secrets/<project>.env`
 
 This is acceptable for a single-user machine with disk encryption and a private repo, but it is

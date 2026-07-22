@@ -15,3 +15,5 @@ def test_cli_help() -> None:
     assert "backup-plan" in result.output
     assert "doctor" in result.output
     assert "restart-all" in result.output
+    assert "godaddy-nameservers" in result.output
+    assert "godaddy-dns" in result.output

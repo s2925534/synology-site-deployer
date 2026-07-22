@@ -13,6 +13,11 @@ from synology_site.cloudflare.workspace import (
     resolve_cloudflare_account,
 )
 from synology_site.errors import SynologySiteError
+from synology_site.godaddy.workspace import (
+    GoDaddyAccount,
+    discover_godaddy_accounts,
+    resolve_godaddy_account,
+)
 from synology_site.nas.target import (
     DEFAULT_TARGET_NAME,
     NasTarget,
@@ -57,6 +62,11 @@ class Settings:
     notify_webhook_events: str = "success,failure"
     cloudflare_accounts: tuple[CloudflareAccount, ...] = ()
     nas_targets: tuple[NasTarget, ...] = ()
+    gd_access_token: str | None = None
+    gd_api_key: str | None = None
+    gd_api_secret: str | None = None
+    gd_environment: str = "production"
+    godaddy_accounts: tuple[GoDaddyAccount, ...] = ()
 
     @property
     def nas_connection_host(self) -> str:
@@ -99,11 +109,22 @@ class Settings:
         )
 
     @property
+    def default_godaddy_account(self) -> GoDaddyAccount:
+        return GoDaddyAccount(
+            name=DEFAULT_WORKSPACE_NAME,
+            access_token=self.gd_access_token,
+            api_key=self.gd_api_key,
+            api_secret=self.gd_api_secret,
+            environment=self.gd_environment,
+        )
+
+    @property
     def known_workspace_names(self) -> set[str]:
         return (
             {DEFAULT_WORKSPACE_NAME}
             | {account.name for account in self.cloudflare_accounts}
             | {target.name for target in self.nas_targets}
+            | {account.name for account in self.godaddy_accounts}
         )
 
     def validate_workspace(self, workspace: str | None) -> None:
@@ -125,6 +146,14 @@ class Settings:
         return resolve_nas_target(
             self.default_nas_target,
             self.nas_targets,
+            workspace=workspace,
+        )
+
+    def resolve_godaddy(self, *, workspace: str | None = None) -> GoDaddyAccount:
+        self.validate_workspace(workspace)
+        return resolve_godaddy_account(
+            self.default_godaddy_account,
+            self.godaddy_accounts,
             workspace=workspace,
         )
 
@@ -283,4 +312,9 @@ def load_config(path: str | Path = ".env", secrets_dir: str | Path = "secrets") 
         notify_webhook_events=notify_events,
         cloudflare_accounts=discover_cloudflare_accounts(secrets_dir),
         nas_targets=discover_nas_targets(secrets_dir, default=default_nas_target),
+        gd_access_token=_optional(values.get("GD_ACCESS_TOKEN")),
+        gd_api_key=_optional(values.get("GD_API_KEY")),
+        gd_api_secret=_optional(values.get("GD_API_SECRET")),
+        gd_environment=(values.get("GD_ENVIRONMENT") or "production").strip().lower(),
+        godaddy_accounts=discover_godaddy_accounts(secrets_dir),
     )

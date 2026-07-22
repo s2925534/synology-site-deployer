@@ -11,7 +11,7 @@ from typing import Any
 import requests
 import typer
 
-from synology_site.cloudflare.api import configure_cloudflare_route
+from synology_site.cloudflare.api import CloudflareAPI, configure_cloudflare_route
 from synology_site.cloudflare.domain_split import split_domain_for_zone
 from synology_site.cloudflare.manual_instructions import build_manual_instructions
 from synology_site.commands.check_nas import smart_ssh_factory
@@ -30,6 +30,7 @@ from synology_site.docker_remote import (
     require_docker,
 )
 from synology_site.errors import SynologySiteError
+from synology_site.godaddy.api import check_nameservers
 from synology_site.naming import db_container_name, domain_to_slug, redis_container_name
 from synology_site.output import console, next_step, ok, warn
 from synology_site.port_allocator import find_available_port
@@ -38,6 +39,7 @@ from synology_site.scaffold import (
     PRODUCTION_PHP_SERVERS,
     validate_frontend,
     validate_php_server,
+    validate_wordpress_db_mode,
 )
 from synology_site.scaffold.base import GeneratedFile, ScaffoldContext
 from synology_site.ssh_client import SSHClient
@@ -77,6 +79,8 @@ def create_site(
     scheduler_enabled: bool = False,
     frontend: str = "none",
     php_server: str = "artisan",
+    wp_table_prefix: str = "wp_",
+    wordpress_image_tag: str = "apache",
     workspace: str | None = None,
     ssh_factory: SSHFactory = smart_ssh_factory,
     health_get: HealthGetter = requests.get,
@@ -85,6 +89,7 @@ def create_site(
 ) -> CreateResult:
     if db_mode not in {"none", "container", "external"}:
         raise SynologySiteError("Only DB mode none, container, or external is supported")
+    validate_wordpress_db_mode(framework, db_mode)
     if redis_enabled and framework != "laravel":
         raise SynologySiteError("--with-redis is only applicable to --framework laravel")
     if queue_enabled and framework != "laravel":
@@ -160,6 +165,8 @@ def create_site(
             redis_enabled=redis_enabled,
             queue_enabled=queue_enabled,
             scheduler_enabled=scheduler_enabled,
+            wp_table_prefix=wp_table_prefix,
+            wordpress_image_tag=wordpress_image_tag,
         )
         files = scaffold.generate(context)
         if dry_run:
@@ -247,6 +254,44 @@ def _confirm_container(ssh: SSHClient, slug: str, docker: str = "docker") -> Non
     if not result.ok or result.stdout.strip().lower() != "true":
         msg = f"Container is not running: {slug}"
         raise SynologySiteError(msg)
+
+
+def _warn_on_godaddy_nameserver_mismatch(
+    settings: Settings,
+    domain: str,
+    *,
+    workspace: str | None,
+    cloudflare_session: Any = requests,
+    godaddy_session: Any = requests,
+) -> None:
+    """Best-effort, read-only: if a GoDaddy account is configured, compare its nameservers for
+    `domain` against the Cloudflare zone's assigned ones and warn on a mismatch. Never raises --
+    any failure here (no GoDaddy account configured, domain not found at GoDaddy, network
+    error) is swallowed, since this is purely informational and must never block a deploy.
+    """
+    try:
+        godaddy_account = settings.resolve_godaddy(workspace=workspace)
+        if not godaddy_account.ready:
+            return
+        cf_account = settings.resolve_cloudflare(domain, workspace=workspace)
+        if not cf_account.ready:
+            return
+        expected = CloudflareAPI(cf_account, session=cloudflare_session).get_zone_nameservers()
+        result = check_nameservers(
+            godaddy_account,
+            domain=domain,
+            expected_nameservers=expected,
+            session=godaddy_session,
+        )
+        if not result.matches:
+            warn(
+                f"GoDaddy nameservers for {domain} don't match this Cloudflare zone -- "
+                f"current: {', '.join(result.current_nameservers)}; "
+                f"expected: {', '.join(result.expected_nameservers)}. "
+                "Run `synology-site godaddy-nameservers` to review/fix."
+            )
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _confirm_health(health_get: HealthGetter, url: str) -> None:
@@ -373,6 +418,7 @@ def app(
                 service_url=result.local_url,
             )
             ok(f"Cloudflare route configured: {result.domain} -> {result.local_url}")
+            _warn_on_godaddy_nameserver_mismatch(settings, result.domain, workspace=workspace)
         except SynologySiteError as exc:
             warn(str(exc))
             if strict_cloudflare:

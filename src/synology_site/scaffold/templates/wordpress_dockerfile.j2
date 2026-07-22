@@ -1,0 +1,3 @@
+FROM wordpress:{{ wordpress_image_tag }}
+COPY health.php /var/www/html/health.php
+COPY db-health.php /var/www/html/db-health.php

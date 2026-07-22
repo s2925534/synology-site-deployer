@@ -59,6 +59,8 @@ class ScaffoldContext:
     redis_enabled: bool = False
     queue_enabled: bool = False
     scheduler_enabled: bool = False
+    wp_table_prefix: str = "wp_"
+    wordpress_image_tag: str = "apache"
 
 
 def common_template_values(context: ScaffoldContext, *, internal_port: int) -> dict[str, object]:
@@ -118,4 +120,6 @@ def common_template_values(context: ScaffoldContext, *, internal_port: int) -> d
         "cloudflare_attempted": context.cloudflare_attempted,
         "cloudflare_configured": context.cloudflare_configured,
         "cloudflare_manual_required": context.cloudflare_manual_required,
+        "wp_table_prefix": context.wp_table_prefix,
+        "wordpress_image_tag": context.wordpress_image_tag,
     }

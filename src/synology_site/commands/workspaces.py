@@ -47,6 +47,24 @@ def check_workspaces(settings: Settings) -> list[str]:
             "are meant to be separate Cloudflare accounts, double-check this wasn't a "
             f"copy-paste mistake (token starts with {token[:6]!r})"
         )
+
+    godaddy_accounts = (settings.default_godaddy_account, *settings.godaddy_accounts)
+    for token, owners in _duplicate_owners(
+        [(a.access_token, a.name) for a in godaddy_accounts if a.access_token]
+    ).items():
+        problems.append(
+            f"GD_ACCESS_TOKEN is identical across workspaces: {', '.join(owners)} -- if these "
+            "are meant to be separate GoDaddy accounts, double-check this wasn't a "
+            f"copy-paste mistake (token starts with {token[:6]!r})"
+        )
+    for key, owners in _duplicate_owners(
+        [(a.api_key, a.name) for a in godaddy_accounts if a.api_key]
+    ).items():
+        problems.append(
+            f"GD_API_KEY is identical across workspaces: {', '.join(owners)} -- if these "
+            "are meant to be separate GoDaddy accounts, double-check this wasn't a "
+            f"copy-paste mistake (key starts with {key[:6]!r})"
+        )
     return problems
 
 
@@ -59,6 +77,7 @@ def app() -> None:
 
     account_names = {account.name for account in settings.cloudflare_accounts}
     target_names = {target.name for target in settings.nas_targets}
+    godaddy_names = {account.name for account in settings.godaddy_accounts}
 
     console.rule("Workspaces")
     for name in sorted(settings.known_workspace_names):
@@ -66,7 +85,8 @@ def app() -> None:
             ok(
                 f"{name}: Cloudflare account ({settings.default_cloudflare_account.zone_domain}, "
                 f"ready={settings.default_cloudflare_account.ready}), "
-                f"NAS target ({settings.default_nas_target.host})"
+                f"NAS target ({settings.default_nas_target.host}), "
+                f"GoDaddy account (ready={settings.default_godaddy_account.ready})"
             )
             continue
         parts = []
@@ -76,6 +96,9 @@ def app() -> None:
         if name in target_names:
             target = next(t for t in settings.nas_targets if t.name == name)
             parts.append(f"NAS target ({target.host})")
+        if name in godaddy_names:
+            godaddy = next(a for a in settings.godaddy_accounts if a.name == name)
+            parts.append(f"GoDaddy account (ready={godaddy.ready})")
         ok(f"{name}: {'; '.join(parts)}")
 
     console.rule("Doctor")

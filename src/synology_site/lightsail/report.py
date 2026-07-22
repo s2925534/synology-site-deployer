@@ -145,17 +145,19 @@ def render_dry_run_report(
     lines.append("")
     lines.append(
         "- NAS-side checks (disk headroom, which NAS target workspace this lands on) are not "
-        "automated by this dry run yet -- confirm manually before `--execute` exists."
+        "automated by this dry run yet -- confirm manually before running `--execute`."
     )
     if target_mode == "existing-site-replace":
         lines.append(
             "- `existing-site-replace` requires a serialization-safe search-replace "
             "(e.g. `wp search-replace`) once imported on the NAS -- a plain SQL `REPLACE()` "
-            "will corrupt serialized page-builder data if any plugin listed above stores it."
+            "will corrupt serialized page-builder data if any plugin listed above stores it. "
+            "`--execute` already handles this automatically."
         )
     lines.append(
-        "- `--execute` (DB dump/restore, wp-content sync, Compose scaffold, Cloudflare cutover) "
-        "is not implemented yet; this command only performs read-only discovery."
+        "- `--execute` performs the actual migration (DB dump/restore, wp-content transfer, "
+        "Compose scaffold for new-site, Cloudflare cutover) -- this dry run only reports what "
+        "it would need to do."
     )
     lines.append("")
 

@@ -40,6 +40,13 @@ class CloudflareAPI:
         current = self._request("GET", list_endpoint, params={"name": hostname})
         return list(current.get("result") or [])
 
+    def get_zone_nameservers(self) -> list[str]:
+        """Read-only lookup of the nameservers Cloudflare has assigned to this zone. Never
+        writes anything -- used to compare against a registrar's (e.g. GoDaddy's) current
+        nameservers without the operator having to paste them in manually."""
+        result = self._request("GET", f"{CLOUDFLARE_API_BASE}/zones/{self.account.zone_id}")
+        return list(result.get("result", {}).get("name_servers") or [])
+
     def get_tunnel_ingress(self) -> list[dict[str, Any]]:
         """Read-only lookup of the tunnel's full ingress rule list. Never writes anything.
 

@@ -6,13 +6,24 @@ from synology_site.scaffold.fastapi import FastAPIScaffold
 from synology_site.scaffold.flask import FlaskScaffold
 from synology_site.scaffold.laravel import LaravelScaffold
 from synology_site.scaffold.nextjs import NextJsScaffold
+from synology_site.scaffold.wordpress import WordPressScaffold
 
 FRAMEWORKS = {
     "flask": FlaskScaffold(),
     "laravel": LaravelScaffold(),
     "fastapi": FastAPIScaffold(),
     "nextjs": NextJsScaffold(),
+    "wordpress": WordPressScaffold(),
 }
+
+
+def validate_wordpress_db_mode(framework: str, db_mode: str) -> None:
+    if framework == "wordpress" and db_mode not in {"container", "external"}:
+        msg = (
+            "--framework wordpress requires --db-mode container or external "
+            "(WordPress always needs a database)"
+        )
+        raise SynologySiteError(msg)
 
 
 def validate_frontend(framework: str, frontend: str, php_server: str) -> None:

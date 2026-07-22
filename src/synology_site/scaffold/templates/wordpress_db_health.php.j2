@@ -1,0 +1,18 @@
+<?php
+header('Content-Type: application/json');
+$host = getenv('WORDPRESS_DB_HOST') ?: '{{ db_container }}';
+$name = getenv('WORDPRESS_DB_NAME') ?: '{{ db_name }}';
+$user = getenv('WORDPRESS_DB_USER') ?: '{{ db_user }}';
+$pass = getenv('WORDPRESS_DB_PASSWORD') ?: '{{ db_password }}';
+$link = @mysqli_connect($host, $user, $pass, $name);
+if (!$link) {
+    http_response_code(503);
+    echo json_encode([
+        'status' => 'error',
+        'database' => 'not_connected',
+        'message' => 'Database connection failed',
+    ]);
+    exit;
+}
+mysqli_close($link);
+echo json_encode(['status' => 'ok', 'database' => 'connected', 'service' => '{{ slug }}']);

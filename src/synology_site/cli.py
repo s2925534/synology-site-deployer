@@ -17,6 +17,8 @@ from synology_site.commands.create import app as create_app
 from synology_site.commands.deploy import app as deploy_app
 from synology_site.commands.doctor import app as doctor_app
 from synology_site.commands.ensure_network import app as ensure_network_app
+from synology_site.commands.godaddy_dns import app as godaddy_dns_app
+from synology_site.commands.godaddy_nameservers import app as godaddy_nameservers_app
 from synology_site.commands.health import app as health_app
 from synology_site.commands.inspect_containers import logs_app, ps_app
 from synology_site.commands.list_sites import app as list_app
@@ -70,6 +72,8 @@ app.command(name="uptime-kuma-monitor-instructions")(uptime_kuma_monitor_app)
 app.command(name="set-autostart")(tunnel_fix.set_autostart)
 app.command(name="workspaces")(workspaces_app)
 app.command(name="migrate-from-lightsail")(migrate_from_lightsail_app)
+app.command(name="godaddy-nameservers")(godaddy_nameservers_app)
+app.command(name="godaddy-dns")(godaddy_dns_app)
 
 
 def main() -> None:

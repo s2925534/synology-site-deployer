@@ -1,0 +1,61 @@
+services:
+  {{ slug }}:
+    build:
+      context: ./app
+    container_name: {{ slug }}
+    restart: {{ restart_policy }}
+    ports:
+      - "{{ port }}:80"
+    env_file:
+      - ./app/.env
+    volumes:
+      - ./wp-content:/var/www/html/wp-content
+{% if db_mode == "container" %}
+    depends_on:
+      {{ db_container }}:
+        condition: service_healthy
+{% endif %}
+    networks:
+{% if db_mode == "container" %}
+      - {{ db_network }}
+{% else %}
+      - {{ shared_db_network }}
+{% endif %}
+{% if db_mode == "container" %}
+
+  {{ db_container }}:
+    image: {{ db_image }}
+    container_name: {{ db_container }}
+    restart: {{ restart_policy }}
+    environment:
+      MARIADB_ROOT_PASSWORD: {{ db_root_password }}
+      MARIADB_DATABASE: {{ db_name }}
+      MARIADB_USER: {{ db_user }}
+      MARIADB_PASSWORD: {{ db_password }}
+{% if db_publish_port and db_host_port %}
+    ports:
+      - "{{ db_host_port }}:3306"
+{% endif %}
+    volumes:
+      - {{ db_volume }}:/var/lib/mysql
+    networks:
+      - {{ db_network }}
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+{% endif %}
+{% if db_mode == "container" %}
+
+volumes:
+  {{ db_volume }}:
+{% endif %}
+
+networks:
+{% if db_mode == "container" %}
+  {{ db_network }}:
+{% else %}
+  {{ shared_db_network }}:
+    external: true
+{% endif %}

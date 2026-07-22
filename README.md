@@ -31,7 +31,9 @@ Contact: `pedro@veloso.dev`
 - `tunnel-fix-plan`: generates a self-contained script (+ DSM Task Scheduler/crontab examples) that keeps the `cloudflared` container alive on its own schedule, directly on the NAS.
 - `swap-fix-plan`: generates two self-contained scripts (+ DSM Task Scheduler/crontab examples) for NAS swap — one creates/sizes a swap file (Synology has no GUI swap resize), the other reclaims stuck swap on a schedule, but only when there's enough free RAM to do so safely. `doctor`'s swap check is what flags when this is needed.
 - `uptime-kuma-monitor-instructions`: prints step-by-step Uptime Kuma monitor setup for a hostname behind the Cloudflare Tunnel.
-- `migrate-from-lightsail --dry-run`: read-only discovery of a WordPress site on an AWS Lightsail instance, producing a migration-readiness report (no writes anywhere). `--execute` (the actual migration) is not implemented yet.
+- `migrate-from-lightsail --dry-run`: read-only discovery of a WordPress site on an AWS Lightsail instance, producing a migration-readiness report (no writes anywhere). `--execute` performs the actual migration (DB dump/restore, `wp-content` transfer, a `wordpress` scaffold + shared/dedicated MariaDB for `--target-mode new-site`, serialization-safe search-replace for `--target-mode existing-site-replace`, Cloudflare cutover) -- see below.
+- `godaddy-nameservers --check`: read-only, compares a domain's current GoDaddy-registered nameservers against an expected set (explicit list, or read live from that domain's Cloudflare zone). `--set` writes new nameservers -- the highest-blast-radius action in this tool, so it always snapshots the prior nameservers first and always requires confirmation. `create`/`migrate-from-lightsail --execute` also run this check automatically (read-only, warn-only) after a successful Cloudflare cutover if a GoDaddy account is configured -- see below.
+- `godaddy-dns`: list/add/replace DNS records directly at GoDaddy, for domains where GoDaddy itself hosts DNS (not delegated to Cloudflare/AWS).
 - Optional deploy/update webhook notifications for Slack or Discord.
 - Finds a free local NAS port when one is needed.
 - Prints manual Cloudflare Tunnel setup instructions if API credentials are missing; otherwise creates/updates the tunnel ingress rule and proxied DNS record automatically.
@@ -151,6 +153,7 @@ secrets/
   acmeco/
     cloudflare.env   # different Cloudflare account/domain/tunnel
     nas.env          # different physical NAS (optional)
+    godaddy.env      # different GoDaddy registrar account (optional)
 ```
 
 ```env
@@ -174,9 +177,19 @@ SYSTEM_TYPE=synology
 
 Most workspaces only need `cloudflare.env` (same NAS, different Cloudflare account/domain — this
 was the original use case). A workspace can also define only `nas.env` (same Cloudflare account,
-different physical NAS) or both. `secrets/` is already gitignored in full, so workspaces are
-added or removed just by adding or removing a folder — there's no separate manifest to keep in
-sync, and no limit to how many can exist.
+different physical NAS), `godaddy.env` (a domain registered at a different GoDaddy account -- see
+"GoDaddy (Domain Registrar)" below), or any combination. `secrets/` is already gitignored in
+full, so workspaces are added or removed just by adding or removing a folder — there's no
+separate manifest to keep in sync, and no limit to how many can exist.
+
+```env
+# secrets/acmeco/godaddy.env -- only needed if a domain in this workspace is registered at a
+# different GoDaddy account than the root .env's (or if the root .env has no GD_* at all).
+GD_ACCESS_TOKEN=       # Personal Access Token, Bearer auth -- the current GoDaddy standard
+# GD_API_KEY=          # legacy sso-key pair, still works but being phased out -- use either
+# GD_API_SECRET=       # this or GD_ACCESS_TOKEN, not both
+GD_ENVIRONMENT=production   # or "ote" for GoDaddy's sandbox/test environment
+```
 
 For shared machines or team workflows, see `docs/secrets-management.md` for `sops`/`age`,
 1Password CLI, and Doppler options. Plain `.env` files remain the default for personal use.
@@ -529,8 +542,109 @@ workspace has no Cloudflare API credentials configured). It writes a Markdown re
 `migration-reports/<source>-to-<target>-dry-run.md` (override the directory with
 `--output-dir`).
 
-`--execute` (the actual DB dump/restore, `wp-content` sync, NAS Compose scaffold, and Cloudflare
-cutover) is not implemented yet and exits with an error explaining that.
+## Migrating A Site Off Lightsail (Execute)
+
+`migrate-from-lightsail --execute` performs the actual migration. It always runs the same
+read-only discovery as `--dry-run` first, live, as a pre-flight check — if it detects a known
+S3-offload plugin (media may not fully live on local disk), it aborts before touching anything,
+since this tool doesn't talk to AWS/S3 (sync media manually first, then re-run). **The Lightsail
+source is read-only by default** (`--transfer-mode direct`) — every source-side step (discovery,
+credential extraction, DB dump, `wp-content` fetch) streams straight over the SSH channel and
+never touches the source's disk. `--transfer-mode full-archive` is the one exception (see below)
+and is explicit about it.
+
+```bash
+synology-site migrate-from-lightsail \
+  --source-domain example.com \
+  --target-domain example.com \
+  --target-mode new-site \
+  --execute
+
+synology-site migrate-from-lightsail \
+  --source-domain example.com \
+  --target-domain newsite.example \
+  --target-mode existing-site-replace \
+  --execute
+```
+
+Two SSH connections run in the same invocation: one to the Lightsail source, one to the NAS
+target. What happens next depends on `--target-mode`:
+
+- **`new-site`**: provisions a fresh WordPress + MariaDB stack on the NAS (a real `wordpress`
+  framework scaffold — `--target-db-mode container` or `external`/shared, default `external`),
+  restores the source's DB dump into it, and pushes `wp-content` over. Then wires up the domain:
+  Cloudflare DNS + tunnel ingress are updated via the same mechanism as `create`'s automatic
+  Cloudflare setup. Before that write, the target domain's *current* DNS record(s) and tunnel
+  ingress are snapshotted to `migration-backups/<target-slug>/cloudflare-before.json`, plus a
+  generated `cloudflare-rollback.md` with literal revert steps — captured before the first write,
+  not reconstructed afterward.
+- **`existing-site-replace`**: overwrites an already-deployed, already-empty target WordPress
+  site's DB and `wp-content` in place. Requires `--yes` (or an interactive confirmation prompt) --
+  a full backup (`pre-overwrite-dump.sql.gz` + a `wp-content` copy) is taken to
+  `migration-backups/<target-slug>/` before anything is touched, regardless. Since source and
+  target domains differ here, runs a serialization-safe `wp-cli search-replace` afterward (a
+  plain SQL `REPLACE()` would corrupt Elementor's/any page-builder's serialized postmeta) --
+  `wp-cli.phar` is downloaded once, used, then removed. No Cloudflare changes in this mode (the
+  target's DNS is already live). Jetpack/Google Site Kit (if active) need manual reconnection
+  afterward -- their connection is tied to site identity, which changes on a clone.
+
+Other flags: `--target-workspace` (NAS/Cloudflare workspace for the target), `--force` (overwrite
+an existing NAS project directory, `new-site` only), `--strict-cloudflare`, `--backup-dir`
+(default `migration-backups/`, gitignored like `migration-reports/`).
+
+**`--transfer-mode`** controls how the DB dump and `wp-content` actually move from source to
+target:
+
+- **`direct`** (default): the DB dump and a `tar` of `wp-content` each stream straight through
+  the SSH channel, in memory, on their own. Nothing is ever written to the source's disk.
+- **`full-archive`**: bundles the DB dump plus a best-effort copy of the Nginx vhost config and
+  any Let's Encrypt cert/key found for the domain into a `_migration_bundle/` folder alongside
+  the site, zips the whole thing (`wp-content` + core + that bundle) into one archive, transfers
+  it, then **always deletes the staging folder and the zip from the source again** — even if a
+  later step fails — so the source ends the run in exactly the state it started, just with a
+  brief window where it wasn't strictly read-only. Requires `zip` on the source (fails with a
+  clear message if missing, telling you to install it or fall back to `--transfer-mode direct`).
+  The Nginx config and cert/key are captured for your own reference only, under
+  `--backup-dir/<target-slug>/source-bundle/` — they're not applied to the NAS target (Cloudflare
+  Tunnel terminates TLS there, and Traefik replaces Nginx as the reverse proxy).
+
+## GoDaddy (Domain Registrar)
+
+Some domains are registered at GoDaddy but delegate DNS elsewhere (Cloudflare, AWS Route53, ...)
+-- GoDaddy is just the registrar, its own nameserver setting is the one thing that actually
+matters there. `godaddy-nameservers` and `godaddy-dns` manage that side directly via the GoDaddy
+API. Credentials come from `secrets/<workspace>/godaddy.env` (see "Workspaces" above) or the root
+`.env`'s `GD_*` block -- unlike Cloudflare/NAS workspaces, a GoDaddy account isn't matched to a
+domain by config; `--workspace` picks the account explicitly, and the GoDaddy API itself is the
+source of truth for which domains that account can manage.
+
+```bash
+# Read-only: compare what's currently set at GoDaddy against this domain's Cloudflare zone
+synology-site godaddy-nameservers example.com --check --expected-provider cloudflare
+
+# Read-only: compare against an explicit list instead
+synology-site godaddy-nameservers example.com --check --expected-nameservers ns1.example,ns2.example
+
+# Write: snapshots the current nameservers first, then requires confirmation
+synology-site godaddy-nameservers example.com --set ns1.example,ns2.example --yes
+
+# DNS records at GoDaddy itself (only relevant if not delegated away)
+synology-site godaddy-dns example.com --list
+synology-site godaddy-dns example.com --add "TXT,@,some-verification-value"
+```
+
+**`--set` is the highest-blast-radius write in this whole tool** -- a wrong nameserver set can
+take a domain's entire DNS resolution offline, with propagation measured in hours and no instant
+rollback. It always writes a snapshot of the domain's prior nameservers to
+`godaddy-backups/<domain>/nameservers-before.json` plus a `rollback.md` with the exact prior
+values, before ever calling the GoDaddy API, and always requires `--yes` or an interactive
+confirmation. `--check` is read-only and always safe.
+
+`create` and `migrate-from-lightsail --execute` (`new-site` mode) both run the `--check`
+comparison automatically after a successful Cloudflare cutover, printing a warning on a mismatch
+-- but only if a GoDaddy account is actually configured, and this can never fail or block the
+deploy/migration itself (any error here is swallowed). Nameserver **writes** are never automatic
+in either flow; that's always a separate, explicit `godaddy-nameservers --set --yes` run.
 
 ### Registry-Based Deploys (Recommended For Production)
 

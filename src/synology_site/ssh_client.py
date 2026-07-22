@@ -140,6 +140,14 @@ class SSHClient:
         except Exception:  # noqa: BLE001
             self._upload_bytes_via_stdin(remote_path, content.encode("utf-8"))
 
+    def upload_bytes(self, remote_path: str, content: bytes) -> None:
+        client = self._require_client()
+        try:
+            with client.open_sftp() as sftp, sftp.file(remote_path, "wb") as remote_file:
+                remote_file.write(content)
+        except Exception:  # noqa: BLE001
+            self._upload_bytes_via_stdin(remote_path, content)
+
     def upload_directory(
         self,
         local_root: Path,
