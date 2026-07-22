@@ -29,6 +29,7 @@ Contact: `pedro@veloso.dev`
 - `restart-all --all-targets`: safely brings a whole fleet up, one Compose service at a time with a pause between each and a load-based abort — the safe alternative to a bulk `docker compose up -d` sweep. `--only <domain-or-slug>` (repeatable) and `--dry-run` supported.
 - `backup-plan`: generates a local MariaDB backup script/env template/scheduler examples for `--with-db` sites.
 - `tunnel-fix-plan`: generates a self-contained script (+ DSM Task Scheduler/crontab examples) that keeps the `cloudflared` container alive on its own schedule, directly on the NAS.
+- `swap-fix-plan`: generates two self-contained scripts (+ DSM Task Scheduler/crontab examples) for NAS swap — one creates/sizes a swap file (Synology has no GUI swap resize), the other reclaims stuck swap on a schedule, but only when there's enough free RAM to do so safely. `doctor`'s swap check is what flags when this is needed.
 - `uptime-kuma-monitor-instructions`: prints step-by-step Uptime Kuma monitor setup for a hostname behind the Cloudflare Tunnel.
 - `migrate-from-lightsail --dry-run`: read-only discovery of a WordPress site on an AWS Lightsail instance, producing a migration-readiness report (no writes anywhere). `--execute` (the actual migration) is not implemented yet.
 - Optional deploy/update webhook notifications for Slack or Discord.

@@ -28,6 +28,7 @@ from synology_site.commands.show_tunnel import app as show_tunnel_app
 from synology_site.commands.start import app as start_app
 from synology_site.commands.start_resilinked_api import app as start_resilinked_api_app
 from synology_site.commands.stop import app as stop_app
+from synology_site.commands.swap_fix_plan import app as swap_fix_plan_app
 from synology_site.commands.tunnel_fix_plan import app as tunnel_fix_plan_app
 from synology_site.commands.update import app as update_app
 from synology_site.commands.uptime_kuma_monitor import app as uptime_kuma_monitor_app
@@ -64,6 +65,7 @@ app.command(name="remove")(remove_app)
 app.command(name="cloudflare-instructions")(tunnel_fix.cloudflare_instructions)
 app.command(name="tunnel-fix-autostart")(tunnel_fix.tunnel_fix_autostart)
 app.command(name="tunnel-fix-plan")(tunnel_fix_plan_app)
+app.command(name="swap-fix-plan")(swap_fix_plan_app)
 app.command(name="uptime-kuma-monitor-instructions")(uptime_kuma_monitor_app)
 app.command(name="set-autostart")(tunnel_fix.set_autostart)
 app.command(name="workspaces")(workspaces_app)
