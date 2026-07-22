@@ -32,9 +32,12 @@ from synology_site.lightsail.migration import (
     create_full_site_archive,
     dump_container_database,
     dump_host_database,
+    dump_wp_content_volume,
     extract_full_site_archive,
     fetch_wp_content,
+    inspect_existing_wordpress_deployment,
     push_wp_content,
+    push_wp_content_to_volume,
     restore_container_database,
 )
 from synology_site.lightsail.report import DnsRecordInfo, render_dry_run_report
@@ -386,7 +389,6 @@ def run_execute(  # noqa: PLR0913
                         db_user=database_user(target_domain),
                         db_password=target_env["WORDPRESS_DB_PASSWORD"],
                         sql_text=sql_dump_bytes.decode("utf-8"),
-                        project_path=create_result.project_path,
                         drop_existing_tables=False,
                     )
                     push_wp_content(target_ssh, wp_content_dir, create_result.project_path)
@@ -409,21 +411,44 @@ def run_execute(  # noqa: PLR0913
                     cloudflare_configured=cloudflare_configured,
                 )
 
-            # existing-site-replace
+            # existing-site-replace. The target may or may not follow this tool's own
+            # `wordpress` scaffold layout (app/.env, bind-mounted wp-content) -- it may just as
+            # well be hand-deployed or `deploy`-managed, with its own Compose file that doesn't.
+            # Try the fast native path first; fall back to introspecting whatever's actually
+            # there via `docker compose config` (fully resolves ${VAR} interpolation itself).
             project_path = f"{target.docker_root.rstrip('/')}/{domain_to_slug(target_domain)}"
             with target_ssh_factory(connection_settings, target_prompted_password) as target_ssh:
-                target_env = _read_remote_env(target_ssh, f"{project_path}/app/.env")
-                target_db_container = target_env["WORDPRESS_DB_HOST"]
-                target_db_name = target_env["WORDPRESS_DB_NAME"]
-                target_db_user = target_env["WORDPRESS_DB_USER"]
-                target_db_password = target_env["WORDPRESS_DB_PASSWORD"]
-                target_table_prefix = target_env.get("WORDPRESS_TABLE_PREFIX", "wp_")
                 marker = json.loads(
                     target_ssh.run(
                         f"cat {shlex.quote(project_path)}/.synology-site.json", check=True
                     ).stdout
                 )
-                target_port = marker["port"]
+                target_port = marker.get("port")
+                compose_file = marker.get("compose_file", "docker-compose.yml")
+                github_sync_repo: str | None = None
+
+                native_env_path = f"{project_path}/app/.env"
+                if target_ssh.run(f"test -f {shlex.quote(native_env_path)}").ok:
+                    target_env = _read_remote_env(target_ssh, native_env_path)
+                    target_db_container = target_env["WORDPRESS_DB_HOST"]
+                    target_db_name = target_env["WORDPRESS_DB_NAME"]
+                    target_db_user = target_env["WORDPRESS_DB_USER"]
+                    target_db_password = target_env["WORDPRESS_DB_PASSWORD"]
+                    target_table_prefix = target_env.get("WORDPRESS_TABLE_PREFIX", "wp_")
+                    app_container = domain_to_slug(target_domain)
+                    wp_content_is_volume = False
+                else:
+                    deployment = inspect_existing_wordpress_deployment(
+                        target_ssh, project_path=project_path, compose_file=compose_file
+                    )
+                    target_db_container = deployment.db_host
+                    target_db_name = deployment.db_name
+                    target_db_user = deployment.db_user
+                    target_db_password = deployment.db_password
+                    target_table_prefix = deployment.table_prefix
+                    app_container = deployment.container_name
+                    wp_content_is_volume = deployment.wp_content_is_volume
+                    github_sync_repo = deployment.github_sync_repo
 
                 if target_table_prefix != creds.table_prefix:
                     msg = (
@@ -447,9 +472,16 @@ def run_execute(  # noqa: PLR0913
                 backup_sql_path.write_bytes(gzip.compress(backup_sql))
 
                 with tempfile.TemporaryDirectory() as backup_tmp:
-                    existing_wp_content = fetch_wp_content(
-                        target_ssh, project_path, Path(backup_tmp)
-                    )
+                    if wp_content_is_volume:
+                        existing_wp_content = dump_wp_content_volume(
+                            target_ssh,
+                            container_name=app_container,
+                            local_tmp_dir=Path(backup_tmp),
+                        )
+                    else:
+                        existing_wp_content = fetch_wp_content(
+                            target_ssh, project_path, Path(backup_tmp)
+                        )
                     backup_wp_content_dir = target_slug_dir / "wp-content"
                     if backup_wp_content_dir.exists():
                         shutil.rmtree(backup_wp_content_dir)
@@ -462,27 +494,43 @@ def run_execute(  # noqa: PLR0913
                     db_user=target_db_user,
                     db_password=target_db_password,
                     sql_text=sql_dump_bytes.decode("utf-8"),
-                    project_path=project_path,
                     drop_existing_tables=True,
                 )
-                target_ssh.run(f"rm -rf {shlex.quote(project_path)}/wp-content", check=True)
-                push_wp_content(target_ssh, wp_content_dir, project_path)
 
-                # wp-cli.phar must land inside the wp-content bind mount to be visible inside
-                # the container at all (only wp-content is bind-mounted, not the whole project
-                # directory) -- and gets deleted again once search-replace is done.
-                wp_cli_host_path = f"{project_path}/wp-content/wp-cli.phar"
-                wp_cli_container_path = "/var/www/html/wp-content/wp-cli.phar"
-                target_ssh.upload_bytes(wp_cli_host_path, wp_cli_download())
+                if wp_content_is_volume:
+                    push_wp_content_to_volume(
+                        target_ssh,
+                        wp_content_dir,
+                        container_name=app_container,
+                    )
+                else:
+                    target_ssh.run(f"rm -rf {shlex.quote(project_path)}/wp-content", check=True)
+                    push_wp_content(target_ssh, wp_content_dir, project_path)
+
+                # wp-cli.phar is copied straight into the running container's own filesystem via
+                # `docker cp` -- this works regardless of how wp-content is mounted (bind mount
+                # or named volume), unlike stashing it inside wp-content itself (which only
+                # worked when wp-content was a host bind mount).
                 docker = docker_command(target_ssh)
-                slug = domain_to_slug(target_domain)
+                wp_cli_host_path = f"/tmp/wp-cli-{domain_to_slug(target_domain)}.phar"
+                wp_cli_container_path = "/tmp/wp-cli.phar"
+                target_ssh.upload_bytes(wp_cli_host_path, wp_cli_download())
+                target_ssh.run(
+                    f"{docker} cp {shlex.quote(wp_cli_host_path)} "
+                    f"{shlex.quote(app_container)}:{shlex.quote(wp_cli_container_path)}",
+                    check=True,
+                )
+                target_ssh.run(f"rm -f {shlex.quote(wp_cli_host_path)}")
                 search_replace = target_ssh.run(
-                    f"{docker} exec -u www-data {shlex.quote(slug)} php "
+                    f"{docker} exec -u www-data {shlex.quote(app_container)} php "
                     f"{shlex.quote(wp_cli_container_path)} search-replace "
                     f"{shlex.quote(source_domain)} {shlex.quote(target_domain)} "
                     "--all-tables --path=/var/www/html"
                 )
-                target_ssh.run(f"rm -f {shlex.quote(wp_cli_host_path)}")
+                target_ssh.run(
+                    f"{docker} exec {shlex.quote(app_container)} "
+                    f"rm -f {shlex.quote(wp_cli_container_path)}"
+                )
                 if not search_replace.ok:
                     detail = search_replace.stderr or search_replace.stdout
                     raise SynologySiteError(f"wp-cli search-replace failed: {detail}")
@@ -491,11 +539,22 @@ def run_execute(  # noqa: PLR0913
                 "Jetpack and Google Site Kit (if active) need manual reconnection after this "
                 "clone -- their connection is tied to site identity, which changed."
             )
+            if github_sync_repo:
+                warn(
+                    f"This target has a GitHub-sync plugin wired to {github_sync_repo!r} -- "
+                    "publishing or editing a post there will push it to that repo. Confirm "
+                    "this is still wanted before publishing anything on the migrated content."
+                )
+            local_url = (
+                f"http://{target.local_base_url_host}:{target_port}"
+                if target_port is not None
+                else f"https://{target_domain}"
+            )
             return ExecuteResult(
                 domain=target_domain,
                 target_mode=target_mode,
                 project_path=project_path,
-                local_url=f"http://{target.local_base_url_host}:{target_port}",
+                local_url=local_url,
                 backup_paths=(backup_sql_path, backup_wp_content_dir),
                 cloudflare_configured=False,
             )

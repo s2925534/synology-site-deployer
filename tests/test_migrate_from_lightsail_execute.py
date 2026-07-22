@@ -90,6 +90,19 @@ def _tar_b64(files: dict[str, bytes]) -> str:
     return base64.b64encode(buf.getvalue()).decode()
 
 
+def _volume_tar_b64(files: dict[str, bytes]) -> str:
+    """Like _tar_b64, but without the wp-content/ prefix -- dump_wp_content_volume tars from
+    /data (the volume root, which *is* wp-content's contents), unlike fetch_wp_content's
+    `tar -C {doc_root} wp-content` which includes wp-content/ as its own top-level entry."""
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        for relpath, content in files.items():
+            info = tarfile.TarInfo(name=relpath)
+            info.size = len(content)
+            tar.addfile(info, io.BytesIO(content))
+    return base64.b64encode(buf.getvalue()).decode()
+
+
 def discovery_responses(
     doc_root: str = DOC_ROOT, *, s3_offload: bool = False
 ) -> dict[str, tuple[int, str]]:
@@ -359,11 +372,11 @@ def test_run_execute_existing_site_replace_backs_up_and_search_replaces(tmp_path
         "'MYSQL_PWD=targetpw mariadb-dump --no-tablespaces "
         "-udemo_example_com_user demo_example_com' | gzip -c | base64"
     )
-    show_tables_command = (
-        "docker exec -i demo-example-com-db sh -c "
-        "'MYSQL_PWD=targetpw mariadb -N -udemo_example_com_user "
-        '-e "SHOW TABLES" demo_example_com\''
+    list_inner = (
+        "MYSQL_PWD=targetpw mariadb -N -udemo_example_com_user "
+        f"-e {shlex.quote('SHOW TABLES')} demo_example_com"
     )
+    show_tables_command = f"docker exec -i demo-example-com-db sh -c {shlex.quote(list_inner)}"
     target_fake.responses[backup_dump_command] = (0, _gzip_b64(b"-- old target dump --\n"))
     target_fake.responses[show_tables_command] = (0, "wp_options\nwp_posts\n")
     target_fake.responses[f"tar czf - -C {project_path} wp-content | base64"] = (
@@ -436,6 +449,113 @@ def test_run_execute_full_archive_transfer_mode_builds_and_cleans_up_source(
     bundle_backup = backup_dir / "demo-example-com" / "source-bundle"
     assert (bundle_backup / "nginx.conf").exists()
     assert (bundle_backup / "database.sql").exists()
+
+
+BESPOKE_COMPOSE_CONFIG = """
+services:
+  systemsnotsilos-com:
+    image: wordpress:latest
+    container_name: systemsnotsilos-com
+    environment:
+      WORDPRESS_DB_HOST: systemsnotsilos-com-db
+      WORDPRESS_DB_NAME: systemsnotsilos_com
+      WORDPRESS_DB_USER: systemsnotsilos_com_user
+      WORDPRESS_DB_PASSWORD: targetpw
+      GITHUB_SYNC_REPO: s2925534/systemsnotsilos
+    volumes:
+      - type: volume
+        source: systemsnotsilos-com-wp-content
+        target: /var/www/html/wp-content
+      - type: bind
+        source: /volume1/docker/systemsnotsilos-com/mu-plugins
+        target: /var/www/html/wp-content/mu-plugins
+volumes:
+  systemsnotsilos-com-wp-content:
+    name: systemsnotsilos-com-wp-content
+"""
+
+
+def test_run_execute_existing_site_replace_handles_bespoke_non_scaffold_target(
+    tmp_path: Path,
+) -> None:
+    """Real-world shape: a target deployed by hand or via `deploy`, not this tool's own
+    `wordpress` scaffold -- no app/.env, wp-content is a named Docker volume, DB host/name/user
+    are hardcoded in the compose file (only the password came from .env), and it has a
+    GitHub-sync-style mu-plugin. Must be handled without ever touching that plugin's separate
+    bind mount, and must warn (not fail) about the sync repo.
+    """
+    project_path = "/volume1/docker/systemsnotsilos-com"
+    target_fake = FakeSSH(dict(DOCKER_BOOTSTRAP_RESPONSES))
+    target_fake.uploads[f"{project_path}/.synology-site.json"] = (
+        '{"tool": "synology-site-deployer", "domain": "systemsnotsilos.com", '
+        '"framework": "existing", "port": null, "compose_file": "docker-compose.yml"}'
+    )
+    target_fake.responses[f"test -f {project_path}/app/.env"] = (1, "")
+    target_fake.responses[
+        f"cd {project_path} && docker compose -f docker-compose.yml config"
+    ] = (0, BESPOKE_COMPOSE_CONFIG)
+
+    backup_dump_command = (
+        "docker exec -i systemsnotsilos-com-db sh -c "
+        "'MYSQL_PWD=targetpw mariadb-dump --no-tablespaces "
+        "-usystemsnotsilos_com_user systemsnotsilos_com' | gzip -c | base64"
+    )
+    bespoke_list_inner = (
+        "MYSQL_PWD=targetpw mariadb -N -usystemsnotsilos_com_user "
+        f"-e {shlex.quote('SHOW TABLES')} systemsnotsilos_com"
+    )
+    show_tables_command = (
+        f"docker exec -i systemsnotsilos-com-db sh -c {shlex.quote(bespoke_list_inner)}"
+    )
+    volume_dump_command = (
+        "docker exec -u www-data systemsnotsilos-com "
+        "tar czf - -C /var/www/html/wp-content . | base64"
+    )
+    target_fake.responses[backup_dump_command] = (0, _gzip_b64(b"-- old target dump --\n"))
+    target_fake.responses[show_tables_command] = (0, "wp_options\nwp_posts\n")
+    target_fake.responses[volume_dump_command] = (
+        0,
+        _volume_tar_b64({"index.php": b"<?php // old target content\n"}),
+    )
+
+    backup_dir = tmp_path / "migration-backups"
+    result = run_execute(
+        source=source(),
+        source_domain="veloso.dev",
+        target_domain="systemsnotsilos.com",
+        target_mode="existing-site-replace",
+        settings=settings(),
+        confirmed=True,
+        source_ssh_factory=lambda _source, _password: source_ssh(),
+        target_ssh_factory=lambda _settings, _password: target_fake,
+        backup_dir=backup_dir,
+        wp_cli_download=lambda: b"phar-bytes",
+    )
+
+    assert result.local_url == "https://systemsnotsilos.com"  # null port -> no host:port shown
+    assert (backup_dir / "systemsnotsilos-com" / "pre-overwrite-dump.sql.gz").exists()
+    assert (backup_dir / "systemsnotsilos-com" / "wp-content" / "index.php").exists()
+
+    volume_push_command = next(
+        c for c in target_fake.commands if c.startswith("docker exec -i -u www-data")
+    )
+    assert "systemsnotsilos-com" in volume_push_command
+    assert "find /var/www/html/wp-content -mindepth 1 -delete" in volume_push_command
+    # the mu-plugins bind mount is a completely separate mount -- never referenced anywhere
+    assert not any("mu-plugins" in c for c in target_fake.commands)
+
+    assert any(
+        c == "docker cp /tmp/wp-cli-systemsnotsilos-com.phar systemsnotsilos-com:/tmp/wp-cli.phar"
+        for c in target_fake.commands
+    )
+    assert any(
+        "search-replace veloso.dev systemsnotsilos.com" in c for c in target_fake.commands
+    )
+    assert any(
+        c == "docker exec systemsnotsilos-com rm -f /tmp/wp-cli.phar"
+        for c in target_fake.commands
+    )
+    assert result.cloudflare_configured is False
 
 
 def test_run_execute_rejects_unknown_transfer_mode() -> None:

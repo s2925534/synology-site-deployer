@@ -586,7 +586,11 @@ target. What happens next depends on `--target-mode`:
   plain SQL `REPLACE()` would corrupt Elementor's/any page-builder's serialized postmeta) --
   `wp-cli.phar` is downloaded once, used, then removed. No Cloudflare changes in this mode (the
   target's DNS is already live). Jetpack/Google Site Kit (if active) need manual reconnection
-  afterward -- their connection is tied to site identity, which changes on a clone.
+  afterward -- their connection is tied to site identity, which changes on a clone. The target
+  doesn't have to follow this tool's own `wordpress` scaffold layout: if `app/.env` isn't found,
+  it falls back to introspecting whatever Compose file is actually there via `docker compose
+  config` (handles wp-content as a named Docker volume instead of a bind mount, DB credentials
+  hardcoded in the Compose file rather than `.env`, and a missing/`null` port).
 
 Other flags: `--target-workspace` (NAS/Cloudflare workspace for the target), `--force` (overwrite
 an existing NAS project directory, `new-site` only), `--strict-cloudflare`, `--backup-dir`

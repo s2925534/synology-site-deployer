@@ -114,9 +114,18 @@ class SSHClient:
                 _stdin.write(stdin if stdin.endswith("\n") else f"{stdin}\n")
                 _stdin.flush()
                 _stdin.channel.shutdown_write()
-            exit_code = stdout_stream.channel.recv_exit_status()
+            # Must drain stdout/stderr *before* recv_exit_status(), not after: paramiko's
+            # channel has a fixed-size receive window, and a remote command producing more
+            # output than that window blocks trying to write once it's full. If nothing is
+            # reading yet (because we're sitting in recv_exit_status() waiting for the process
+            # to exit), the process can never finish writing, so it never exits, so
+            # recv_exit_status() never returns -- a real deadlock, invisible for small output
+            # but guaranteed for anything past roughly a channel-window's worth (confirmed
+            # against a real 159MB wp-content tar+base64 stream, which reproducibly hung here
+            # before this fix).
             stdout = stdout_stream.read().decode("utf-8", errors="replace")
             stderr = stderr_stream.read().decode("utf-8", errors="replace")
+            exit_code = stdout_stream.channel.recv_exit_status()
         except Exception as exc:  # noqa: BLE001
             msg = f"Remote command failed to execute: {command}"
             raise SynologySiteError(msg) from exc
