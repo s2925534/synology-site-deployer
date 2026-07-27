@@ -1,0 +1,101 @@
+{
+  "domain": "veloso.dev",
+  "_comment": [
+    "Group 'aliases': pv/resume/cv.veloso.dev -> p.veloso.dev, path preserved. Enabled now --",
+    "these have zero effect on veloso.dev root and are needed for the aliases to work at all.",
+    "Group 'blog-redirect': veloso.dev's old WordPress post/category/tag links -> their",
+    "systemsnotsilos.com equivalents (see ../veloso.dev/RELAUNCH-PLAN.md §4). Created disabled",
+    "on purpose -- this is the parked half of the veloso.dev relaunch, enabled later via",
+    "`synology-site redirect-ruleset veloso.dev --enable-group blog-redirect --yes`.",
+    "Path/permalink structure confirmed by a direct DB query against both veloso.dev and",
+    "systemsnotsilos.com (RELAUNCH-PLAN.md §1/§3) -- do not hand-edit the expressions below",
+    "without re-checking that structure hasn't changed.",
+    "The 'posts' rule uses starts_with year-prefix branches instead of a regex: this account's",
+    "Cloudflare plan doesn't have the `matches` operator entitlement (Business/WAF Advanced",
+    "only), and --apply sends the whole ruleset in one PUT, so a single regex rule blocked the",
+    "aliases group too. Years cover 2023-2027 (published posts run 2023-05-05 to 2026-07-08 per",
+    "RELAUNCH-PLAN.md §1, plus one year of buffer); the blog now lives permanently on",
+    "systemsnotsilos.com so veloso.dev shouldn't gain new dated posts, but extend this list if",
+    "it ever does."
+  ],
+  "rules": [
+    {
+      "group": "aliases",
+      "name": "pv",
+      "description": "pv.veloso.dev -> p.veloso.dev (path preserved)",
+      "enabled": true,
+      "expression": "(http.host eq \"pv.veloso.dev\")",
+      "target": {
+        "type": "dynamic",
+        "value": "concat(\"https://p.veloso.dev\", http.request.uri.path)"
+      },
+      "status_code": 301,
+      "preserve_query_string": true
+    },
+    {
+      "group": "aliases",
+      "name": "resume",
+      "description": "resume.veloso.dev -> p.veloso.dev (path preserved)",
+      "enabled": true,
+      "expression": "(http.host eq \"resume.veloso.dev\")",
+      "target": {
+        "type": "dynamic",
+        "value": "concat(\"https://p.veloso.dev\", http.request.uri.path)"
+      },
+      "status_code": 301,
+      "preserve_query_string": true
+    },
+    {
+      "group": "aliases",
+      "name": "cv",
+      "description": "cv.veloso.dev -> p.veloso.dev (path preserved)",
+      "enabled": true,
+      "expression": "(http.host eq \"cv.veloso.dev\")",
+      "target": {
+        "type": "dynamic",
+        "value": "concat(\"https://p.veloso.dev\", http.request.uri.path)"
+      },
+      "status_code": 301,
+      "preserve_query_string": true
+    },
+    {
+      "group": "blog-redirect",
+      "name": "posts",
+      "description": "Dated post permalinks (/YYYY/MM/DD/slug/) -> systemsnotsilos.com. Regex-free (starts_with year branches) so it works on this account's Cloudflare plan. PARKED: created disabled.",
+      "enabled": false,
+      "expression": "(http.host in {\"veloso.dev\" \"www.veloso.dev\"} and (http.request.uri.path starts_with \"/2023/\" or http.request.uri.path starts_with \"/2024/\" or http.request.uri.path starts_with \"/2025/\" or http.request.uri.path starts_with \"/2026/\" or http.request.uri.path starts_with \"/2027/\"))",
+      "target": {
+        "type": "dynamic",
+        "value": "concat(\"https://www.systemsnotsilos.com\", http.request.uri.path)"
+      },
+      "status_code": 301,
+      "preserve_query_string": true
+    },
+    {
+      "group": "blog-redirect",
+      "name": "category",
+      "description": "/category/<slug>/ archives -> systemsnotsilos.com. PARKED: created disabled.",
+      "enabled": false,
+      "expression": "(http.host in {\"veloso.dev\" \"www.veloso.dev\"} and http.request.uri.path starts_with \"/category/\")",
+      "target": {
+        "type": "dynamic",
+        "value": "concat(\"https://www.systemsnotsilos.com\", http.request.uri.path)"
+      },
+      "status_code": 301,
+      "preserve_query_string": true
+    },
+    {
+      "group": "blog-redirect",
+      "name": "tag",
+      "description": "/tag/<slug>/ archives -> systemsnotsilos.com. PARKED: created disabled.",
+      "enabled": false,
+      "expression": "(http.host in {\"veloso.dev\" \"www.veloso.dev\"} and http.request.uri.path starts_with \"/tag/\")",
+      "target": {
+        "type": "dynamic",
+        "value": "concat(\"https://www.systemsnotsilos.com\", http.request.uri.path)"
+      },
+      "status_code": 301,
+      "preserve_query_string": true
+    }
+  ]
+}
