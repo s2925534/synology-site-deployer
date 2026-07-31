@@ -199,6 +199,44 @@ they all happened to be checked out into a directory literally called `repo`.
   needed) — `test_docker_remote.py` additions, `test_doctor_command.py`,
   `test_restart_all_command.py`, `test_health_command.py` additions.
 
+## Phase 15 — Redirect Rules (Create Disabled, Flip On Later)
+
+Came out of a real need in a sibling project (veloso.dev's relaunch): stage a domain's redirect
+rules on Cloudflare ahead of time in a disabled state, then flip a defined group of them on with
+one command once, later — without re-deriving the rule content at flip time. Built generic/
+reusable from the start, not veloso.dev-specific.
+
+- [Done] `cloudflare/redirects.py` — `RedirectRule`/`RedirectTarget`/`RedirectRuleSet` data model,
+  JSON rules-file loader, Cloudflare rule-payload builder, `with_group_enabled` (pure, operates on
+  Cloudflare's own GET response — no rules file needed to toggle a group later)
+- [Done] `CloudflareAPI.get_redirect_ruleset`/`set_redirect_ruleset_rules` — the Ruleset Engine's
+  `http_request_dynamic_redirect` phase entrypoint (read/replace-the-whole-set); `_request` gained
+  a `not_found_ok` option so "no ruleset created yet" reads as an empty list, not an error
+- [Done] `redirect-ruleset <domain> --status|--apply|--enable-group|--disable-group` — same safety
+  shape as `godaddy-nameservers`: `--status` read-only by default, writes snapshot the zone's prior
+  rule state to `--backup-dir` first and require `--yes`/confirmation
+- [Done] `redirects/veloso-dev.json` — the real first consumer: `aliases` group (pv/resume/cv →
+  p.veloso.dev, enabled) and `blog-redirect` group (old WordPress post/category/tag links →
+  systemsnotsilos.com, created disabled on purpose)
+- [Done] Tests: `test_cloudflare_redirects.py`, `test_redirect_ruleset_command.py`, plus
+  `get_redirect_ruleset`/`set_redirect_ruleset_rules` cases in `test_cloudflare_api.py`
+- [Done] README: "Redirect Rules" section
+- [Done] Live verification against a real Cloudflare zone (`veloso.dev`, 2026-07-23). `--status`
+  confirmed the payload shape and 404-when-empty handling are correct as written. `--apply`
+  surfaced two real findings, both applicable beyond this one project:
+  - **The `matches` (regex) operator isn't available on every plan** — a real `--apply` failed
+    outright with `not entitled: the use of operator Matches is not allowed, a Business plan or a
+    WAF Advanced plan is required`. Since `--apply` PUTs the whole rule set atomically, one rule
+    using `matches` blocks every other rule in the same file, even ones that don't need it. No
+    code fix applied yet — either detect/warn on `matches` before sending, or document it
+    prominently (currently just discovered, not mitigated).
+  - **A rule alone doesn't make a hostname reachable.** Redirect Rules only evaluate after a
+    request reaches the zone's Cloudflare edge — a rule referencing a hostname with no DNS record
+    at all is silently inert (confirmed: `pv.veloso.dev` etc. 404'd/NXDOMAIN'd until a DNS record
+    was created via the unrelated `cloudflare-route` command). `redirect-ruleset --apply` should
+    probably ensure a DNS record exists for every hostname its rules reference, rather than
+    requiring this as a manual follow-up step every time. Not implemented yet.
+
 ---
 
 Design rationale and phased rollout detail for Phase 4 lives in `docs/laravel-scaffold-options.md`.

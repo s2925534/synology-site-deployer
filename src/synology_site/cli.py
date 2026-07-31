@@ -23,6 +23,7 @@ from synology_site.commands.health import app as health_app
 from synology_site.commands.inspect_containers import logs_app, ps_app
 from synology_site.commands.list_sites import app as list_app
 from synology_site.commands.migrate_from_lightsail import app as migrate_from_lightsail_app
+from synology_site.commands.redirect_ruleset import app as redirect_ruleset_app
 from synology_site.commands.registry_login import app as registry_login_app
 from synology_site.commands.remove import app as remove_app
 from synology_site.commands.restart_all import app as restart_all_app
@@ -74,6 +75,7 @@ app.command(name="workspaces")(workspaces_app)
 app.command(name="migrate-from-lightsail")(migrate_from_lightsail_app)
 app.command(name="godaddy-nameservers")(godaddy_nameservers_app)
 app.command(name="godaddy-dns")(godaddy_dns_app)
+app.command(name="redirect-ruleset")(redirect_ruleset_app)
 
 
 def main() -> None:

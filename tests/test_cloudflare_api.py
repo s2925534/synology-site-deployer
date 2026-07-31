@@ -165,3 +165,53 @@ def test_configure_cloudflare_route_updates_tunnel_and_dns() -> None:
         "content": "tunnel-id.cfargotunnel.com",
         "proxied": True,
     }
+
+
+def test_get_redirect_ruleset_returns_empty_list_when_none_exists_yet() -> None:
+    session = FakeSession()
+    session.request = lambda method, url, **kwargs: FakeResponse(
+        {"success": False, "errors": [{"message": "not found"}]}, status_code=404
+    )
+
+    rules = CloudflareAPI(account(), session=session).get_redirect_ruleset(
+        "http_request_dynamic_redirect"
+    )
+
+    assert rules == []
+
+
+def test_get_redirect_ruleset_is_read_only() -> None:
+    session = FakeSession()
+    session.request = lambda method, url, **kwargs: (
+        FakeResponse(
+            {
+                "success": True,
+                "result": {"rules": [{"ref": "aliases--pv", "enabled": True}]},
+            }
+        )
+        if method == "GET"
+        else (_ for _ in ()).throw(AssertionError(f"unexpected {method} {url}"))
+    )
+
+    rules = CloudflareAPI(account(), session=session).get_redirect_ruleset(
+        "http_request_dynamic_redirect"
+    )
+
+    assert rules == [{"ref": "aliases--pv", "enabled": True}]
+
+
+def test_set_redirect_ruleset_rules_puts_the_full_list_to_the_phase_entrypoint() -> None:
+    session = FakeSession()
+
+    rules = [{"ref": "aliases--pv", "enabled": True}]
+    CloudflareAPI(account(), session=session).set_redirect_ruleset_rules(
+        "http_request_dynamic_redirect", rules
+    )
+
+    put_call = next(r for r in session.requests if r[0] == "PUT")
+    _, url, kwargs = put_call
+    assert url == (
+        "https://api.cloudflare.com/client/v4/zones/zone"
+        "/rulesets/phases/http_request_dynamic_redirect/entrypoint"
+    )
+    assert kwargs["json"] == {"rules": rules}

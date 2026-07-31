@@ -59,6 +59,32 @@ class CloudflareAPI:
         config = current.get("result", {}).get("config") or {}
         return list(config.get("ingress") or [])
 
+    def get_redirect_ruleset(self, phase: str) -> list[dict[str, Any]]:
+        """Read-only lookup of the zone's redirect rules for a Ruleset Engine phase (e.g.
+        `http_request_dynamic_redirect`). Never writes anything. Returns an empty list if no
+        ruleset has been created for that phase on this zone yet -- that's a normal, expected
+        state (not an error) for a zone that's never had a Redirect Rule configured before."""
+        endpoint = self._redirect_ruleset_endpoint(phase)
+        current = self._request("GET", endpoint, not_found_ok=True)
+        if current is None:
+            return []
+        return list(current.get("result", {}).get("rules") or [])
+
+    def set_redirect_ruleset_rules(self, phase: str, rules: list[dict[str, Any]]) -> None:
+        """Replaces the *entire* rule list for a Ruleset Engine phase in one call -- this
+        endpoint creates the phase's entrypoint ruleset if none exists yet, or overwrites it if
+        one does. Callers are responsible for including every rule that should still exist, not
+        just the ones being added/changed (see `redirects.with_group_enabled` for an in-place
+        update that preserves everything else)."""
+        endpoint = self._redirect_ruleset_endpoint(phase)
+        self._request("PUT", endpoint, json={"rules": rules})
+
+    def _redirect_ruleset_endpoint(self, phase: str) -> str:
+        return (
+            f"{CLOUDFLARE_API_BASE}/zones/{self.account.zone_id}"
+            f"/rulesets/phases/{phase}/entrypoint"
+        )
+
     def configure_tunnel_route(self, hostname: str, service_url: str) -> CloudflareRouteResult:
         self._update_tunnel_ingress(hostname, service_url)
         dns_record_id = self._ensure_dns_record(hostname)
@@ -114,13 +140,17 @@ class CloudflareAPI:
         record_id = created.get("result", {}).get("id")
         return str(record_id) if record_id else None
 
-    def _request(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
+    def _request(
+        self, method: str, url: str, *, not_found_ok: bool = False, **kwargs: Any
+    ) -> dict[str, Any] | None:
         response = self.session.request(method, url, headers=self.headers, timeout=30, **kwargs)
         try:
             payload = response.json()
         except ValueError as exc:
             msg = "Cloudflare API returned invalid JSON"
             raise SynologySiteError(msg) from exc
+        if response.status_code == 404 and not_found_ok:
+            return None
         if response.status_code >= 400 or not payload.get("success", False):
             errors = payload.get("errors") or []
             detail = (

@@ -612,6 +612,44 @@ target:
   `--backup-dir/<target-slug>/source-bundle/` — they're not applied to the NAS target (Cloudflare
   Tunnel terminates TLS there, and Traefik replaces Nginx as the reverse proxy).
 
+## Redirect Rules
+
+`redirect-ruleset` manages a zone's Cloudflare Redirect Rules (the Ruleset Engine's
+`http_request_dynamic_redirect` phase — wildcard/pattern-based redirects, not the simpler static
+Bulk Redirects product). Built for a recurring shape: park a group of redirect rules on a zone in
+a **disabled** state ahead of time, then flip them all on later with one command, once — reusable
+across any domain/workspace, not specific to one project.
+
+```bash
+# Read-only: list every redirect rule currently on the domain's zone, and whether each is enabled
+synology-site redirect-ruleset example.com --status
+
+# Write: replace the zone's ENTIRE redirect-rule set with what's in this file (see
+# redirects/veloso-dev.json for a real example of the file format). Snapshots the prior live
+# state to --backup-dir first, always. Requires --yes or an interactive confirmation.
+synology-site redirect-ruleset example.com --apply --rules-file redirects/example-com.json --yes
+
+# Write: flip every rule in one group to enabled/disabled, leaving every other rule untouched.
+# Works from the zone's live rules alone -- no rules file needed, since each rule's `ref` already
+# encodes its group ("<group>--<name>", e.g. "blog-redirect--posts").
+synology-site redirect-ruleset example.com --enable-group blog-redirect --yes
+synology-site redirect-ruleset example.com --disable-group blog-redirect --yes
+```
+
+Rules are plain JSON, one file per domain, checked into this repo under `redirects/` (not
+`secrets/` — redirect targets aren't sensitive). Each rule has a `group`/`name` (joined into a
+stable `ref`), a Cloudflare ruleset expression, a `target` (`"static"` — a fixed URL — or
+`"dynamic"` — a rewrite expression that can carry the original path through, e.g.
+`concat("https://other.example", http.request.uri.path)`), and its own `enabled` flag.
+
+**Not yet verified against a live Cloudflare account.** The rule payload shape
+(`action_parameters.from_value.target_url` as `{"value": ...}` or `{"expression": ...}`) is
+modeled on Cloudflare's documented Redirect Rules format, but hasn't been exercised against a
+real zone yet — run `--status` against the real account first and adjust
+`cloudflare/redirects.py`'s `rule_to_cloudflare_payload` if the actual response shape differs.
+Also worth confirming before the first `--apply` on a new zone: Redirect Rules' `matches` (regex)
+expression operator requires it be enabled for that zone/plan.
+
 ## GoDaddy (Domain Registrar)
 
 Some domains are registered at GoDaddy but delegate DNS elsewhere (Cloudflare, AWS Route53, ...)
