@@ -4,6 +4,8 @@ Synology Site Deployer is a local Python CLI for deploying containerized apps to
 
 The tool is generic. Domains, NAS hosts, Docker paths, Cloudflare zones, tunnel names, and ports come from `.env`, CLI options, or validated defaults.
 
+See [CHANGELOG.md](CHANGELOG.md) for what changed and when.
+
 ## Developer
 
 Developed by Pedro Veloso.
@@ -1032,6 +1034,34 @@ Prints copy-paste steps for an HTTP(s) monitor against the domain in [Uptime Kum
 plus an optional Docker-container monitor for `cloudflared` itself (documented, not automated,
 since it requires mounting the Docker socket into Uptime Kuma). Omit `--kuma-port` if you don't
 know it yet -- run `synology-site list` to find it.
+
+## Third-Party Drives (Storage Manager)
+
+DSM 7's disk-compatibility check doesn't just warn about drives missing from Synology's
+certified-drive database -- on models with M.2/NVMe storage pool support, it hides them from
+"available drives" entirely. Storage Manager then refuses pool creation with "No drives are
+available or meet the requirements," even on hardware that fully supports the feature (confirmed
+against a real DS1525+ refusing two Samsung 9100 Pro NVMe SSDs).
+
+```bash
+synology-site allow-third-party-drives --status
+synology-site allow-third-party-drives
+synology-site allow-third-party-drives --revert
+```
+
+With no flags, it flips `support_disk_compatibility` to `"no"` in both `/etc/synoinfo.conf` and
+`/etc.defaults/synoinfo.conf` and restarts the NAS's storage daemon so Storage Manager picks up
+the change immediately -- no reboot needed. Both files are backed up (once, before the first
+change) with a `.bak.synology-site-drive-fix` suffix. Prompts for confirmation first; pass `--yes`
+to skip it for scripting. `--status` only reports the current setting. `--revert` restores DSM's
+default certified-drives-only enforcement. `--workspace <name>` targets a non-default NAS (see
+[Workspaces](#workspaces-multiple-cloudflare-accounts-multiple-nas-targets)). Drives added this way still show as unverified/uncertified in the
+DSM UI, and Synology's own S.M.A.R.T./health monitoring may be limited for them -- this only
+affects whether Storage Manager will let you use them, not how DSM assesses their health.
+
+If Storage Manager still doesn't list the drives as selectable right after running this, it's
+usually a stale web UI session rather than the fix not taking effect -- log out of DSM and back
+in (or open Storage Manager in a private window) before considering a NAS reboot.
 
 ## Operations
 

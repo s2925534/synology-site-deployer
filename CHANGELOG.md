@@ -1,0 +1,59 @@
+# Changelog
+
+Notable changes to this project, most recent first. Each entry says what changed and, for new
+functionality, where to find usage in the README.
+
+## 2026-08-05
+- Added `allow-third-party-drives` command: toggles DSM's `support_disk_compatibility` flag and
+  restarts the storage daemon so Storage Manager stops hard-filtering non-Synology-certified
+  drives (e.g. third-party NVMe SSDs) out of "available drives" for pool creation. Supports
+  `--status`, `--revert`, `--yes`, `--workspace`. See
+  [Third-Party Drives (Storage Manager)](README.md#third-party-drives-storage-manager).
+- Started this changelog.
+
+## 2026-07-31
+- Added `redirect-ruleset` command for Cloudflare Redirect Rules.
+
+## 2026-07-27
+- Redesigned blog-redirect rules to avoid the Cloudflare `matches` (regex) operator.
+
+## 2026-07-22
+- Added GoDaddy registrar support and `migrate-from-lightsail --execute` for real Lightsail-to-NAS
+  cutovers, plus reliability fixes found during a real migration.
+- Added `swap-fix-plan` command: generates NAS swap-file setup/release scripts and DSM Task
+  Scheduler/crontab instructions.
+
+## 2026-07-21
+- Fixed `health` using the LAN IP instead of the configured Tailscale host when Tailscale is
+  enabled.
+
+## 2026-07-20
+- Added `--remove-orphans` to `remove`/`stop`.
+- Fixed `restart-policy` detection (was matching a literal `\t` instead of a real tab).
+- Fixed port reuse validation to reject a port still registered to a stopped site.
+
+## 2026-07-19
+- Added `start-resilinked-api` command (handles its `supabase-db` dependency and name-conflict
+  recovery).
+- Fixed `docker ps`/`inspect` format strings; added a memory gate to `restart-all`.
+
+## 2026-07-18
+- Added `doctor` and `restart-all` commands for safe fleet health checks and recovery.
+- Added `--compose-file` to `update` for applying a compose-only change in place.
+- Added scheduled tunnel recovery safety net (`tunnel-fix-plan`) and Uptime Kuma monitor
+  instructions.
+- Fixed `list`/`create`/`deploy` always using the remote transport instead of trying LAN first.
+
+## 2026-07-15
+- Added read-only NAS diagnostics (`check-nas`, `ps`, `logs`); fixed silent deploy failures.
+
+## 2026-07-14
+- Added `registry-login` command for one-time NAS Docker registry auth; token piped via SSH
+  stdin rather than a temp file.
+
+## 2026-07-10
+- Implemented `migrate-from-lightsail --dry-run` for Lightsail-to-NAS migration planning.
+
+## 2026-07-07
+- Added `check-nas --remote` (LAN vs. remote auto-detection) and `configure-tailscale` (automates
+  writing `TAILSCALE_ENABLED`/`TAILSCALE_NAS_HOST` from the Tailscale API).

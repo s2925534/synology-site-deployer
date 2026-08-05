@@ -3,6 +3,7 @@ from __future__ import annotations
 import typer
 
 from synology_site.commands import tunnel_fix
+from synology_site.commands.allow_third_party_drives import app as allow_third_party_drives_app
 from synology_site.commands.backup_plan import app as backup_plan_app
 from synology_site.commands.bootstrap_mariadb import app as bootstrap_mariadb_app
 from synology_site.commands.bootstrap_n8n import app as bootstrap_n8n_app
@@ -54,6 +55,7 @@ app.command(name="bootstrap-umami")(bootstrap_umami_app)
 app.command(name="bootstrap-uptime-kuma")(bootstrap_uptime_kuma_app)
 app.command(name="bootstrap-vaultwarden")(bootstrap_vaultwarden_app)
 app.command(name="check-nas")(check_nas_app)
+app.command(name="allow-third-party-drives")(allow_third_party_drives_app)
 app.command(name="ensure-network")(ensure_network_app)
 app.command(name="configure-tailscale")(configure_tailscale_app)
 app.command(name="health")(health_app)
