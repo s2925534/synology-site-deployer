@@ -4,6 +4,22 @@ Notable changes to this project, most recent first. Each entry says what changed
 functionality, where to find usage in the README.
 
 ## 2026-08-05
+- Added a local activity log: `create`/`deploy`/`update` now append one JSON-lines entry per
+  successful run to `activity-log/history.jsonl` (`synology_site/activity_log.py`). Only
+  `activity-log/README.md` (format docs + example) is committed to git; the actual `*.jsonl`
+  files are gitignored (`activity-log/*.jsonl`), so history accumulates locally without bloating
+  the repo or leaking per-deployment domains/ports into git history. Best-effort: a write
+  failure there never turns a successful command into a reported failure. See
+  [Activity Log](README.md#activity-log).
+- New Flask scaffold (`create --framework flask`) now generates a "Storage location" section on
+  the public `/` page: host volume path (via a new `HOST_DATA_PATH` env var), the real underlying
+  device from `/proc/mounts`, and a persisted marker file (always shows `created at`, only the
+  last 9 `seen at` records). Adds a `./data:/app/data` bind mount to the generated Compose file;
+  `create` now creates that `data/` directory on the NAS before starting the container. Built
+  from a manual prototype validated on the `health-veloso-dev` test site while migrating its data
+  from `volume1` to the new NVMe pool -- the page correctly showed the device change
+  (`cachedev_1` -> `cachedev_2`) with marker history intact, confirming the migration moved data
+  rather than recreating it. See [Deploy Flask](README.md#deploy-flask).
 - Added `run-hdd-db-fix` command: uploads and runs a pinned `007revad/Synology_HDD_db` release on
   the NAS on demand (the live-execution counterpart to `drive-compat-fix-plan --include-hdd-db`'s
   boot-time script). Added `synology_site/hdd_db.py`, a shared fetch-with-local-cache helper

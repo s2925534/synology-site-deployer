@@ -20,3 +20,4 @@ godaddy-backups/
 redirect-backups/
 drive-compat-fix-plan/
 vendor/
+activity-log/*.jsonl

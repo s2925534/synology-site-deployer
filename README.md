@@ -239,6 +239,24 @@ synology-site list --all-targets
 specific one). `--all-targets` fans out over every configured target and aggregates the results;
 a target that's unreachable is reported inline rather than aborting the whole listing.
 
+## Activity Log
+
+Every successful `create`, `deploy`, and `update` appends one JSON-lines entry to
+`activity-log/history.jsonl` -- domain, slug, framework/ports where relevant, project path,
+workspace, and a UTC timestamp. Dry runs and failed commands are not logged (failures already
+have a separate real-time path: `NOTIFY_WEBHOOK_URL`/`NOTIFY_WEBHOOK_EVENTS` in `.env`).
+
+```bash
+tail -20 activity-log/history.jsonl | jq .
+jq 'select(.domain == "demo.example.com")' activity-log/history.jsonl
+```
+
+Only `activity-log/README.md` (the format documentation) is committed to git; the actual
+`*.jsonl` log files are gitignored, so day-to-day deployment history accumulates locally without
+bloating the repo or putting per-deployment details (domains, ports, workspace names) into git
+history. Logging is best-effort -- a write failure there (e.g. read-only filesystem) is silently
+swallowed and never turns a successful command into a reported failure.
+
 ## Deploy Flask
 
 ```bash
@@ -251,12 +269,25 @@ This creates a generated Flask app, Dockerfile, Compose file, marker file, and d
 /volume1/docker/demo-example-com
 ```
 
-The public page shows only:
+The public page (`/`) shows:
 
 ```text
 It works
 demo.example.com is running successfully.
 ```
+
+...plus a **Storage location** section: the host volume path (`<project_path>/data`, via a
+`HOST_DATA_PATH` env var set in the generated Compose file -- containers can't otherwise see
+which host path a bind mount resolves to), the underlying mount line from `/proc/mounts` (shows
+the real device, e.g. `/dev/mapper/cachedev_N`, so you can tell which physical volume it's
+actually on), and a small persisted marker file it writes to on every visit -- the `created at`
+line is always shown, but only the most recent 9 `seen at` lines. This exists to make a
+volume-to-volume data migration visually verifiable: move `<project_path>/data` to a different
+volume, update the Compose file's bind mount and `HOST_DATA_PATH` to match, restart, and the page
+should show the new path/device with the marker history intact -- proof the data moved rather
+than being recreated fresh. The generated Compose file bind-mounts `./data:/app/data`, and
+`create` creates that `data/` directory on the NAS up front (Docker refuses to start a container
+whose bind-mount source doesn't already exist).
 
 ## Deploy Flask With MariaDB
 

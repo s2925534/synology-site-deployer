@@ -13,6 +13,7 @@ import requests
 import typer
 
 from synology_site import __version__
+from synology_site.activity_log import record_activity
 from synology_site.cloudflare.api import configure_cloudflare_route
 from synology_site.cloudflare.manual_instructions import build_manual_instructions
 from synology_site.commands.check_nas import smart_ssh_factory
@@ -377,6 +378,19 @@ def app(
             )
         console.print(f"[ERROR] {exc}")
         raise typer.Exit(1) from exc
+
+    if not (dry_run or settings.dry_run):
+        record_activity(
+            "deploy",
+            details={
+                "domain": result.domain,
+                "slug": result.slug,
+                "project_path": result.project_path,
+                "port": result.port,
+                "container_name": result.container_name,
+                "workspace": workspace,
+            },
+        )
 
     console.rule("Result")
     ok(f"Domain: {result.domain}")

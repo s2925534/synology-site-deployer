@@ -49,6 +49,26 @@ def test_flask_public_page_is_minimal() -> None:
     assert "DATABASE_URL" not in app_py
 
 
+def test_flask_index_page_shows_storage_location() -> None:
+    app_py = generated_files()["app/app.py"]
+
+    assert "DATA_DIR = \"/app/data\"" in app_py
+    assert "MAX_SEEN_RECORDS = 9" in app_py
+    assert "HOST_DATA_PATH" in app_py
+    assert "/proc/mounts" in app_py
+    # created-at is always kept; only the most recent MAX_SEEN_RECORDS seen-at lines are shown
+    assert "seen_lines[-MAX_SEEN_RECORDS:]" in app_py
+    assert '"created at"' in app_py
+    assert "_storage_info()" in app_py
+
+
+def test_flask_compose_bind_mounts_data_directory() -> None:
+    compose = generated_files()["docker-compose.yml"]
+
+    assert "./data:/app/data" in compose
+    assert "HOST_DATA_PATH=/volume1/docker/demo-example-com/data" in compose
+
+
 def test_flask_scaffold_without_db_excludes_db_route_and_dependencies() -> None:
     files = generated_files()
 

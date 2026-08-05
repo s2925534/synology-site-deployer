@@ -107,6 +107,14 @@ def test_create_site_deploys_flask_without_db() -> None:
     assert "/volume1/docker/demo-example-com/docker-compose.yml" in fake.uploads
     assert "/volume1/docker/demo-example-com/docs/README.md" in fake.uploads
     assert "cd /volume1/docker/demo-example-com && docker compose up -d --build" in fake.commands
+    # the compose file bind-mounts ./data:/app/data, which Docker refuses to start if the
+    # source doesn't already exist -- must be created before `docker compose up`.
+    assert any(
+        "mkdir -p" in c and "/volume1/docker/demo-example-com/data" in c for c in fake.commands
+    )
+    compose_content = fake.uploads["/volume1/docker/demo-example-com/docker-compose.yml"]
+    assert "./data:/app/data" in compose_content
+    assert "HOST_DATA_PATH=/volume1/docker/demo-example-com/data" in compose_content
 
 
 def test_create_site_dry_run_skips_remote_writes_and_start() -> None:

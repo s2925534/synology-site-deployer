@@ -11,6 +11,7 @@ from typing import Any
 import requests
 import typer
 
+from synology_site.activity_log import record_activity
 from synology_site.cloudflare.api import CloudflareAPI, configure_cloudflare_route
 from synology_site.cloudflare.domain_split import split_domain_for_zone
 from synology_site.cloudflare.manual_instructions import build_manual_instructions
@@ -193,7 +194,7 @@ def create_site(
                 db_password=context.db_password,
             )
 
-        _prepare_remote_project(ssh, project_path, force=force)
+        _prepare_remote_project(ssh, project_path, framework=context.framework, force=force)
         _upload_files(ssh, project_path, files)
         _start_compose(ssh, project_path, compose)
         docker = docker_command(ssh)
@@ -220,13 +221,21 @@ def create_site(
     )
 
 
-def _prepare_remote_project(ssh: SSHClient, project_path: str, *, force: bool) -> None:
+def _prepare_remote_project(
+    ssh: SSHClient, project_path: str, *, framework: str, force: bool
+) -> None:
     quoted_project = shlex.quote(project_path)
     exists = ssh.run(f"test -e {quoted_project}")
     if exists.ok and not force:
         msg = f"Remote project folder already exists: {project_path}. Use --force to overwrite."
         raise SynologySiteError(msg)
-    ssh.run(f"mkdir -p {quoted_project}/app {quoted_project}/docs", check=True)
+    dirs = f"{quoted_project}/app {quoted_project}/docs"
+    if framework == "flask":
+        # Flask's compose.yml.j2 bind-mounts ./data:/app/data -- Docker refuses to start a
+        # container whose bind-mount source doesn't already exist, so it must be created
+        # before `docker compose up`, not left for the container to create on first write.
+        dirs += f" {quoted_project}/data"
+    ssh.run(f"mkdir -p {dirs}", check=True)
 
 
 def _upload_files(ssh: SSHClient, project_path: str, files: list[GeneratedFile]) -> None:
@@ -395,6 +404,20 @@ def app(
     except SynologySiteError as exc:
         console.print(f"[ERROR] {exc}")
         raise typer.Exit(1) from exc
+
+    if not (dry_run or settings.dry_run):
+        record_activity(
+            "create",
+            details={
+                "domain": result.domain,
+                "slug": result.slug,
+                "framework": framework,
+                "port": result.port,
+                "project_path": result.project_path,
+                "db_enabled": result.db_enabled,
+                "workspace": workspace,
+            },
+        )
 
     console.rule("Result")
     ok(f"Domain: {result.domain}")

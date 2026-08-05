@@ -12,6 +12,7 @@ from typing import Any
 import requests
 import typer
 
+from synology_site.activity_log import record_activity
 from synology_site.commands.check_nas import smart_ssh_factory
 from synology_site.config import Settings, load_config
 from synology_site.docker_remote import detect_compose_command, docker_command, require_docker
@@ -247,6 +248,20 @@ def app(
             )
         console.print(f"[ERROR] {exc}")
         raise typer.Exit(1) from exc
+
+    if not (dry_run or settings.dry_run):
+        record_activity(
+            "update",
+            details={
+                "domain": result.domain,
+                "slug": result.slug,
+                "project_path": result.project_path,
+                "pulled": result.pulled,
+                "built": result.built,
+                "compose_uploaded": result.compose_uploaded,
+                "workspace": workspace,
+            },
+        )
 
     ok(f"Updated {result.domain}")
     ok(f"Project folder: {result.project_path}")
