@@ -4,6 +4,19 @@ Notable changes to this project, most recent first. Each entry says what changed
 functionality, where to find usage in the README.
 
 ## 2026-08-05
+- Added `create-storage-pool` command: creates a DSM storage pool directly via `synostgpool`,
+  bypassing a separate wizard-specific restriction in Storage Manager that
+  `allow-third-party-drives` alone doesn't clear. Requires an explicit `--nvme`/`--hdd` target and
+  `--raid-level`; refuses to touch any device that already has a filesystem signature or RAID
+  membership; `--hdd` additionally refuses outright on any model listed in
+  `PROTECTED_HDD_MODELS` (ships with `DS1525+`, a real NAS whose regular bays already hold live
+  pools). See
+  [Creating the Pool Directly](README.md#creating-the-pool-directly-create-storage-pool).
+- Added `drive-compat-fix-plan` command: generates a boot-time script (DSM Task Scheduler
+  Boot-up trigger or crontab `@reboot`) that re-applies the `allow-third-party-drives` fix on
+  every boot, so a future DSM version update can't silently re-block third-party drives and
+  strand a pool built from them. See
+  [Surviving DSM Updates](README.md#surviving-dsm-updates-drive-compat-fix-plan).
 - Added `allow-third-party-drives` command: toggles DSM's `support_disk_compatibility` flag and
   restarts the storage daemon so Storage Manager stops hard-filtering non-Synology-certified
   drives (e.g. third-party NVMe SSDs) out of "available drives" for pool creation. Supports

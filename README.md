@@ -1059,9 +1059,59 @@ default certified-drives-only enforcement. `--workspace <name>` targets a non-de
 DSM UI, and Synology's own S.M.A.R.T./health monitoring may be limited for them -- this only
 affects whether Storage Manager will let you use them, not how DSM assesses their health.
 
-If Storage Manager still doesn't list the drives as selectable right after running this, it's
-usually a stale web UI session rather than the fix not taking effect -- log out of DSM and back
-in (or open Storage Manager in a private window) before considering a NAS reboot.
+If Storage Manager still doesn't list the drives as selectable right after running this and
+logging back into DSM, that's not a stale session or a reason to reboot -- it's Storage Manager's
+pool-creation *wizard* enforcing a separate restriction of its own, on top of the compatibility
+flag (confirmed: `synodisk --enum -t cache` correctly lists the drives after this fix, but the
+wizard still refuses them). See `create-storage-pool` below, which creates the pool directly and
+sidesteps the wizard entirely.
+
+### Creating the Pool Directly (`create-storage-pool`)
+
+```bash
+synology-site create-storage-pool --nvme --raid-level raid1
+synology-site create-storage-pool --nvme --raid-level basic --device /dev/nvme0n1
+synology-site create-storage-pool --hdd --raid-level shr1
+```
+
+Creates a DSM storage pool via `synostgpool` directly over SSH, bypassing Storage Manager's
+wizard-specific restriction above entirely. Storage Manager still handles the final "Create
+Volume" step on top of the resulting pool normally.
+
+- **Exactly one of `--nvme` / `--hdd` is required** -- no default, so there's no ambiguity about
+  which physical bays get touched. `--nvme` auto-detects the M.2 bays (`synodisk --enum -t
+  cache`); `--hdd` auto-detects the regular SATA bays (`-t internal`).
+- **`--raid-level`**, required. `--nvme`: `basic` (single drive, no RAID), `raid0`, `raid1`.
+  `--hdd` additionally supports `raid5`, `raid6`, `raid10`, `raid_f1`, `linear`, `shr1`, `shr2`.
+- **`--device <path>`** (repeatable) overrides auto-detection with explicit device paths --
+  required when `--raid-level basic` finds more than one candidate drive, since picking one
+  automatically would be a guess.
+- **Before touching anything**, every target device is checked for an existing filesystem
+  signature (`blkid`) or RAID membership (`/proc/mdstat`); if any device already looks in use,
+  the command refuses and names exactly which one(s) blocked it, rather than risking existing
+  data.
+- **`--hdd` also carries a hardcoded per-NAS-model guard** (`PROTECTED_HDD_MODELS` in
+  `create_storage_pool.py`) -- it refuses outright on any listed model, regardless of the safety
+  check above. This ships with `DS1525+` in it, since that's a real NAS whose regular bays already
+  hold live pools; remove a model from the set only if you specifically intend `--hdd` to run
+  against that exact NAS.
+- Prints the exact resolved device list and requires confirmation before partitioning anything;
+  `--yes` skips that for scripting. `--description` sets the pool's DSM description.
+
+### Surviving DSM Updates (`drive-compat-fix-plan`)
+
+```bash
+synology-site drive-compat-fix-plan --output-dir drive-compat-fix-plan
+```
+
+`allow-third-party-drives` fixes the compatibility flag right now; it doesn't protect against a
+future DSM *version update* (not a routine reboot) regenerating `/etc/synoinfo.conf` from
+`/etc.defaults/synoinfo.conf` or refreshing Synology's certified-drive database, which can
+silently re-block the drives and make an existing pool built from them show as "missing" with
+online assembly failing. This generates `drive-compat-fix.sh` (idempotent, a no-op once the flag
+is already correct) plus `README.md`/`crontab.example`/`synology-task-commands.txt` -- copy the
+script to the NAS and schedule it with DSM Task Scheduler on a **Boot-up** trigger (or crontab
+`@reboot`) so the fix reapplies automatically on every boot, update or not.
 
 ## Operations
 

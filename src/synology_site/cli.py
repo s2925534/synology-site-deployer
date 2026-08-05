@@ -15,7 +15,9 @@ from synology_site.commands.check_nas import app as check_nas_app
 from synology_site.commands.cloudflare_route import app as cloudflare_route_app
 from synology_site.commands.configure_tailscale import app as configure_tailscale_app
 from synology_site.commands.create import app as create_app
+from synology_site.commands.create_storage_pool import app as create_storage_pool_app
 from synology_site.commands.deploy import app as deploy_app
+from synology_site.commands.drive_compat_fix_plan import app as drive_compat_fix_plan_app
 from synology_site.commands.doctor import app as doctor_app
 from synology_site.commands.ensure_network import app as ensure_network_app
 from synology_site.commands.godaddy_dns import app as godaddy_dns_app
@@ -56,6 +58,8 @@ app.command(name="bootstrap-uptime-kuma")(bootstrap_uptime_kuma_app)
 app.command(name="bootstrap-vaultwarden")(bootstrap_vaultwarden_app)
 app.command(name="check-nas")(check_nas_app)
 app.command(name="allow-third-party-drives")(allow_third_party_drives_app)
+app.command(name="drive-compat-fix-plan")(drive_compat_fix_plan_app)
+app.command(name="create-storage-pool")(create_storage_pool_app)
 app.command(name="ensure-network")(ensure_network_app)
 app.command(name="configure-tailscale")(configure_tailscale_app)
 app.command(name="health")(health_app)
