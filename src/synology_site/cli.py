@@ -17,8 +17,8 @@ from synology_site.commands.configure_tailscale import app as configure_tailscal
 from synology_site.commands.create import app as create_app
 from synology_site.commands.create_storage_pool import app as create_storage_pool_app
 from synology_site.commands.deploy import app as deploy_app
-from synology_site.commands.drive_compat_fix_plan import app as drive_compat_fix_plan_app
 from synology_site.commands.doctor import app as doctor_app
+from synology_site.commands.drive_compat_fix_plan import app as drive_compat_fix_plan_app
 from synology_site.commands.ensure_network import app as ensure_network_app
 from synology_site.commands.godaddy_dns import app as godaddy_dns_app
 from synology_site.commands.godaddy_nameservers import app as godaddy_nameservers_app
@@ -30,6 +30,7 @@ from synology_site.commands.redirect_ruleset import app as redirect_ruleset_app
 from synology_site.commands.registry_login import app as registry_login_app
 from synology_site.commands.remove import app as remove_app
 from synology_site.commands.restart_all import app as restart_all_app
+from synology_site.commands.run_hdd_db_fix import app as run_hdd_db_fix_app
 from synology_site.commands.show_tunnel import app as show_tunnel_app
 from synology_site.commands.start import app as start_app
 from synology_site.commands.start_resilinked_api import app as start_resilinked_api_app
@@ -59,6 +60,7 @@ app.command(name="bootstrap-vaultwarden")(bootstrap_vaultwarden_app)
 app.command(name="check-nas")(check_nas_app)
 app.command(name="allow-third-party-drives")(allow_third_party_drives_app)
 app.command(name="drive-compat-fix-plan")(drive_compat_fix_plan_app)
+app.command(name="run-hdd-db-fix")(run_hdd_db_fix_app)
 app.command(name="create-storage-pool")(create_storage_pool_app)
 app.command(name="ensure-network")(ensure_network_app)
 app.command(name="configure-tailscale")(configure_tailscale_app)

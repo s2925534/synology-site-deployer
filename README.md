@@ -1076,7 +1076,12 @@ synology-site create-storage-pool --hdd --raid-level shr1
 
 Creates a DSM storage pool via `synostgpool` directly over SSH, bypassing Storage Manager's
 wizard-specific restriction above entirely. Storage Manager still handles the final "Create
-Volume" step on top of the resulting pool normally.
+Volume" step on top of the resulting pool normally -- **except on 2025-series-or-later Plus
+models** (confirmed on a real DS1525+), where the pool creates and syncs fine but Storage Manager
+then reports the drives "Unrecognized"/Critical and refuses "Create Volume" with "No available
+storage pool for creating a new volume." That's a separate, per-drive compatibility-database
+check, not this command's doing -- see `drive-compat-fix-plan --include-hdd-db` below, which is
+what actually resolves it.
 
 - **Exactly one of `--nvme` / `--hdd` is required** -- no default, so there's no ambiguity about
   which physical bays get touched. `--nvme` auto-detects the M.2 bays (`synodisk --enum -t
@@ -1102,16 +1107,58 @@ Volume" step on top of the resulting pool normally.
 
 ```bash
 synology-site drive-compat-fix-plan --output-dir drive-compat-fix-plan
+synology-site drive-compat-fix-plan --output-dir drive-compat-fix-plan --include-hdd-db
+synology-site drive-compat-fix-plan --include-hdd-db --hdd-db-version v3.6.137
 ```
 
 `allow-third-party-drives` fixes the compatibility flag right now; it doesn't protect against a
 future DSM *version update* (not a routine reboot) regenerating `/etc/synoinfo.conf` from
 `/etc.defaults/synoinfo.conf` or refreshing Synology's certified-drive database, which can
 silently re-block the drives and make an existing pool built from them show as "missing" with
-online assembly failing. This generates `drive-compat-fix.sh` (idempotent, a no-op once the flag
-is already correct) plus `README.md`/`crontab.example`/`synology-task-commands.txt` -- copy the
-script to the NAS and schedule it with DSM Task Scheduler on a **Boot-up** trigger (or crontab
-`@reboot`) so the fix reapplies automatically on every boot, update or not.
+online assembly failing. With no flags, this generates `drive-compat-fix.sh` (idempotent, a no-op
+once the flag is already correct) plus `README.md`/`crontab.example`/`synology-task-commands.txt`.
+
+**`--include-hdd-db` bundles the fix that actually matters on 2025-series-or-later Plus models**
+(confirmed on a real DS1525+): a pinned copy of
+[`007revad/Synology_HDD_db`](https://github.com/007revad/Synology_HDD_db) (default `v3.6.137`,
+override with `--hdd-db-version`), downloaded once at generation time -- not fetched live from
+the NAS at boot -- plus a `run-hdd-db-fix.sh` wrapper that runs it with `-s -n`. That script adds
+your installed drives' exact model+firmware as explicit "supported" entries in DSM's per-model
+compatibility database, which is what actually let Storage Manager create a *volume* (not just a
+pool) on third-party NVMe drives -- disabling `support_disk_compatibility` alone got the pool
+created but left the drives "Unrecognized"/Critical, blocking volume creation. It also
+re-enables `support_disk_compatibility` itself; with correct per-drive entries in place, that's
+the right end state, not a global bypass. This bundles third-party code -- read the generated
+`syno_hdd_db.sh` before trusting it on your NAS.
+
+Copy whichever script matches your generation mode (`drive-compat-fix.sh` or, with
+`--include-hdd-db`, `run-hdd-db-fix.sh` plus `syno_hdd_db.sh`/`syno_hdd_vendor_ids.txt`) to the
+NAS and schedule it with DSM Task Scheduler on a **Boot-up** trigger (or crontab `@reboot`) so the
+fix reapplies automatically on every boot, update or not -- see the generated `README.md`. Don't
+schedule both scripts together; they manage the same flag differently and would fight each other.
+
+### Running the HDD DB Fix Right Now (`run-hdd-db-fix`)
+
+```bash
+synology-site run-hdd-db-fix
+synology-site run-hdd-db-fix --hdd-db-version v3.6.137 --workspace corroborly
+synology-site run-hdd-db-fix --yes
+```
+
+The on-demand equivalent of `drive-compat-fix-plan --include-hdd-db`'s boot script -- same pinned
+release, same `-s -n` flags, but runs immediately over SSH instead of waiting for a scheduled
+boot. Fetches (or reuses the local cache, see below) the pinned
+[`007revad/Synology_HDD_db`](https://github.com/007revad/Synology_HDD_db) release, uploads it to
+`<docker_root>/hdd-db-fix/` on the NAS, and runs it as root. Prompts for confirmation first (this
+executes third-party code as root and edits DSM's compatibility database); `--yes` skips that for
+scripting. `--hdd-db-version` overrides the pinned release; `--workspace` targets a non-default
+NAS.
+
+**Local vendor cache.** Both this command and `drive-compat-fix-plan --include-hdd-db` cache
+fetched releases under `vendor/synology_hdd_db/<version>/` (gitignored -- not committed) so a
+later run doesn't re-download anything, and still works even if the upstream repo ever
+disappears. Delete a version's subdirectory to force a re-fetch, or read
+`vendor/synology_hdd_db/<version>/syno_hdd_db.sh` any time to see exactly what would run.
 
 ## Operations
 

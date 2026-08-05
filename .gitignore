@@ -18,3 +18,5 @@ swap-fix-plan/
 migration-backups/
 godaddy-backups/
 redirect-backups/
+drive-compat-fix-plan/
+vendor/

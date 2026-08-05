@@ -4,6 +4,26 @@ Notable changes to this project, most recent first. Each entry says what changed
 functionality, where to find usage in the README.
 
 ## 2026-08-05
+- Added `run-hdd-db-fix` command: uploads and runs a pinned `007revad/Synology_HDD_db` release on
+  the NAS on demand (the live-execution counterpart to `drive-compat-fix-plan --include-hdd-db`'s
+  boot-time script). Added `synology_site/hdd_db.py`, a shared fetch-with-local-cache helper
+  (`vendor/synology_hdd_db/<version>/`, gitignored) used by both this command and
+  `drive-compat-fix-plan`, so a pinned release only needs to be downloaded once and survives the
+  upstream repo disappearing. See
+  [Running the HDD DB Fix Right Now](README.md#running-the-hdd-db-fix-right-now-run-hdd-db-fix).
+- Corrected the record on the third-party-drive fix after a real end-to-end run: disabling
+  `support_disk_compatibility` (`allow-third-party-drives`) plus `create-storage-pool` gets a pool
+  *created* on 2025-series-or-later Plus models (confirmed on a real DS1525+), but Storage Manager
+  still refused "Create Volume" on it, reporting the drives "Unrecognized"/Critical -- a separate
+  per-drive compatibility-database check, not the global flag. Running a pinned copy of
+  [`007revad/Synology_HDD_db`](https://github.com/007revad/Synology_HDD_db) (`v3.6.137`) resolved
+  it: it added the drives' exact model+firmware as explicit "supported" database entries (and, in
+  doing so, re-enabled `support_disk_compatibility` -- the correct end state once real per-drive
+  entries exist, not a global bypass). Volume creation then worked immediately, no reboot needed.
+  `drive-compat-fix-plan --include-hdd-db` now bundles this fix for the boot-time safety net too.
+  README updated in the [Third-Party Drives](README.md#third-party-drives-storage-manager),
+  [Creating the Pool Directly](README.md#creating-the-pool-directly-create-storage-pool), and
+  [Surviving DSM Updates](README.md#surviving-dsm-updates-drive-compat-fix-plan) sections.
 - Added `create-storage-pool` command: creates a DSM storage pool directly via `synostgpool`,
   bypassing a separate wizard-specific restriction in Storage Manager that
   `allow-third-party-drives` alone doesn't clear. Requires an explicit `--nvme`/`--hdd` target and
