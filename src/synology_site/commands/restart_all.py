@@ -44,6 +44,7 @@ class ProjectPlan:
     working_dir: str
     compose_file: str
     label: str
+    slug: str | None = None
 
 
 @dataclass(frozen=True)
@@ -76,24 +77,58 @@ def discover_projects(
         marker = markers_by_working_dir.get(working_dir)
         if marker is not None:
             label = str(marker.get("domain") or marker.get("slug") or working_dir)
+            slug = str(marker["slug"]) if marker.get("slug") else None
             raw_compose_file = str(marker.get("compose_file") or "docker-compose.yml")
             compose_file = posixpath.basename(raw_compose_file)
         else:
             label = posixpath.basename(working_dir) or working_dir
+            slug = None
             compose_file = "docker-compose.yml"
-        plans.append(ProjectPlan(working_dir=working_dir, compose_file=compose_file, label=label))
+        plans.append(
+            ProjectPlan(
+                working_dir=working_dir, compose_file=compose_file, label=label, slug=slug
+            )
+        )
     return plans
+
+
+def _plan_identifiers(plan: ProjectPlan) -> set[str]:
+    """Every string that should let --only pick this plan.
+
+    Matching only `label` (domain-or-slug-or-working_dir) and the working directory's basename
+    missed the marker's actual `slug` whenever a nested `compose_file` (e.g.
+    `repo/infra/admin/docker-compose.admin.yml`) shifts the resolved working directory away from
+    the slug root -- `admin-reslk-com`'s working dir basename becomes `admin`, not the slug, so
+    `--only admin-reslk-com` matched nothing. Real incident: this silently dropped two projects
+    from a `--only` list with no warning (see unmatched_only_values).
+    """
+    identifiers = {plan.label.lower(), posixpath.basename(plan.working_dir).lower()}
+    if plan.slug:
+        identifiers.add(plan.slug.lower())
+    return identifiers
 
 
 def filter_projects(plans: list[ProjectPlan], only: list[str] | None) -> list[ProjectPlan]:
     if not only:
         return plans
     wanted = {value.lower() for value in only}
-    return [
-        plan
-        for plan in plans
-        if plan.label.lower() in wanted or posixpath.basename(plan.working_dir).lower() in wanted
-    ]
+    return [plan for plan in plans if wanted & _plan_identifiers(plan)]
+
+
+def unmatched_only_values(plans: list[ProjectPlan], only: list[str] | None) -> list[str]:
+    """Which --only values (case-insensitively) matched zero discovered projects.
+
+    `filter_projects` returning fewer results than --only values were passed is exactly how a
+    typo -- or a project whose nested compose_file shifts its matchable identifiers -- goes
+    unnoticed. Returns the original (not lowercased) values so the caller can report them back
+    exactly as the user typed them.
+    """
+    if not only:
+        return []
+    matched: set[str] = set()
+    for plan in plans:
+        matched |= _plan_identifiers(plan)
+    return [value for value in only if value.lower() not in matched]
 
 
 def restart_all(
@@ -127,9 +162,19 @@ def restart_all(
             connection_settings = settings.resolved_for(target)
             with ssh_factory(connection_settings, target_password) as ssh:
                 containers = list_containers_with_projects(ssh)
-                plans = filter_projects(
-                    discover_projects(markers, containers, target.docker_root), only
-                )
+                all_plans = discover_projects(markers, containers, target.docker_root)
+                plans = filter_projects(all_plans, only)
+
+                for unmatched in unmatched_only_values(all_plans, only):
+                    steps.append(
+                        RestartStep(
+                            target.name,
+                            "*",
+                            "*",
+                            False,
+                            f"--only {unmatched!r} matched no project on this target",
+                        )
+                    )
 
                 if dry_run:
                     for plan in plans:

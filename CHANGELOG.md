@@ -4,6 +4,13 @@ Notable changes to this project, most recent first. Each entry says what changed
 functionality, where to find usage in the README.
 
 ## 2026-08-05
+- Fixed `restart-all --only <slug-or-domain>` silently matching nothing for a project whose
+  marker has a nested `compose_file` (e.g. `repo/infra/admin/docker-compose.admin.yml`) --
+  matching previously used the working directory's basename instead of the marker's actual
+  `slug`, which the nested path shifts away from the slug root. Now matches the slug too, and
+  any `--only` value matching zero projects is reported as an explicit warning step instead of
+  disappearing without a trace. Found and reproduced against a real NAS (`admin-reslk-com`,
+  `s-reslk-com`) while bringing the resilinked/reslk.com stack back online.
 - Added a local activity log: `create`/`deploy`/`update` now append one JSON-lines entry per
   successful run to `activity-log/history.jsonl` (`synology_site/activity_log.py`). Only
   `activity-log/README.md` (format docs + example) is committed to git; the actual `*.jsonl`

@@ -7,6 +7,7 @@ from synology_site.commands.restart_all import (
     discover_projects,
     filter_projects,
     restart_all,
+    unmatched_only_values,
 )
 from synology_site.config import Settings
 from synology_site.docker_remote import ContainerInfo
@@ -101,6 +102,47 @@ def test_filter_projects_returns_everything_when_only_not_given() -> None:
     plans = [ProjectPlan("/d", "docker-compose.yml", "x")]
 
     assert filter_projects(plans, None) == plans
+
+
+def test_filter_projects_matches_slug_even_with_nested_compose_file() -> None:
+    # Real incident: admin-reslk-com's compose_file is repo/infra/admin/docker-compose.admin.yml,
+    # which shifts working_dir so its basename becomes "admin", not the slug -- only the slug
+    # itself should reliably identify it.
+    plans = [
+        discover_projects(
+            [
+                {
+                    "slug": "admin-reslk-com",
+                    "domain": "admin.reslk.com",
+                    "compose_file": "repo/infra/admin/docker-compose.admin.yml",
+                }
+            ],
+            [],
+            "/volume1/docker",
+        )[0]
+    ]
+
+    filtered = filter_projects(plans, ["admin-reslk-com"])
+
+    assert filtered == plans
+
+
+def test_unmatched_only_values_reports_nothing_when_all_match() -> None:
+    plans = [ProjectPlan("/volume1/docker/site-a", "docker-compose.yml", "site-a", "site-a")]
+
+    assert unmatched_only_values(plans, ["site-a"]) == []
+
+
+def test_unmatched_only_values_reports_values_matching_nothing() -> None:
+    plans = [ProjectPlan("/volume1/docker/site-a", "docker-compose.yml", "site-a", "site-a")]
+
+    assert unmatched_only_values(plans, ["site-a", "Typo-Site"]) == ["Typo-Site"]
+
+
+def test_unmatched_only_values_empty_when_only_not_given() -> None:
+    plans = [ProjectPlan("/volume1/docker/site-a", "docker-compose.yml", "site-a", "site-a")]
+
+    assert unmatched_only_values(plans, None) == []
 
 
 class FakeSSH:
@@ -309,6 +351,29 @@ def test_restart_all_only_filters_to_named_project() -> None:
     )
 
     assert all("site-a" in step.working_dir for step in steps)
+
+
+def test_restart_all_warns_when_only_value_matches_nothing() -> None:
+    fake = FakeSSH(
+        markers=[{"slug": "site-a", "domain": "a.example.com"}],
+        containers_output="",
+        services_by_dir={"/volume1/docker/site-a": "web\n"},
+    )
+
+    steps = restart_all(
+        settings(),
+        (settings().default_nas_target,),
+        ssh_factory=lambda _settings, _password: fake,
+        only=["a.example.com", "no-such-project"],
+        sleep=lambda _seconds: None,
+    )
+
+    unmatched_steps = [step for step in steps if "matched no project" in step.detail]
+    assert len(unmatched_steps) == 1
+    assert "no-such-project" in unmatched_steps[0].detail
+    assert unmatched_steps[0].ok is False
+    # the matching value still proceeds normally alongside the warning
+    assert any(step.working_dir == "/volume1/docker/site-a" for step in steps)
 
 
 def test_restart_all_records_error_when_compose_file_missing() -> None:
