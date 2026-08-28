@@ -156,13 +156,15 @@ def test_load_the_real_veloso_dev_rules_file() -> None:
         "aliases--pv",
         "aliases--resume",
         "aliases--cv",
+        "aliases--p",
         "blog-redirect--posts",
         "blog-redirect--category",
         "blog-redirect--tag",
     }
     enabled_by_ref = {rule.ref: rule.enabled for rule in rule_set.rules}
     assert enabled_by_ref["aliases--pv"] is True
-    assert enabled_by_ref["blog-redirect--posts"] is False
+    assert enabled_by_ref["aliases--p"] is True
+    assert enabled_by_ref["blog-redirect--posts"] is True
 
 
 def test_with_group_enabled_flips_only_the_matching_group() -> None:
