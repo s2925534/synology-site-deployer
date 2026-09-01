@@ -3,6 +3,14 @@
 Notable changes to this project, most recent first. Each entry says what changed and, for new
 functionality, where to find usage in the README.
 
+## 2026-09-01
+- Updated documented default Docker root from `/volume1/docker` to `/volume3/dockernvme` to
+  match the NVMe storage-pool migration -- new sites already deployed there via the real
+  `NAS_DOCKER_ROOT` in `.env`, but the examples still showed the old volume. Touched
+  `.env.example`, the README (setup, deploy, and troubleshooting snippets), and the staging-path
+  examples in the `swap-fix-plan`, `tunnel-fix-plan`, and `drive-compat-fix-plan` command help.
+  Docs/help text only -- no behavior change; test fixtures keep their own injected roots.
+
 ## 2026-08-05
 - Fixed `restart-all --only <slug-or-domain>` silently matching nothing for a project whose
   marker has a nested `compose_file` (e.g. `repo/infra/admin/docker-compose.admin.yml`) --

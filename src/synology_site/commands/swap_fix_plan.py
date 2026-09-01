@@ -188,7 +188,7 @@ the wrong size.
 
 ### Schedule it (DSM Task Scheduler)
 
-1. Copy `swap-setup.sh` to the NAS, e.g. `/volume1/docker/swap-fix/swap-setup.sh`.
+1. Copy `swap-setup.sh` to the NAS, e.g. `/volume3/dockernvme/swap-fix/swap-setup.sh`.
 2. DSM > Control Panel > Task Scheduler > Create > Triggered Task > Boot-up.
 3. User: `root`. Run command: see `synology-task-commands.txt`.
 4. Save, then run it once manually (right-click > Run) to confirm it exits cleanly before relying

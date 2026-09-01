@@ -53,7 +53,7 @@ Contact: `pedro@veloso.dev`
 - SSH access to the NAS
 - Synology Container Manager
 - Docker and Docker Compose on the NAS
-- A Docker root path such as `/volume1/docker`
+- A Docker root path such as `/volume3/dockernvme`
 - Optional: Cloudflare domain and Cloudflare Tunnel running on the NAS
 
 On Synology, Docker may be available at `/usr/local/bin/docker` instead of the default shell `PATH`. The tool detects this path automatically. If the SSH user can only access Docker through `sudo`, the tool can use `sudo -S` with the configured SSH password.
@@ -97,7 +97,7 @@ Important settings:
 NAS_HOST=192.168.1.100
 NAS_PORT=22
 NAS_USER=your_synology_username
-NAS_DOCKER_ROOT=/volume1/docker
+NAS_DOCKER_ROOT=/volume3/dockernvme
 LOCAL_BASE_URL_HOST=192.168.1.100
 DEFAULT_START_PORT=5050
 DEFAULT_END_PORT=5999
@@ -266,7 +266,7 @@ synology-site create demo.example.com
 This creates a generated Flask app, Dockerfile, Compose file, marker file, and docs under:
 
 ```text
-/volume1/docker/demo-example-com
+/volume3/dockernvme/demo-example-com
 ```
 
 The public page (`/`) shows:
@@ -407,7 +407,7 @@ the real npm registry in the authoring environment — see `RESUME.md`.
 synology-site deploy app.example.com --compose-file ./infra/web/docker-compose.web.yml --env-file ./infra/web/.env
 ```
 
-This uploads the Compose file and `.env` (permission `600`) to `/volume1/docker/app-example-com`, then runs `docker compose pull` followed by `docker compose up -d` (falling back to `--build` if the pull fails, e.g. before an image has ever been published, or if you use `--no-pull --build` to always build locally).
+This uploads the Compose file and `.env` (permission `600`) to `/volume3/dockernvme/app-example-com`, then runs `docker compose pull` followed by `docker compose up -d` (falling back to `--build` if the pull fails, e.g. before an image has ever been published, or if you use `--no-pull --build` to always build locally).
 
 If the service in your Compose file is fronted by a reverse proxy already running on the NAS (Traefik, Nginx Proxy Manager) and doesn't publish a host port — as with ResiLinked's `infra/web/docker-compose.web.yml`, which joins the shared `supabase_default` network and routes by Traefik `Host()` label — omit `--port`. Cloudflare automation and the health check are both skipped, since routing is handled by the existing proxy/tunnel setup rather than a per-app port.
 
@@ -1285,7 +1285,7 @@ the plan (which projects, in what order) without touching anything.
 ```bash
 docker ps
 docker logs demo-example-com
-cd /volume1/docker/demo-example-com
+cd /volume3/dockernvme/demo-example-com
 docker compose restart
 docker compose down
 docker compose up -d
@@ -1303,7 +1303,7 @@ sudo /usr/local/bin/docker ps
 Read database credentials on the NAS:
 
 ```bash
-cat /volume1/docker/demo-example-com/docs/DATABASE.md
+cat /volume3/dockernvme/demo-example-com/docs/DATABASE.md
 ```
 
 Back up MariaDB:

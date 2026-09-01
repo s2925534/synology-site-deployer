@@ -129,7 +129,7 @@ It does not rename containers -- that's a one-time cleanup step, better done del
 
 ## Schedule it (recommended: DSM Task Scheduler)
 
-1. Copy `tunnel-fix.sh` to the NAS, e.g. `/volume1/docker/tunnel-fix/tunnel-fix.sh`.
+1. Copy `tunnel-fix.sh` to the NAS, e.g. `/volume3/dockernvme/tunnel-fix/tunnel-fix.sh`.
 2. Open DSM > Control Panel > Task Scheduler.
 3. Create > Scheduled Task > User-defined script.
 4. Set the schedule to run every {interval_minutes} minutes (Task Scheduler's UI offers hourly

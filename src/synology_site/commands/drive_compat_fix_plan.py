@@ -198,7 +198,7 @@ instead of requiring you to notice and SSH in.
 ## Schedule it (DSM Task Scheduler -- recommended)
 
 1. Copy `{schedule_target}`{" and syno_hdd_db.sh/syno_hdd_vendor_ids.txt" if include_hdd_db else ""}
-   to the NAS, e.g. `/volume1/docker/drive-compat-fix/`.
+   to the NAS, e.g. `/volume3/dockernvme/drive-compat-fix/`.
 2. DSM > Control Panel > Task Scheduler > Create > Triggered Task > Boot-up.
 3. User: `root`. Run command: see `synology-task-commands.txt`.
 4. Save, then run it once manually (right-click > Run) to confirm it exits cleanly before relying
