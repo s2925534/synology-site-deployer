@@ -231,6 +231,19 @@ def read_memory_info(ssh: SSHClient) -> MemoryInfo:
     )
 
 
+def read_docker_root_dir(ssh: SSHClient) -> str:
+    """Read-only: Docker's data root (`DockerRootDir` from `docker info`).
+
+    This is where Docker-*managed* named volumes and image layers physically live -- a
+    daemon/Container-Manager setting, independent of `NAS_DOCKER_ROOT` (which only controls where
+    this tool places project *directories*). Returns "" when it can't be read, so callers treat it
+    as "unknown" rather than turning a soft, advisory check into a hard target failure.
+    """
+    docker = docker_command(ssh)
+    result = ssh.run(f"{docker} info --format '{{{{.DockerRootDir}}}}'")
+    return result.stdout.strip()
+
+
 def compose_services(
     ssh: SSHClient,
     compose_cmd: str,

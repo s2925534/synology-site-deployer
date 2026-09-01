@@ -27,7 +27,7 @@ Contact: `pedro@veloso.dev`
 - `workspaces`: lists configured Cloudflare accounts/NAS targets and flags copy-paste credential mistakes (e.g. a `CF_TUNNEL_ID` accidentally reused across workspaces).
 - `list --all-targets`: aggregates sites across every configured NAS target instead of just the default one.
 - `health --all-targets`: checks every known site's health endpoint where a marker contains a port. `--proxy-port` also checks sites with no port of their own (fronted by a shared reverse proxy) via a `Host:`-header request.
-- `doctor --all-targets`: read-only fleet audit — never-started sites, containers missing an auto-restart policy, Compose project-name collisions, and load/memory pressure.
+- `doctor --all-targets`: read-only fleet audit — never-started sites, containers missing an auto-restart policy, Compose project-name collisions, load/memory pressure, and a Docker data root that's drifted onto a different volume than the deploy root.
 - `restart-all --all-targets`: safely brings a whole fleet up, one Compose service at a time with a pause between each and a load-based abort — the safe alternative to a bulk `docker compose up -d` sweep. `--only <domain-or-slug>` (repeatable) and `--dry-run` supported.
 - `backup-plan`: generates a local MariaDB backup script/env template/scheduler examples for `--with-db` sites.
 - `tunnel-fix-plan`: generates a self-contained script (+ DSM Task Scheduler/crontab examples) that keeps the `cloudflared` container alive on its own schedule, directly on the NAS.
@@ -1247,7 +1247,7 @@ These two commands exist because of a real incident: restarting every project on
 hand, one `docker compose up -d` per project (or worse, all at once), pushed a NAS's load average
 to 75 and took its Docker daemon down hard enough to need a physical power cycle.
 
-`doctor` is read-only and reports four things, each traced back to a real failure from that
+`doctor` is read-only and reports five things, most traced back to a real failure from that
 incident:
 
 - **Never-started sites** -- a `.synology-site.json` marker and Compose file exist, but no
@@ -1267,6 +1267,14 @@ incident:
   ever used.
 - **Resource pressure** -- load average and memory/swap usage, flagged at thresholds picked from
   the incident itself (load average ≥25 or swap ≥80% is "critical"; ≥10 / ≥50% is "warn").
+- **Docker data-root drift** -- `NAS_DOCKER_ROOT` controls where each project's *directory* (bind
+  mounts, Compose file, `.env`) lands, but Docker-*managed* named volumes and image layers live
+  under Docker's own `DockerRootDir` (a Container Manager setting this tool can't set). When those
+  two sit on different volumes, named volumes silently keep accumulating on the old volume even
+  after the deploy root has been moved. This warns when they've drifted apart -- e.g. after the
+  NVMe pool migration, where the deploy root is `/volume3/dockernvme` but `DockerRootDir` is still
+  on `/volume1`, which is meant to hold only caching. `docker info` on the NAS shows the live
+  value; the fix is repointing Container Manager's data root at the same volume.
 
 `restart-all` is the safe way to actually bring a fleet back (or finish sites `doctor` found were
 never started): one Compose *service* at a time, not one project at a time and never a bulk sweep

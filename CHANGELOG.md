@@ -4,6 +4,16 @@ Notable changes to this project, most recent first. Each entry says what changed
 functionality, where to find usage in the README.
 
 ## 2026-09-01
+- Added a `doctor` preflight check for **Docker data-root drift**: it now reads the NAS's live
+  `DockerRootDir` (via `docker info`) and warns when it sits on a different volume than
+  `NAS_DOCKER_ROOT`. `NAS_DOCKER_ROOT` only controls where project *directories* land; Docker-
+  managed named volumes and image layers live under `DockerRootDir`, a Container Manager setting
+  this tool can't set -- so after the NVMe migration (deploy root `/volume3/dockernvme`, volume1
+  reserved for caching) named volumes could silently keep landing on volume1 with nothing to flag
+  it. The check degrades quietly (no finding) on non-Synology paths or an unreadable `docker info`,
+  so it never turns an advisory into a hard target failure. See
+  [Fleet Health & Recovery](README.md#fleet-health--recovery-doctor-restart-all)
+  (`read_docker_root_dir` in `docker_remote.py`; `check_docker_root_volume` in `commands/doctor.py`).
 - Updated documented default Docker root from `/volume1/docker` to `/volume3/dockernvme` to
   match the NVMe storage-pool migration -- new sites already deployed there via the real
   `NAS_DOCKER_ROOT` in `.env`, but the examples still showed the old volume. Touched

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import posixpath
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from getpass import getpass
@@ -15,6 +16,7 @@ from synology_site.docker_remote import (
     MemoryInfo,
     SystemLoad,
     list_containers_with_projects,
+    read_docker_root_dir,
     read_memory_info,
     read_system_load,
 )
@@ -105,6 +107,39 @@ def find_project_name_collisions(containers: list[ContainerInfo]) -> dict[str, s
     return {project: dirs for project, dirs in by_project.items() if len(dirs) > 1}
 
 
+_VOLUME_RE = re.compile(r"^(/volume\d+)(?:/|$)")
+
+
+def _volume_root(path: str) -> str | None:
+    """The `/volumeN` prefix of a Synology path, or None when it has none (or is empty)."""
+    match = _VOLUME_RE.match(path.strip())
+    return match.group(1) if match else None
+
+
+def check_docker_root_volume(docker_root_dir: str, deploy_root: str) -> tuple[str, str] | None:
+    """Warn when Docker's managed data root sits on a different volume than the deploy root.
+
+    This tool places each project's *directory* (bind mounts, compose file, `.env`) under
+    `NAS_DOCKER_ROOT` (`deploy_root`), but Docker-*managed* named volumes and image layers live
+    under Docker's own `DockerRootDir`, a Container-Manager setting this tool can't set. When the
+    two land on different volumes, named volumes keep silently accumulating on the old volume even
+    after the deploy root has been moved -- exactly the drift to catch after the NVMe migration,
+    where volume1 is meant to hold only caching. Returns None (no finding) when either path lacks
+    a `/volumeN` prefix, so non-Synology hosts and an unreadable `docker info` degrade quietly.
+    """
+    deploy_volume = _volume_root(deploy_root)
+    root_dir_volume = _volume_root(docker_root_dir)
+    if deploy_volume and root_dir_volume and deploy_volume != root_dir_volume:
+        return (
+            "warn",
+            f"Docker data root (DockerRootDir={docker_root_dir}) is on {root_dir_volume}, but "
+            f"sites deploy to {deploy_root} on {deploy_volume} -- Docker-managed named volumes "
+            f"and image layers still land on {root_dir_volume}. Point Container Manager's data "
+            f"root at {deploy_volume} so nothing but caching remains on {root_dir_volume}.",
+        )
+    return None
+
+
 def check_resources(load: SystemLoad, memory: MemoryInfo) -> list[tuple[str, str]]:
     findings: list[tuple[str, str]] = []
     if load.load1 >= LOAD_CRITICAL:
@@ -162,6 +197,7 @@ def run_doctor(
                 containers = list_containers_with_projects(ssh)
                 load = read_system_load(ssh)
                 memory = read_memory_info(ssh)
+                docker_root_dir = read_docker_root_dir(ssh)
         except SynologySiteError as exc:
             findings.append(
                 DoctorFinding(target.name, "connectivity", "critical", f"target unreachable: {exc}")
@@ -207,6 +243,11 @@ def run_doctor(
         for severity, detail in check_resources(load, memory):
             findings.append(DoctorFinding(target.name, "resources", severity, detail))
 
+        docker_root_finding = check_docker_root_volume(docker_root_dir, target.docker_root)
+        if docker_root_finding:
+            severity, detail = docker_root_finding
+            findings.append(DoctorFinding(target.name, "docker-root-volume", severity, detail))
+
     return findings
 
 
@@ -219,8 +260,9 @@ def app(
     ),
 ) -> None:
     """Read-only: audits the NAS for the failure classes a real incident on this fleet exposed --
-    never-started sites, missing restart policies, Compose project-name collisions, and
-    load/memory pressure. Never writes anything."""
+    never-started sites, missing restart policies, Compose project-name collisions, load/memory
+    pressure, and a Docker data root that's drifted onto a different volume than the deploy root.
+    Never writes anything."""
     try:
         settings = load_config()
         targets = (

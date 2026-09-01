@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from synology_site.commands.doctor import (
+    check_docker_root_volume,
     check_resources,
     expected_working_dir,
     find_missing_restart_policy,
@@ -161,6 +162,26 @@ def test_check_resources_reports_nothing_when_healthy() -> None:
     assert findings == []
 
 
+def test_check_docker_root_volume_flags_a_different_volume() -> None:
+    finding = check_docker_root_volume("/volume1/@docker", "/volume3/dockernvme")
+
+    assert finding is not None
+    severity, detail = finding
+    assert severity == "warn"
+    assert "/volume1" in detail
+    assert "/volume3" in detail
+
+
+def test_check_docker_root_volume_ok_when_same_volume() -> None:
+    assert check_docker_root_volume("/volume3/@docker", "/volume3/dockernvme") is None
+
+
+def test_check_docker_root_volume_degrades_quietly_without_volume_prefix() -> None:
+    # An unreadable `docker info` yields "" -- must not produce a spurious finding.
+    assert check_docker_root_volume("", "/volume3/dockernvme") is None
+    assert check_docker_root_volume("/var/lib/docker", "/opt/apps") is None
+
+
 class FakeSSH:
     def __init__(
         self,
@@ -172,12 +193,14 @@ class FakeSSH:
         free_output: str = (
             "Mem:  7894  2000  3000  100  2000  5000\nSwap: 2047  100  1947\n"
         ),
+        docker_info_output: str = "/volume1/@docker\n",
     ) -> None:
         self.markers = markers
         self.containers_output = containers_output
         self.inspect_output = inspect_output
         self.uptime_output = uptime_output
         self.free_output = free_output
+        self.docker_info_output = docker_info_output
 
     def __enter__(self) -> FakeSSH:
         return self
@@ -210,6 +233,8 @@ class FakeSSH:
             return RemoteCommandResult(command, 0, self.containers_output, "")
         if command.startswith("docker inspect --format"):
             return RemoteCommandResult(command, 0, self.inspect_output, "")
+        if command.startswith("docker info --format"):
+            return RemoteCommandResult(command, 0, self.docker_info_output, "")
         if command == "uptime":
             return RemoteCommandResult(command, 0, self.uptime_output, "")
         if command == "free -m":
@@ -273,6 +298,30 @@ def test_run_doctor_reports_clean_fleet_as_no_findings() -> None:
     )
 
     assert findings == []
+    # DockerRootDir on the same volume as the deploy root -- no drift finding.
+    assert not any(finding.category == "docker-root-volume" for finding in findings)
+
+
+def test_run_doctor_flags_docker_root_on_a_different_volume() -> None:
+    # Deploy root is /volume1/docker (see settings()), but Docker's data root has drifted to
+    # volume3 -- named volumes would keep landing on volume3 while site directories go to volume1.
+    fake = FakeSSH(
+        markers=[{"slug": "good-site", "domain": "good.example.com"}],
+        containers_output="good-site\tgood-site\t/volume1/docker/good-site\tUp 2 minutes\n",
+        inspect_output="/good-site\tunless-stopped\n",
+        docker_info_output="/volume3/@docker\n",
+    )
+
+    findings = run_doctor(
+        settings(),
+        (settings().default_nas_target,),
+        ssh_factory=lambda _settings, _password: fake,
+    )
+
+    drift = [finding for finding in findings if finding.category == "docker-root-volume"]
+    assert len(drift) == 1
+    assert drift[0].severity == "warn"
+    assert "/volume3/@docker" in drift[0].summary
 
 
 def test_run_doctor_keeps_going_when_a_target_is_unreachable() -> None:
