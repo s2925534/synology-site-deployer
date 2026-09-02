@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import posixpath
 import shlex
 import time
 from collections.abc import Callable
@@ -18,6 +19,7 @@ from synology_site.cloudflare.api import configure_cloudflare_route
 from synology_site.cloudflare.manual_instructions import build_manual_instructions
 from synology_site.commands.check_nas import smart_ssh_factory
 from synology_site.config import Settings, load_config
+from synology_site.data_safety import check_data_mount_safety, snapshot_databases
 from synology_site.docker_remote import (
     detect_compose_command,
     docker_command,
@@ -72,6 +74,7 @@ def deploy_existing_project(
     force: bool = False,
     dry_run: bool = False,
     strict_cloudflare: bool = False,
+    allow_data_mount_change: bool = False,
     workspace: str | None = None,
     ssh_factory: SSHFactory = smart_ssh_factory,
     health_get: HealthGetter = requests.get,
@@ -129,6 +132,24 @@ def deploy_existing_project(
             )
             resolved_local_url = f"http://{target.health_check_host}:{selected_port}"
 
+        # Data-safety preflight (read-only): refuse a Compose change that would
+        # move a stateful mount (a DB datadir, wp-content, or any named volume)
+        # off its existing populated store onto a fresh, empty one -- which
+        # would silently orphan the real data and re-initialize an empty
+        # database. Runs before the dry-run return so `--dry-run` surfaces it too.
+        docker = docker_command(ssh)
+        new_compose_dir = (
+            posixpath.dirname(posixpath.join(project_path, remote_compose_path)) or project_path
+        )
+        check_data_mount_safety(
+            ssh,
+            docker_cmd=docker,
+            project_path=project_path,
+            new_compose_text=compose_file.read_text(encoding="utf-8"),
+            new_compose_dir=new_compose_dir,
+            allow_data_mount_change=allow_data_mount_change,
+        )
+
         if dry_run:
             return DeployResult(
                 domain=domain,
@@ -169,9 +190,12 @@ def deploy_existing_project(
             ssh.run(f"chmod 600 {shlex.quote(remote_env_path)}", check=True)
         _write_marker(ssh, project_path, domain, slug, selected_port, remote_compose_path)
 
+        # Safety net: snapshot existing database datadirs into backups/ before
+        # `up -d`, so any data-affecting change is a one-command restore away.
+        snapshot_databases(ssh, docker_cmd=docker, project_path=project_path)
+
         _start_compose(ssh, project_path, compose, remote_compose_path, pull=pull, build=build)
         if container_name:
-            docker = docker_command(ssh)
             _confirm_container(ssh, container_name, docker)
         if health_path and resolved_local_url:
             _confirm_health(health_get, f"{resolved_local_url}{health_path}")
@@ -332,6 +356,14 @@ def app(
     dry_run: bool = typer.Option(False, "--dry-run"),
     force: bool = typer.Option(False, "--force"),
     strict_cloudflare: bool = typer.Option(False, "--strict-cloudflare"),
+    allow_data_mount_change: bool = typer.Option(
+        False,
+        "--allow-data-mount-change",
+        help="Override the data-safety guard that refuses a deploy which would move a "
+        "stateful mount (DB datadir, wp-content, named volume) off its existing populated "
+        "store onto an empty one. The old data is never deleted -- this only lets the new, "
+        "empty store take over.",
+    ),
     workspace: str | None = typer.Option(
         None,
         "--workspace",
@@ -364,6 +396,7 @@ def app(
             force=force or settings.allow_overwrite,
             dry_run=dry_run or settings.dry_run,
             strict_cloudflare=strict_cloudflare,
+            allow_data_mount_change=allow_data_mount_change,
             workspace=workspace,
             prompted_password=prompted_password,
         )
