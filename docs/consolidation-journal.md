@@ -10,6 +10,30 @@ Container count = fleet total (`docker ps -aq | wc -l`).
 
 ---
 
+## 2026-09-06
+
+### health-veloso-dev — retired (Pedro chose B1)
+
+- **Decision:** Pedro picked **B1** from the earlier B-options (B1 retire · B2 fold `/health` · B3
+  keep as canary). Rationale: it's the deployer's Flask **scaffold demo** — no source on disk,
+  referenced nowhere, **no Traefik/public route** (LAN-only on host port 5052), so removing it
+  breaks nothing.
+- **Actions:** removed the container; retired its **volume1** dir →
+  `/volume1/docker/health-veloso-dev.retired-20260906`; deleted its Kuma monitor
+  (`health.veloso.dev`, 220 heartbeats + notification/tls links + the monitor row) so it doesn't
+  sit red. Backups taken (`kuma.db.prehealthdel3-*`).
+- **Gotcha (recorded for next Kuma DB edit):** Kuma's schema has a table named `group` (a SQLite
+  reserved word) — `pragma table_info(group)` / `delete from group` fail unless the identifier is
+  double-quoted. The delete script must quote table names and wrap per-table ops in try/except,
+  else it aborts mid-way and never commits (happened twice before the quoted version worked).
+- **Result:** fleet **45 → 44**; Kuma **36 → 35** monitors, restarted healthy.
+- **Note:** volume1 is **not** fully clear yet — the `ecosystem-services` hub still deploys from
+  `/volume1/docker/services-systemsnotsilos-com` (plus stale dirs: `p-veloso-dev`,
+  `systemsnotsilos-com`, `hdd-db-fix`, `swap-fix`, `zqx-api-migrate`). Moving the hub off volume1
+  is a separate item.
+
+---
+
 ## 2026-09-05
 
 ### Goal & approach
@@ -88,7 +112,7 @@ full product, is not a drop-in.
 
 ### Pending decisions (options menu for Pedro)
 1. **url-shortener**: A1 rewrite→Supabase+fold · A2 standalone. Alias `s.zqx.io`.
-2. **health-veloso-dev**: B1 retire · B2 fold `/health` · B3 keep.
+2. **health-veloso-dev**: ✅ RESOLVED — B1 (retired 2026-09-06). See the 2026-09-06 entry.
 3. **Frontend combined static container** (gated): F1 veloso.dev · F2 +corroborly.com · F3 +lofas.org.
    Needs the **lofas repo path**.
 4. **Naming clarify**: ResearchBoss vs corroborly (canonical?); wp-ai-poster vs wordpress-ai-publisher.
