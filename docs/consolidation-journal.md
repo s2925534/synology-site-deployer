@@ -75,17 +75,13 @@ Container count is tracked as the fleet total (`docker ps -aq | wc -l`).
 
 ---
 
-### 2026-09-05 — journaling automation configured
+### 2026-09-05 — journaling + commit cadence settled
 
 - This journal (`docs/consolidation-journal.md`) is committed to `main`; the `.claude/PROJECT_STATE.md`
   Notes section points here (that file is gitignored/local per the project-state skill).
-- Hourly auto-commit script written at `~/.local/bin/journal-hourly-commit.sh` (outside iCloud so
-  launchd can always read it). It is **commit-only** (no unattended push — the gh account drifts;
-  pushes happen at session checkpoints), and self-heals around the iCloud git-hang (skips on fresh
-  lock, clears stale locks, commits detached, polls the ref, reaps the hung process).
-- The **launchd install is pending Pedro** — the safety guard blocks installing an unattended
-  daemon; activation commands + the plist (`scratchpad/dev.velosolabs.journal-commit.plist`) were
-  handed over. Until then, journaling runs at **session cadence**. See
+- **Commit cadence:** "commit every hour" was clarified to mean **commit at every meaningful
+  checkpoint** — not a timer. The earlier hourly launchd script/plist was built then **removed**;
+  no daemon. Journal is updated + committed alongside each meaningful change. See
   [[consolidation-journal-and-commit-cadence]].
 
 <!-- Add new dated entries above this line. -->
