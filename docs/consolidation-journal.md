@@ -12,6 +12,30 @@ Container count = fleet total (`docker ps -aq | wc -l`).
 
 ## 2026-09-06
 
+### url-shortener → rebuilt on the zqx stack + deployed (Phases 1 & 2 done)
+
+- **Decision (Pedro):** move the shortener off ResiLinked onto the **zqx stack** — same stack
+  (NestJS 11 + Prisma 6), **share the zqx Postgres**, serve on **s.zqx.io** (s.reslk.com kept as
+  alias until fully cut over). Rationale: the shortener is stateful (needs a DB); the DB-less hub
+  was a bad fit, but zqx already runs Postgres → clean home, and the domain becomes s.zqx.io.
+- **Phase 1 (code):** rebuilt Fastify/SQLite → **NestJS 11 + Prisma 6** (`feat/rebuild-on-zqx-stack`,
+  PR #7 merged to `main`). Prisma targets the shared `zqx` DB isolated in a `shortener` schema
+  (`?schema=shortener`). SQLite→Postgres migration script preserves short codes. Dockerfile switched
+  `npm ci`→`npm install` (lockfile regenerated in the rebuild).
+- **Phase 2 (live, on the NAS):**
+  - Synced code to the NAS (SFTP disabled → `cat`-pipe transfer); preserved the old `data/shortener.db`.
+  - Brought up **`zqx-db`** (was down; rest of the zqx stack stays down); created the `shortener`
+    schema + a **least-privilege `shortener_app` role** (granted `CREATE ON DATABASE` — needed for
+    Prisma's init `CREATE SCHEMA`; **hardening follow-up:** could revoke after init migration).
+  - Built the image on the NAS (clean-FS build = the real gate; local build impossible under iCloud).
+  - Migrated the 2 links incl. **`8GQJDb → veloso.dev`** (the signature target) — verified in Postgres.
+  - Added **`s.zqx.io`** to the shared `veloso-nas` tunnel ingress (same Traefik target as
+    s.reslk.com, inserted before the catch-all, all 44 rules preserved) + DNS CNAME (via CF API).
+  - **Verified externally:** `s.zqx.io/8GQJDb` and `s.reslk.com/8GQJDb` both **302 → veloso.dev**;
+    `/health` 200. The signature link is live again (was down before).
+- **Phase 3 (pending):** repoint `SIGNATURE_URL` `s.reslk.com/8GQJDb` → `s.zqx.io/8GQJDb` across the
+  sites, committed per-project. Not urgent — the signature already works via s.reslk.com.
+
 ### health-veloso-dev — retired (Pedro chose B1)
 
 - **Decision:** Pedro picked **B1** from the earlier B-options (B1 retire · B2 fold `/health` · B3
@@ -111,7 +135,7 @@ full product, is not a drop-in.
 - This journal + PROJECT_STATE.md Notes pointer established (journal committed to main).
 
 ### Pending decisions (options menu for Pedro)
-1. **url-shortener**: A1 rewrite→Supabase+fold · A2 standalone. Alias `s.zqx.io`.
+1. **url-shortener**: ✅ RESOLVED — rebuilt on the **zqx stack** (NestJS+Prisma, shared zqx Postgres), deployed, `s.zqx.io` + `s.reslk.com` live (see 2026-09-06 entry). Only Phase 3 (signature repoint) remains.
 2. **health-veloso-dev**: ✅ RESOLVED — B1 (retired 2026-09-06). See the 2026-09-06 entry.
 3. **Frontend combined static container** (gated): F1 veloso.dev · F2 +corroborly.com · F3 +lofas.org.
    Needs the **lofas repo path**.
