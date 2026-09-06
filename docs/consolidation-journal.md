@@ -18,15 +18,15 @@ Found the signature link in only **two** repos (zqx's signature is aria-hidden d
 Resilinked has no `8GQJDb`):
 - **veloso.dev** `src/consts.ts:65` (`SIGNATURE_URL`) — ✅ edited, committed (`6f625d7`, per-project),
   CI built, **redeployed & verified live**: `https://veloso.dev/` signature now → `s.zqx.io/8GQJDb`.
-- **velosolabs** `app/templates/base.html:42` — ✅ edited + committed (`8562146`), but **redeploy
-  BLOCKED**: CI builds ok but `docker push ghcr.io/s2925534/velosolabs` fails
-  `permission_denied: read_package`. Cause: the `velosolabs` GHCR package was created by the manual
-  NAS retag during the repo rename, so it isn't write-linked to the renamed repo; the CI
-  `GITHUB_TOKEN` only has read. **Fix options:** (a) in GHCR package settings → "Manage Actions
-  access" add the `velosolabs` repo with **Write**, then re-run CI; or (b) delete the manual
-  `velosolabs` package (needs `delete:packages`) so CI recreates it linked; or (c) build+push from
-  the NAS (which owns the package). Not urgent — the live velosolabs signature still works via the
-  `s.reslk.com` alias. **This also blocks ALL future velosolabs image publishes until fixed.**
+- **velosolabs** `app/templates/base.html:42` — ✅ edited + committed (`8562146`); CI push was
+  blocked (`permission_denied: read_package` — the `velosolabs` GHCR package, created by the manual
+  NAS retag during the repo rename, isn't write-linked to the renamed repo), so I did **option (c):
+  built + pushed the image from the NAS** (which owns the package) and recreated `hub-veloso-dev`.
+  **Verified live: velosolabs.com signature → `s.zqx.io/8GQJDb`** (internal + external).
+  **OUTSTANDING follow-up:** the velosolabs **CI push is still broken** — all *future* velosolabs
+  image publishes via GitHub Actions will fail until the GHCR package is write-linked to the repo
+  (GHCR package → Manage Actions access → add `velosolabs` repo with Write). Until then, velosolabs
+  must be rebuilt from the NAS.
 
 ### url-shortener → rebuilt on the zqx stack + deployed (Phases 1 & 2 done)
 
