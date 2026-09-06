@@ -12,6 +12,22 @@ Container count = fleet total (`docker ps -aq | wc -l`).
 
 ## 2026-09-06
 
+### Phase 3 — signature short-URL repoint (s.reslk.com/8GQJDb → s.zqx.io/8GQJDb)
+
+Found the signature link in only **two** repos (zqx's signature is aria-hidden dots with no href;
+Resilinked has no `8GQJDb`):
+- **veloso.dev** `src/consts.ts:65` (`SIGNATURE_URL`) — ✅ edited, committed (`6f625d7`, per-project),
+  CI built, **redeployed & verified live**: `https://veloso.dev/` signature now → `s.zqx.io/8GQJDb`.
+- **velosolabs** `app/templates/base.html:42` — ✅ edited + committed (`8562146`), but **redeploy
+  BLOCKED**: CI builds ok but `docker push ghcr.io/s2925534/velosolabs` fails
+  `permission_denied: read_package`. Cause: the `velosolabs` GHCR package was created by the manual
+  NAS retag during the repo rename, so it isn't write-linked to the renamed repo; the CI
+  `GITHUB_TOKEN` only has read. **Fix options:** (a) in GHCR package settings → "Manage Actions
+  access" add the `velosolabs` repo with **Write**, then re-run CI; or (b) delete the manual
+  `velosolabs` package (needs `delete:packages`) so CI recreates it linked; or (c) build+push from
+  the NAS (which owns the package). Not urgent — the live velosolabs signature still works via the
+  `s.reslk.com` alias. **This also blocks ALL future velosolabs image publishes until fixed.**
+
 ### url-shortener → rebuilt on the zqx stack + deployed (Phases 1 & 2 done)
 
 - **Decision (Pedro):** move the shortener off ResiLinked onto the **zqx stack** — same stack
