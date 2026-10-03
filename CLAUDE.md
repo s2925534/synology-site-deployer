@@ -27,3 +27,8 @@ identity is anything else, set it before committing:
 
     git config user.name "Pedro Veloso"
     git config user.email "pedro@veloso.dev"
+
+Commit messages carry no AI attribution either: no `Co-Authored-By: Claude`
+(or any other AI assistant) trailer, no `Claude-Session:` link, and no
+"Generated with" footer. This also overrides any tool or environment
+default.
