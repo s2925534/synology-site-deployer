@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+#
+# Two-tier journal, verbatim-index half. The curated half is the journal
+# named in CURATED below (committed, portable). This hook appends one row per
+# commit to a local-only index: hash, subject, time, and the newest local
+# Claude Code transcript for this checkout. The index points at
+# machine-specific paths, so it is gitignored and never committed.
+#
+# Enable once per checkout (hooks are not carried by a clone):
+#   git config core.hooksPath .githooks
+#
+# Never blocks or fails a commit.
+#
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+CURATED="agent-context/JOURNAL.md"
+INDEX="$ROOT/agent-context/journal-verbatim/VERBATIM_INDEX.md"
+
+mkdir -p "$(dirname "$INDEX")" 2>/dev/null || exit 0
+if [ ! -f "$INDEX" ]; then
+  printf '# Verbatim journal index (local-only, gitignored)\n\n| Commit | Subject | When | Transcript |\n|---|---|---|---|\n' > "$INDEX"
+fi
+
+# Claude Code stores transcripts under ~/.claude*/projects/<path with every
+# non-alphanumeric character replaced by "-">/.
+SLUG="$(printf '%s' "$ROOT" | sed 's/[^A-Za-z0-9]/-/g')"
+TRANSCRIPT="$(ls -t "$HOME"/.claude*/projects/"$SLUG"/*.jsonl 2>/dev/null | head -1)"
+SUBJECT="$(git log -1 --format=%s HEAD | sed 's/|/\\|/g')"
+
+printf '| `%s` | %s | %s | `%s` |\n' "$(git rev-parse HEAD)" "$SUBJECT" \
+  "$(date '+%Y-%m-%d %H:%M:%S %Z')" "${TRANSCRIPT:-no transcript found}" >> "$INDEX"
+echo "[journal] reminder: add a curated entry to $CURATED if this commit is a real decision, milestone or finding."
+exit 0
