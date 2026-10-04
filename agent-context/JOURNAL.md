@@ -29,5 +29,12 @@ other gitignored local files plus this project's Claude Code memory.
 Replaces any OS-specific backup scheduler (Windows Task Scheduler, macOS
 launchd): the same committed hook runs on any machine once `git config
 core.hooksPath .githooks` is set. Same pattern already in use in
-veloso.dev, ecosystem-services, and systemsnotsilos. Earlier history lives
-only in `git log`; when a past decision becomes relevant, summarise it here.
+veloso.dev, ecosystem-services, and systemsnotsilos.
+
+A remote (cloud) Claude session independently set up the same
+journal/coordination scaffolding in parallel on GitHub around the same
+time — this entry supersedes that one; the NAS backup piece only makes
+sense run locally, so remote sessions won't trigger it.
+
+Earlier history lives only in `git log`; when a past decision becomes
+relevant, summarise it here.
