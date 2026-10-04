@@ -21,3 +21,6 @@ redirect-backups/
 drive-compat-fix-plan/
 vendor/
 activity-log/*.jsonl
+
+# Verbatim journal index: machine-local transcript paths, not portable
+/agent-context/journal-verbatim/
