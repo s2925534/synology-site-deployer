@@ -130,7 +130,7 @@ def update_site(
             else:
                 warn("docker compose pull failed; falling back to a local build")
                 build = True
-        up_flags = " up -d --build" if build else " up -d"
+        up_flags = " up -d --build --remove-orphans" if build else " up -d --remove-orphans"
         result = ssh.run(f"{base}{up_flags}")
         if not result.ok and compose == "docker compose":
             result = ssh.run(f"cd {quoted_project} && docker-compose -f {quoted_file}{up_flags}")
