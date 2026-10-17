@@ -20,6 +20,19 @@ remote sessions.
 
 ---
 
+## 2026-10-17: deployed velosolabs b489f17 (Tradeline bulk-orders docs)
+
+Third velosolabs deploy of the day, same Windows→NAS flow. Pulled `main` to
+`b489f17` ("Tradeline docs: bulk orders and trade enquiries", PR #26).
+Pre-deploy, confirmed GHCR `:latest` already == `b489f17` by content-digest
+(`77f86384…`) even though the commit was only ~2.5 min old — CI for an
+`app/**` change publishes fast. Dry-run → live (rc=0, `--remove-orphans`),
+verified: `/tradeline/docs/bulk-orders` (new route) → 200, new screenshot
+asset → 200, "Bulk order" text on `/tradeline/docs`; `43cd9a2`'s additions
+(`/bylinely/docs`, Tradeline "Coming soon") still present (no regression);
+`/health` 200 after the ~20s blip. (Classic PAT for GHCR still valid at deploy
+time — remind Pedro to revoke once done.)
+
 ## 2026-10-17: redeployed velosolabs to 43cd9a2 (true latest); Watchtower did NOT auto-land it
 
 Follow-up to the same-day `a468f1d` deploy below. After re-authing `gh` on
