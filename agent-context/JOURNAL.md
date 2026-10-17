@@ -20,6 +20,35 @@ remote sessions.
 
 ---
 
+## 2026-10-17: deployed velosolabs latest main to the NAS (from Windows)
+
+Routine production deploy of velosolabs.com, driven from the Windows machine
+(`IPC-ADM-122`) via the deployer, per `velosolabs-deploy` memory:
+
+    cd /c/Users/claude/Projects/synology-site-deployer
+    synology-site update hub.veloso.dev \
+      --compose-file ../velosolabs/docker-compose.local.yml \
+      --container-name velosolabs        # --dry-run first, then live
+
+Pulled velosolabs `main` to `a468f1d` (Merge PR #24 "feat/theme-licensing";
+the feature commit `d3d3fa4` touches `app/**`, which is what triggers the
+`docker-publish` workflow → GHCR `:latest`). Dry-run clean; live deploy rc=0
+("Uploaded new compose file", "Pulled latest images"); `up` ran with the now-
+committed `--remove-orphans` default (update.py:133). Verified: `/health` →
+`{"status":"ok"}` (404 for the first ~30s was the startup blip, as usual),
+`/`, `/tradeline`, `/tradeline/docs`, `/tradeline/support` all → 200, homepage
+serves Tradeline content with no stale "self-hosted" markup.
+
+Caveat for next time: the `gh` CLI token for `s2925534` on Windows is
+**invalid/expired**, so the usual `gh run list -R s2925534/velosolabs` CI-green
+pre-check couldn't run, and the GHCR package is private (anonymous registry
+query denied). Deploy proceeded on strong circumstantial evidence (app-code
+commit ~1 day old → CI long since published) plus post-deploy health/content
+verification. To restore the exact pre-check, re-auth on Windows with
+`gh auth login -h github.com` (interactive; needs Pedro). The app exposes no
+public version/revision endpoint, so there's no byte-level "is a468f1d live"
+confirmation beyond content.
+
 ## 2026-10-12: project migrated to Windows (IPC-ADM-122), Mac copy safe to delete
 
 Completed the move of this project onto the Windows machine
