@@ -20,6 +20,23 @@ remote sessions.
 
 ---
 
+## 2026-10-17: deployed velosolabs cb8fdda; theme-code secret now consumed + verified
+
+Pulled `main` to `cb8fdda` (#32; with #30 NetWattle/Gizmohaus pages, #31
+"Selling the themes: per-theme PayPal checkout" adding `app/theme_products.py`,
+#32 theme install/update docs). Confirmed GHCR `:latest` == `cb8fdda` by
+content-digest (`2865698…`) before deploying. Dry-run → live (rc=0,
+`--remove-orphans`).
+
+Milestone: the theme-code feature has now SHIPPED — `app/themes.py:code_secret()`
+reads `THEME_CODE_SECRET_<PRODUCT>` from env. So the `THEME_CODE_SECRET_TRADELINE`
+staged into the NAS `.env` earlier today is now actually consumed. Verified end
+to end: running container's image `revision` label == `cb8fdda`, and
+`docker exec velosolabs python -c "from app import themes; print(bool(themes.code_secret('tradeline')))"`
+→ **True** (the forwarded verify that didn't exist in b489f17 now works).
+`/health` 200 after the ~20s blip; `/`, `/tradeline`, `/tradeline/docs/bulk-orders`,
+`/bylinely/docs`, `/gizmohaus` all 200.
+
 ## 2026-10-17: added two secrets to velosolabs PRODUCTION .env (NAS-side), recreated
 
 Added `THEME_CODE_SECRET_TRADELINE` and `OPENID_KEY` to velosolabs' live env
