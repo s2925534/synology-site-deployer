@@ -20,6 +20,38 @@ remote sessions.
 
 ---
 
+## 2026-10-17: added two secrets to velosolabs PRODUCTION .env (NAS-side), recreated
+
+Added `THEME_CODE_SECRET_TRADELINE` and `OPENID_KEY` to velosolabs' live env
+(values not recorded here). Key operational facts worth remembering:
+
+- **Production env lives on the NAS, not in the repo.** The compose uses
+  `env_file: - .env`, and the deployer's `update` uploads ONLY the compose
+  file (`ssh.upload_text`), never the `.env`. So the file the container reads
+  is `/volume3/dockernvme/hub-veloso-dev/.env` on the NAS. Editing the Windows
+  `velosolabs/.env` alone does NOT reach prod. I edited the NAS file directly
+  (owned by `pedro:users`, mode 600 — no sudo needed to edit) and mirrored the
+  same keys into the Windows `velosolabs/.env` source-of-truth. Backed up the
+  NAS file first to `.env.bak-20261017-165924`.
+- **Reloading env needs a recreate, not a restart.** Ran
+  `cd <proj> && <compose> -f docker-compose.yml up -d --force-recreate`.
+  Drove it through the deployer's own plumbing so sudo/password is handled:
+  `smart_ssh_factory(settings, None)` + `detect_compose_command(ssh)` /
+  `docker_command(ssh)` (both resolve to `sudo -S -p '' /usr/local/bin/docker …`
+  with the password injected via the SSH channel). The deployer CLI has no
+  exec/force-recreate passthrough, so a ~20-line script reusing those helpers
+  is the clean way to run arbitrary sudo-docker on the NAS.
+- **Verify by env presence, not the forwarded accessor.** The instructions I
+  was given used `app.themes.code_secret('tradeline')`, which does NOT exist in
+  the live image (`b489f17`) — a full grep finds no `THEME_CODE_SECRET` usage at
+  all. The secret is staged ahead of the theme-code feature that will consume
+  it. Confirmed load with `docker exec velosolabs sh -c 'test -n "$VAR"'` +
+  length check (THEME_CODE_SECRET_TRADELINE len 48 as expected, OPENID_KEY 164).
+  Site healthy after recreate (/health 200, routes 200).
+
+Gotcha: nested `ssh nas "cmd"` inside `ssh win bash -s` must use `ssh -n`
+(no stdin) or the first ssh eats the rest of the heredoc as its stdin.
+
 ## 2026-10-17: deployed velosolabs b489f17 (Tradeline bulk-orders docs)
 
 Third velosolabs deploy of the day, same Windows→NAS flow. Pulled `main` to
