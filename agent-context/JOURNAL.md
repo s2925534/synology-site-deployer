@@ -20,6 +20,34 @@ remote sessions.
 
 ---
 
+## 2026-10-17: redeployed velosolabs to 43cd9a2 (true latest); Watchtower did NOT auto-land it
+
+Follow-up to the same-day `a468f1d` deploy below. After re-authing `gh` on
+Windows (needed a classic PAT — fine-grained PATs failed GHCR registry pulls,
+and `gh`'s browser login can't complete over the non-TTY SSH automation) we
+confirmed the running image by content and by GHCR digest:
+- `a468f1d` had been deployed correctly, but `main` advanced to **`43cd9a2`**
+  (PR #25, "Availability wording / Bylinely docs") whose image published to
+  GHCR ~34 min AFTER that deploy. GHCR `:latest` moved to `43cd9a2`
+  (digest `711ba28e…`, ≠ `a468f1d`'s `893ba450…`).
+- **The NAS was still serving `a468f1d`** — i.e. Watchtower had NOT pulled the
+  newer `:latest` in that window. Don't assume Watchtower lands "latest"
+  promptly (or at all) for velosolabs; to put latest live, run the deploy
+  explicitly. (Open question whether Watchtower is watching this container or
+  just polls slowly — worth confirming on the NAS when there's socket access.)
+
+Redeployed to `43cd9a2` via the usual Windows→NAS flow (dry-run → live, rc=0,
+`--remove-orphans`). Verified the running image is now `43cd9a2` by its
+visible diff — markers that were absent pre-deploy are now present:
+`/bylinely/docs` (new route) → 200; Tradeline says "Coming soon" (old
+"Submitted to the Shopify Theme Store · In review" gone); `/bylinely` hero is
+"Download free" (was "Get Bylinely"); `/health` 200 after the usual ~20s blip.
+
+Verification technique worth reusing: to prove WHICH commit is live without
+NAS docker access, read the GHCR tag's `org.opencontainers.image.revision`
+label / compare tag content-digests, and grep the live site for a string the
+target commit's diff adds or removes.
+
 ## 2026-10-17: deployed velosolabs latest main to the NAS (from Windows)
 
 Routine production deploy of velosolabs.com, driven from the Windows machine
