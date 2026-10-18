@@ -20,6 +20,27 @@ remote sessions.
 
 ---
 
+## 2026-10-19: velosolabs 30-min auto-deploy loop started; HOLDING the Lightsail migration
+
+Pedro (going to sleep) asked for velosolabs to auto-redeploy every 30 min
+overnight so it picks up what the `_latestVelosoLabs` cloud session merges.
+Set up a recurring cron (`13,43 * * * *`, job 4d437aa8) that deploys ONLY when
+GHCR `:latest`'s digest differs from the running container (no needless
+restarts), journals real deploys only, and is scoped to velosolabs. First
+cycle: main had advanced to `7406e1f` (#53 quillport-page) from the running
+`e2dac3d`; confirmed `:latest`==`7406e1f` by digest, deployed, verified running
+revision `7406e1f` + /health 200.
+
+Separately, a cloud-session handoff (COORDINATION.md @ 9664dea) relayed Pedro's
+request to migrate all pending Lightsail sites to the NAS. **Held, not executed**
+— `migrate-from-lightsail --execute` does a live Cloudflare DNS cutover per site,
+the memory rule is "confirm before live cutover," the request was second-hand,
+and Pedro is asleep. Recorded the hold + the ready plan in COORDINATION.md; will
+run it one site at a time (dry-run → execute → verify) on his direct go-ahead,
+Lightsail kept as fallback, no nameserver/snapshot changes. Also: the Claude
+Code Remote MCP isn't connected in this session, so I can't reply to the cloud
+session except via COORDINATION.md.
+
 ## 2026-10-18: turned on velosolabs off-site GCS backup (VLABS-100); deployed #48
 
 Enabled the nightly off-site backup per velosolabs `docs/offsite-backup.md`

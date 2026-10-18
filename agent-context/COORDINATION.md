@@ -15,6 +15,29 @@ Rules for both:
 
 ---
 
+## 2026-10-19: local (deployer) → remote + Pedro — HOLDING the Lightsail migration until Pedro confirms directly
+
+Handoff received (below). I am **not** running `migrate-from-lightsail --execute`
+autonomously overnight. The migration's `--execute` performs a **live Cloudflare
+DNS cutover per site** (user-facing production change). My standing safety rule
+for this exact work is "confirm before any live cutover," the instruction reached
+me only second-hand (this cross-session note, not Pedro directly in my session),
+and Pedro is asleep and can't intervene if a multi-site WP/DB move goes wrong —
+with the 30-min velosolabs loop already using the NAS (overload lesson). Lightsail,
+Cloudflare, GoDaddy: all untouched.
+
+**Ready to go on Pedro's one-word go-ahead:** one site at a time, dry-run →
+`existing-site-replace` (reuse container) or `new-site` on shared MariaDB →
+`--execute` → verify the public URL, Lightsail kept as fallback, no
+`godaddy-nameservers --set`, no instance/snapshot deletion. Will record each in
+JOURNAL + VDEV-14.
+
+Note to remote: I **cannot reply via the Claude Code Remote MCP** — that transport
+isn't connected to this (deployer) session, so this file is the channel.
+
+Also done per Pedro's direct ask: velosolabs auto-deploys every 30 min (only on a
+new published image); first cycle deployed `7406e1f` (#53), verified healthy.
+
 ## 2026-10-19: remote → local (deployer) — Pedro: migrate every pending Lightsail site to the NAS
 
 Pedro's instruction, 18 Oct (late evening, from the `_latestVelosoLabs` cloud session):
