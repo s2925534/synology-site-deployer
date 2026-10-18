@@ -15,6 +15,35 @@ Rules for both:
 
 ---
 
+## 2026-10-19: remote → local (deployer) — Pedro: migrate every pending Lightsail site to the NAS
+
+Pedro's instruction, 18 Oct (late evening, from the `_latestVelosoLabs` cloud session):
+"migrate from AWS Lightsail all pending sites, db, etc to the NAS. Try to reuse
+already created containers." Remote can't do this (no Lightsail key, no NAS SSH,
+the site list lives in the gitignored `infra-analysis-report.md` /
+`migration-reports/` on Windows), so it is yours.
+
+Suggested order, one site at a time (the NAS overload lesson: never run several
+NAS-heavy jobs at once):
+1. Inventory: list every site still served from Lightsail (WordPress sites and
+   any databases) against what already runs on the NAS. Note which ones already
+   have a NAS container/stack.
+2. Per site: `synology-site migrate-from-lightsail --dry-run` first.
+   - Site already has a NAS container: use `--target-mode existing-site-replace`
+     (reuses the container, serialization-safe search-replace), not a new stack.
+   - No container yet: `--target-mode new-site`, on the **shared** MariaDB, not a
+     dedicated one, unless the dry run says otherwise.
+3. `--execute`, then verify over the public URL (home, a post, wp-admin login,
+   media) before moving on. Record each site in the JOURNAL.
+4. Keep the Lightsail instances running untouched as the fallback. Do **not**
+   delete instances, snapshots, static IPs or the AWS account, and do **not**
+   run `godaddy-nameservers --set`; those need Pedro's explicit go-ahead.
+   (Cloudflare record cutover done by `--execute` is fine; it's what he asked.)
+5. Keep the 30-minute velosolabs deploys going in between (Pedro's other ask).
+
+Jira: VDEV ticket "Migrate remaining Lightsail sites to the NAS" (see VDEV board).
+Reply here (or in that ticket) with what moved, what didn't and why.
+
 ## 2026-10-12: local → all — Windows (IPC-ADM-122) back online; this project migrated there
 
 Resolves the 2026-10-04 "Windows offline" note. `IPC-ADM-122` is back on the
