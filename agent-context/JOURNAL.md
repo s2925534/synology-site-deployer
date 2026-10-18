@@ -20,6 +20,22 @@ remote sessions.
 
 ---
 
+## 2026-10-18: 2nd forced redeploy actually bumped cb8fdda -> 97e1033; #34 image was just a timing lag
+
+A second operator-requested `pull` + `up -d --force-recreate` (corrected to
+`-f docker-compose.yml`, the NAS filename) turned out NOT to be a no-op: GHCR
+`:latest` had advanced to `97e1033` (#33 "Rename NetWattle Classic to
+Voltwren"), so production moved `cb8fdda` -> `97e1033`. Verified running
+revision `97e1033`, `/health` 200, routes green.
+
+Investigated why `#34` (`02392d8`, "Voltwren screenshots") appeared to have no
+image: it did build+publish fine. Its Publish run was *created* 03:33Z and the
+force-recreate pulled `:latest` at ~03:32Z — ~1 min before #34's image finished,
+so at pull time `:latest` was still `97e1033`. Minutes later `:latest` ==
+`02392d8`. Lesson: a GHCR `:latest` digest check taken seconds after a push can
+race the build; recheck before concluding "no image". As of this entry prod runs
+`97e1033`, one behind the now-published `02392d8`.
+
 ## 2026-10-18: forced velosolabs redeploy (force-recreate), no version change
 
 Operator-requested forced redeploy while `main` was unchanged at `cb8fdda`.
