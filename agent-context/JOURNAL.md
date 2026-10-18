@@ -20,6 +20,13 @@ remote sessions.
 
 ---
 
+## 2026-10-18: redeployed velosolabs latest -> #38 (lightbox button fix)
+
+Routine "deploy latest": pulled `main` to `4472ab7` (#38 "Fix lightbox buttons
+on the live site: version hub.css and lightbox.js URLs"), deployed (pull :latest
++ up -d --remove-orphans, rc=0). Running revision confirmed `4472ab7`; /health
+200, routes 200. No config change this time (theme secrets already set).
+
 ## 2026-10-18: uploaded tradeline 1.3.0 zip (Lite download live); deployed latest #37
 
 Uploaded `tradeline-1.3.0.zip` to the hub admin endpoint (`version=1.3.0`,
