@@ -20,6 +20,34 @@ remote sessions.
 
 ---
 
+## 2026-10-18: turned on velosolabs off-site GCS backup (VLABS-100); deployed #48
+
+Enabled the nightly off-site backup per velosolabs `docs/offsite-backup.md`
+(PRs #47/#48 already merged; HEAD `e2dac3d`). Steps done from here:
+- Placed the `velosolabs-backup` GCS service-account key on the NAS at
+  `/volume3/dockernvme/hub-veloso-dev/backup-key.json`, perms 600 (container
+  runs as root so it reads it fine; key sha-verified Mac->Windows->NAS, contents
+  never printed). It lives ONLY on the NAS — not in the repo or Windows source;
+  re-downloadable from GCP if lost.
+- Edited the compose SOURCE (`velosolabs/docker-compose.local.yml`) to add the
+  read-only mount `./backup-key.json:/app/secrets/backup-key.json:ro` and
+  `environment: BACKUP_BUCKET=velosolabs-hub-backups`,
+  `BACKUP_KEY_FILE=/app/secrets/backup-key.json`; YAML-validated. The deployer
+  uploads this as `docker-compose.yml`, so the key MUST already be on the NAS
+  before deploy or Docker makes an empty dir at the mount path.
+- Deployed `e2dac3d` (first image with `app/backup.py`), recreated the
+  container. Verified env+key readable in-container.
+- `docker exec velosolabs python -m app.backup run` -> ok, object
+  `hub-20261018T124757Z.db.gz`, 23 files uploaded. `... drill` -> integrity ok
+  (1 licence, 2 activations, 6 plans, 18 plugin releases; live DB untouched).
+
+Design notes worth keeping: the backup key is add+read-only (Storage Object
+Creator/Viewer) so a leaked key can't wipe backups; there is no fixed "latest"
+object — each night writes a dated `velosolabs/db/hub-<ts>.db.gz` (35-day
+lifecycle), restore uses the newest. Bucket `velosolabs-hub-backups`
+(project velosolabs-hub, us-west1). The `.env` + licence signing key are NOT
+in the bucket by design.
+
 ## 2026-10-18: redeployed velosolabs latest -> #45 (licence-terms)
 
 Routine "deploy latest": pulled `main` to `1d21127` (Merge PR #45
