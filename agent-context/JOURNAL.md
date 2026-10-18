@@ -20,6 +20,27 @@ remote sessions.
 
 ---
 
+## 2026-10-18: rotated velosolabs live PayPal creds + plan IDs; force-recreated
+
+Pedro pasted 10 PayPal vars (live client id/secret, webhook id, and the three
+per-theme yearly plan + checkout URLs) as "new values for existing vars".
+Upserted all 10 into the NAS production `.env` (`/volume3/dockernvme/hub-veloso-dev/.env`,
+backup `.env.bak-20261018-192841`) and mirrored into the Windows velosolabs
+source `.env` — all 10 already existed, so all updated, no dups, `PAYPAL_ENV`
+stayed `live`, `PAYPAL_WEBHOOK_INSECURE_DEV` absent. Values moved file->file,
+never echoed/committed (`.env` is gitignored).
+
+main was unchanged (`974adf9`), so "redeploy" meant reload the env: ran
+`pull` + `up -d --force-recreate` (force, because a same-image `up -d` may skip
+recreation and a plain restart never reloads `.env`). Verified in-container
+(`PAYPAL_ENV=live`, client_id/secret set, webhook + 3 plan IDs match by tail)
+and on the live site — each theme page's Buy button `plan_id` now matches the
+new plan (tradeline `…JNLKI74A`, voltwren `…8NLKI74I`, gizmohaus `…RNLKI74Q`);
+/health 200.
+
+Note: previous PayPal values are preserved in the dated NAS `.env.bak-*` for
+rollback.
+
 ## 2026-10-18: velosolabs theme "Coming soon" was a content bug, not a stale deploy; fixed via PR #41/#42
 
 Another chat insisted the live site still ran "old code" (voltwren/gizmohaus
