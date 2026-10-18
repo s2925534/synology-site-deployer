@@ -20,6 +20,16 @@ remote sessions.
 
 ---
 
+## 2026-10-18: forced velosolabs redeploy (force-recreate), no version change
+
+Operator-requested forced redeploy while `main` was unchanged at `cb8fdda`.
+Ran `pull` + `up -d --force-recreate` via the deployer's sudo-docker plumbing
+(no code change: GHCR `:latest` and the running revision stayed `cb8fdda`).
+Point of a force-recreate is to restart the container and have it re-read
+`.env`. Verified: running revision still `cb8fdda`, `/health` 200 after the
+~20s blip, core routes + `/gizmohaus` all 200. No app/config change — recorded
+only because asked.
+
 ## 2026-10-17: deployed velosolabs cb8fdda; theme-code secret now consumed + verified
 
 Pulled `main` to `cb8fdda` (#32; with #30 NetWattle/Gizmohaus pages, #31
