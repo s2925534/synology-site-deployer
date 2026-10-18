@@ -20,6 +20,12 @@ remote sessions.
 
 ---
 
+## 2026-10-19: auto-deploy loop — velosolabs 7406e1f -> 20aa082
+
+Loop cycle (cron 4d437aa8): main advanced to `20aa082` (running was `7406e1f`);
+confirmed `:latest`==`20aa082` by digest, deployed (pull + up -d --remove-orphans),
+verified running revision `20aa082`, /health 200.
+
 ## 2026-10-19: velosolabs 30-min auto-deploy loop started; HOLDING the Lightsail migration
 
 Pedro (going to sleep) asked for velosolabs to auto-redeploy every 30 min
