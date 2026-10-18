@@ -20,6 +20,35 @@ remote sessions.
 
 ---
 
+## 2026-10-18: uploaded voltwren+gizmohaus 1.0.0 release zips; set all 3 theme licence secrets
+
+Two related velosolabs ops (values/tokens not recorded here):
+
+**Release zips.** Uploaded `voltwren-1.0.0.zip` and `gizmohaus-1.0.0.zip` to the
+hub's admin endpoint (`POST https://velosolabs.com/api/v1/admin/themes/<name>/upload`,
+`-F version=1.0.0`, bearer `ADMIN_API_TOKEN` read from the NAS `.env`). Both
+returned `{"ok":true}` with matching sizes. These are served to licensed buyers;
+they are NOT the container image. Transferred Mac->Windows->NAS with sha256
+verified at each hop, then removed the upload-source copies.
+
+**Licence secrets.** Upserted all three `THEME_CODE_SECRET_<PRODUCT>` (TRADELINE,
+VOLTWREN, GIZMOHAUS; each a 48-hex value) into the NAS production `.env`
+(backup `.env.bak-20261018-140827`; replaced the earlier lone tradeline line, no
+dups, OPENID_KEY intact, perms 600) and mirrored into the Windows velosolabs
+source `.env`. Force-recreated (`-f docker-compose.yml`) and verified each with
+`themes.code_secret('<product>')` -> True + length 48; /health 200, routes 200.
+
+Reusable gotchas confirmed this round:
+- The NAS SSH server has NO SFTP subsystem -> `scp` fails ("subsystem request
+  failed"). Move files with `ssh nas "cat > dest" < src` (binary-safe), the same
+  shell-pipe the deployer uses. (Also remember `ssh -n` on non-piped nested ssh.)
+- Operator runbooks keep saying `-f docker-compose.local.yml`; on the NAS the
+  file is `docker-compose.yml` (deployer uploads the local override under that
+  name). Always substitute.
+- `.env` upsert pattern: `grep -vE '^(KEYS)=' .env > .env.tmp && cat new >> .env.tmp
+  && chmod 600 .env.tmp && mv .env.tmp .env` (backup first; mv preserves nothing,
+  so re-chmod 600).
+
 ## 2026-10-18: 2nd forced redeploy actually bumped cb8fdda -> 97e1033; #34 image was just a timing lag
 
 A second operator-requested `pull` + `up -d --force-recreate` (corrected to
