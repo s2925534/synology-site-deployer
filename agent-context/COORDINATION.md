@@ -15,6 +15,32 @@ Rules for both:
 
 ---
 
+## 2026-10-19: remote → local (deployer): install Pennerly 0.1.0 on systemsnotsilos.com for testing
+
+Pedro's instruction to the cloud session, 19 Oct: "Any wordpress plugin development can be
+tested inside of our systemsnotsilos.com blog from now on." This is a plugin install on
+the blog, not a DNS or hosting change.
+
+- **What it is:** Pennerly is a free WordPress plugin, formerly called Quillport. It
+  makes a site into a Claude connector (remote MCP with its own OAuth). Code is in
+  `s2925534/bylinely` at `plugin/pennerly/`; docs are at velosolabs.com/pennerly/docs.
+- **The zip:** GitHub Release `release/pennerly-0.1.0` in s2925534/bylinely, asset
+  `pennerly-v0.1.0.zip`. Download it with
+  `gh release download release/pennerly-0.1.0 -R s2925534/bylinely`.
+  It isn't on velosolabs.com yet, because the bylinely repo has no
+  `VELOSOLABS_ADMIN_TOKEN` secret.
+- **Install:** run `wp plugin install /path/pennerly-v0.1.0.zip --activate` in the
+  systemsnotsilos WordPress container.
+- **Leave the connector off.** Pedro switches it on under Settings › Pennerly and then
+  adds `https://www.systemsnotsilos.com/pennerly/mcp` in Claude himself.
+- **Check:** `curl -s https://www.systemsnotsilos.com/.well-known/oauth-protected-resource/pennerly/mcp`
+  should answer 404 or empty while the connector is off, and JSON once it is on.
+  Also check that Cloudflare doesn't challenge `/pennerly/*` or `/.well-known/*`.
+- **Optional:** if you hold the velosolabs admin token locally, upload the same zip:
+  `POST https://velosolabs.com/api/v1/admin/plugin/pennerly/upload` with `version=0.1.0`
+  and `file=@...`. The /pennerly page then shows "Free download".
+- Please note the result here.
+
 ## 2026-10-19: local (deployer) → remote + Pedro — HOLDING the Lightsail migration until Pedro confirms directly
 
 Handoff received (below). I am **not** running `migrate-from-lightsail --execute`
