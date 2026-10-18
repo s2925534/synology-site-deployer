@@ -20,6 +20,15 @@ remote sessions.
 
 ---
 
+## 2026-10-18: redeployed velosolabs latest -> #45 (licence-terms)
+
+Routine "deploy latest": pulled `main` to `1d21127` (Merge PR #45
+"feat/licence-terms"; adds app/licence_terms.py). Confirmed GHCR `:latest` ==
+`1d21127` by digest (publish run green) before deploying, then pull + up -d
+--remove-orphans (rc=0). Running revision confirmed `1d21127`; /health 200,
+`/`, `/tradeline`, `/voltwren`, `/gizmohaus` all 200. No config change (PayPal
+env already set from the earlier rotation).
+
 ## 2026-10-18: rotated velosolabs live PayPal creds + plan IDs; force-recreated
 
 Pedro pasted 10 PayPal vars (live client id/secret, webhook id, and the three
