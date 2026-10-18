@@ -20,6 +20,39 @@ remote sessions.
 
 ---
 
+## 2026-10-18: velosolabs theme "Coming soon" was a content bug, not a stale deploy; fixed via PR #41/#42
+
+Another chat insisted the live site still ran "old code" (voltwren/gizmohaus
+showing "Coming soon"). That was WRONG and worth remembering how I disproved it:
+read the running container's image `revision` label via the deployer's
+`docker_command` plumbing (`docker inspect velosolabs --format
+'{{index .Config.Labels "org.opencontainers.image.revision"}}'`) — it already
+matched the newest commit, and tradeline showed prices. The deployer's `update`
+does `docker compose pull` + `up -d` (NOT a bare restart), so it always fetches
+the new image; "restart reuses the old image" doesn't apply to our deploy path.
+
+Real cause: a hardcoded FAQ answer in velosolabs `app/theme_products.py`
+("When can I buy Voltwren? It is coming soon…") stayed even though the themes
+are launched (live PayPal plans + prices). It was **lowercase** "coming soon",
+so the existing `test_theme_selling`/`test_site_wording` checks (which match
+capital "Coming soon" from the template badge) never caught it.
+
+Flow (velosolabs repo work, done on the Windows checkout): edited the two FAQ
+answers, ran the two tests (12/12 pass), and — because a direct push to
+velosolabs `main` is correctly blocked (app code lands via PR) — branched and
+opened **PR #41**, which Pedro merged. Deployed `7b89837` (waited for the GHCR
+publish run to finish first — a `:latest` digest check seconds after merge
+races the build). Then a sibling session merged **PR #42** ("Theme FAQ follows
+the Buy button" — the more robust conditional version) and asked (via a
+cross-session message) for the same deploy; verified facts independently +ok'd
+by Pedro, deployed `974adf9`. Final: `/voltwren` + `/gizmohaus` show $99 + Buy,
+no "Coming soon", FAQ answers availability.
+
+Gotchas: (1) GHCR publish for an `app/**` change takes a few min — poll the
+sha tag before deploying or you redeploy the old `:latest`. (2) The "Claude
+Code Remote" MCP server (used to reply to other sessions) is NOT connected in
+this deployer session, so cross-session replies can't be sent from here.
+
 ## 2026-10-18: redeployed velosolabs latest -> #38 (lightbox button fix)
 
 Routine "deploy latest": pulled `main` to `4472ab7` (#38 "Fix lightbox buttons
