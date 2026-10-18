@@ -20,6 +20,27 @@ remote sessions.
 
 ---
 
+## 2026-10-18: uploaded tradeline 1.3.0 zip (Lite download live); deployed latest #37
+
+Uploaded `tradeline-1.3.0.zip` to the hub admin endpoint (`version=1.3.0`,
+`{"ok":true}`, size 719326, sha verified Mac->Windows->NAS). Note the version
+drift: an operator runbook said `tradeline-1.2.0.zip`/`version=1.2.0`, but the
+file actually dropped was `1.3.0` — uploaded at `1.3.0` to match the artifact.
+After upload the free "Download Tradeline Lite" button is live on `/tradeline`
+and `/api/v1/themes/tradeline/download` -> 200.
+
+Then "redeploy the latest": the deployer pulls `:latest`, which had raced from
+`2ce5238` (#35) to **`8de61d0`** (#37 "Docs: quick order search, in-cart status
+and category picker") during this rollout. Running revision confirmed
+`8de61d0`; all three `code_secret()` still True after the recreate; /health 200,
+routes 200. (An earlier "deploy 02392d8" request was intentionally NOT followed
+to the letter — 02392d8/#34 predates the 1.2.0+ docs; deploying latest is what
+the operator actually wanted.)
+
+Reminder that recurred all day: velosolabs `main` publishes a new `:latest`
+every few minutes, so "deploy latest" lands whatever is newest at pull time —
+always read back the running `revision` label to report the exact commit.
+
 ## 2026-10-18: uploaded voltwren+gizmohaus 1.0.0 release zips; set all 3 theme licence secrets
 
 Two related velosolabs ops (values/tokens not recorded here):
