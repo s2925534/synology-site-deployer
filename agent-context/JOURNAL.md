@@ -20,6 +20,12 @@ remote sessions.
 
 ---
 
+## 2026-10-19: auto-deploy loop — velosolabs eb3d4e6 -> 852eaed
+
+Loop cycle: main advanced to `852eaed` (running was eb3d4e6); confirmed
+:latest==852eaed by digest, deployed (pull + up -d --remove-orphans),
+verified running revision 852eaed, /health 200.
+
 ## 2026-10-19: FIXED the live modamarieclaire.com 500 at source (WooCommerce core restored); NAS staging paused
 
 **Live site fix (the win):** www.modamarieclaire.com was returning 500 (store DOWN).
