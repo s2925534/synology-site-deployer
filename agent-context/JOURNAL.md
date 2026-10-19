@@ -20,6 +20,45 @@ remote sessions.
 
 ---
 
+## 2026-10-19: modamarieclaire staging — full serialized search-replace + WC DB update DONE
+
+Completed the two remaining cutover-prep steps on the staging copy
+(`modamarieclaire-veloso-dev`). The `wordpress:latest` image ships no wp-cli and
+no mysql client, and the `mariadb:11` db container uses `mariadb-dump` (not
+`mysqldump`) — both bit the first attempts.
+
+- Installed wp-cli 2.12.0 into the WP container (`/usr/local/bin/wp`, run as
+  www-data/uid 33); loads WordPress fine.
+- Took a real pre-change backup via the db container's `mariadb-dump`
+  (`/volume3/dockernvme/modamarieclaire-veloso-dev/pre-sr-backup.sql`, 116 MB) —
+  gated the destructive step on size > 50k, aborts otherwise.
+- `wp search-replace` (serialized-safe, `--all-tables --skip-columns=guid`) for
+  every URL form: `https://`+`http://` × (www / non-www), the JSON escaped-slash
+  variants, and bare-host `www.modamarieclaire.com`. ~8.6k replacements total.
+  The first live run timed out mid-table (local ssh SIGTERM at 2m); re-ran
+  **detached** on Windows (`nohup python > /tmp/sr_c.log`, poll the log) — that's
+  the pattern for any long NAS op, since wp search-replace is idempotent.
+- DELIBERATELY did NOT blanket-replace the bare `modamarieclaire.com` string:
+  of the ~10.4k bare matches, 7,300 are `@modamarieclaire.com` **email
+  addresses** (admin/customer/CRM — a blanket replace corrupts them), plus
+  `imgix.modamarieclaire.com` (real CDN subdomain), `sc-domain:modamarieclaire.com`
+  (Google Search Console property id), a Cloudflare-plugin setting, and spam-log
+  plaintext ("Dear modamarieclaire.com Administrator…"). Those are correct to
+  leave. Only true self-referential URL forms were rewritten.
+- WooCommerce DB update: `wp wc update` → "No updates required. Database version
+  is 10.1.2" (woocommerce_db_version already == version; nothing pending).
+- Flushed object cache + transients + rewrite rules. Verified:
+  siteurl/home = https://modamarieclaire.veloso.dev; public
+  `/`→200, `/shop/`→200, `/wp-login.php`→200 through Cloudflare.
+
+Staging is now a true independent copy (functional URLs all point at
+modamarieclaire.veloso.dev). Remaining before Lightsail can be deleted is just
+the DNS cutover for the real modamarieclaire.com (+ repoint veloso.au /
+veloso.com.au redirects off Lightsail) — needs Pedro's GoDaddy/Cloudflare
+go-ahead. wp-cli authorization for the fetch was explicit this time.
+
+---
+
 ## 2026-10-19: modamarieclaire.veloso.dev staging now WORKING (200)
 
 After fixing the live source, got the NAS staging copy serving without
