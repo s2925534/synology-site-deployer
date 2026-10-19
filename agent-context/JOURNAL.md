@@ -20,6 +20,12 @@ remote sessions.
 
 ---
 
+## 2026-10-19: redeployed velosolabs -> 8955b5b (#57 paypal fix)
+
+Pedro asked to redeploy latest; main at `8955b5b` (#57 fix/paypal-reco),
+running was 856ac3d. Confirmed :latest==8955b5b by digest, deployed, verified
+running revision 8955b5b, /health 200.
+
 ## 2026-10-19: Lightsail delete-readiness audit (read-only) — NOT safe to delete yet
 
 Pedro wants to delete the Lightsail box (54.79.130.10, workspace veloso-dev,
