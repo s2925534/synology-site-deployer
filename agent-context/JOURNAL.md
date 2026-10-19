@@ -20,6 +20,31 @@ remote sessions.
 
 ---
 
+## 2026-10-19: Lightsail delete-readiness audit (read-only) — NOT safe to delete yet
+
+Pedro wants to delete the Lightsail box (54.79.130.10, workspace veloso-dev,
+shared instance) but only once everything's live elsewhere. Read-only audit
+(SSH with secrets/veloso-dev/lightsail-ssh-key.pem + public DNS/HTTP; nothing
+changed on Lightsail/Cloudflare/GoDaddy):
+
+Still DEPENDS on Lightsail (DNS points directly at 54.79.130.10):
+- **modamarieclaire.com + www** — live WordPress at /var/www/html/modamarieclaire/
+  production/ (wp-config, wordfence, WooCommerce feeds). No NAS container. NOT
+  migrated. `www` currently 500s. -> migrate (new-site, WP+DB) then repoint DNS.
+- **veloso.au / www.veloso.au / veloso.com.au / www.veloso.com.au** — 301 redirect
+  to veloso.dev, served by Lightsail. -> repoint DNS (needs Pedro's go-ahead).
+
+Already OFF Lightsail (safe): veloso.dev/www/p./blog.veloso.dev and
+systemsnotsilos.com/www all resolve to Cloudflare -> NAS (containers p-veloso-dev,
+systemsnotsilos-com up). gumtree.dev and risefortruth.com DNS point to GoDaddy/AWS
+forwarding (15.197/3.33, 76.223/13.248), not this box -> their Lightsail vhosts/
+files are stale leftovers, deleting won't affect them.
+
+Gotcha: the box's nginx vhosts list many domains (veloso.dev vhost even names
+systemsnotsilos.com, veloso.com.au, veloso.au) — vhost presence means nothing;
+only live DNS does. Check `dig` per hostname vs 54.79.130.10, not nginx config.
+No AWS CLI on Windows, and sudo mysql needs creds, so DB list wasn't pulled.
+
 ## 2026-10-19: redeployed velosolabs -> 856ac3d (#56 licence-two-way-revoke)
 
 Pedro asked to redeploy; main was at `856ac3d` (#56 licence-two-way-revoke),
