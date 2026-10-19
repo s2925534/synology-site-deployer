@@ -20,6 +20,13 @@ remote sessions.
 
 ---
 
+## 2026-10-19: redeployed velosolabs -> eb3d4e6
+
+Pedro asked to redeploy latest; main at `eb3d4e6`, running was f6b5e88.
+Confirmed :latest==eb3d4e6 by digest, deployed (rc=0), /health 200.
+(Also added PAYPAL_SANDBOX_CLIENT_ID/SECRET to the NAS prod .env + Windows
+mirror earlier this session; take effect on next recreate.)
+
 ## 2026-10-19: redeployed velosolabs -> f6b5e88 (#59)
 
 Pedro asked to redeploy latest; main at `f6b5e88` (#59), running was b200cbf.
