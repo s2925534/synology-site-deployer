@@ -20,6 +20,12 @@ remote sessions.
 
 ---
 
+## 2026-10-19: redeployed velosolabs -> 856ac3d (#56 licence-two-way-revoke)
+
+Pedro asked to redeploy; main was at `856ac3d` (#56 licence-two-way-revoke),
+running was `20aa082`. Confirmed `:latest`==`856ac3d` by digest, deployed,
+verified running revision `856ac3d`, /health 200, / 200.
+
 ## 2026-10-19: auto-deploy loop — velosolabs 7406e1f -> 20aa082
 
 Loop cycle (cron 4d437aa8): main advanced to `20aa082` (running was `7406e1f`);
