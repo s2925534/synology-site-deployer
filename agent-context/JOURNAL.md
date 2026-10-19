@@ -20,6 +20,27 @@ remote sessions.
 
 ---
 
+## 2026-10-19: modamarieclaire.veloso.dev staging now WORKING (200)
+
+After fixing the live source, got the NAS staging copy serving without
+re-fetching 3.6G: (1) the staged wp-content (pulled pre-fix) was missing
+WooCommerce core too, but its own `wp-content/upgrade/woocommerce.10.1.2` came
+across in the tarball, so restored it the same way (`cp -a` into plugins +
+chown 33) -> in-container self-test 500 -> 301. (2) The 502 was a WRONG PORT in
+my Cloudflare route: the deployer dynamically published the container on
+**5055** (not the 5054 my first route used — it reassigned on the re-create).
+Repointed the route to http://192.168.1.109:5055; external
+https://modamarieclaire.veloso.dev now 200 (/, /shop/, /wp-login.php), real
+store renders, WooCommerce present.
+
+Migration now proven end to end. Remaining for a REAL cutover (not just this
+staging check): full serialized `wp search-replace` (only siteurl/home were SQL-
+updated, so content/asset URLs still point at modamarieclaire.com — fine for
+staging, which actually loads assets off the now-working live site); run the
+WooCommerce DB update; and the DNS cutover (needs the Cloudflare/nameserver
+decision). Lightsail still not deletable until modamarieclaire.com + the
+veloso.au/com.au redirects are moved off it.
+
 ## 2026-10-19: auto-deploy loop — velosolabs eb3d4e6 -> 852eaed
 
 Loop cycle: main advanced to `852eaed` (running was eb3d4e6); confirmed
