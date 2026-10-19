@@ -20,6 +20,24 @@ remote sessions.
 
 ---
 
+## 2026-10-19: velosolabs deploy 74b1c3d -> e257590
+
+Auto-deploy loop: new commit `e257590` on main AND CI had published its image, so
+deployed. Running revision now `e257590d507a5a27a9f97276c7347410c1afc37e` ==
+origin/main HEAD; health 404→200 after the blip.
+
+Nailed the freshness check this time (the earlier digest-representation trap is
+now solved — see prior entry). The robust, token-free, buildx-free method:
+compare the **linux/amd64 per-platform manifest digest** of `:latest` vs the
+running image, both read from the registry via the NAS's own GHCR auth —
+`docker manifest inspect --verbose <repo>@<running-index-digest>` and
+`… <repo>:latest`, pull `.Descriptor.digest` where platform is amd64/linux.
+Running was `…8a70`, `:latest` was `…6f09…3270` → genuinely new → DEPLOY. This
+distinguishes a real published image from "new commit but build still running"
+(skip), which the bare revision==HEAD check could not. Use this going forward.
+
+---
+
 ## 2026-10-19: velosolabs deploy 852eaed -> 74b1c3d
 
 Auto-deploy loop fired, found a genuinely new GHCR `:latest` (running digest
