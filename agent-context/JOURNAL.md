@@ -20,6 +20,11 @@ remote sessions.
 
 ---
 
+## 2026-10-19: redeployed velosolabs -> f6b5e88 (#59)
+
+Pedro asked to redeploy latest; main at `f6b5e88` (#59), running was b200cbf.
+Confirmed :latest==f6b5e88 by digest, deployed (rc=0), /health 200, / 200.
+
 ## 2026-10-19: redeployed velosolabs -> b200cbf (#58 admin fix)
 
 Pedro asked to redeploy latest; main at `b200cbf` (#58 fix/admin), running was
