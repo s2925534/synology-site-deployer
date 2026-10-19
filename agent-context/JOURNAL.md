@@ -20,6 +20,73 @@ remote sessions.
 
 ---
 
+## 2026-10-19: FIXED the live modamarieclaire.com 500 at source (WooCommerce core restored); NAS staging paused
+
+**Live site fix (the win):** www.modamarieclaire.com was returning 500 (store DOWN).
+Root cause: a WooCommerce 10.1.2 auto-update failed mid-install — WordPress had
+deleted the old `wp-content/plugins/woocommerce/` core dir but never moved the new
+one into place, so the ~20 WooCommerce EXTENSION plugins (smart-coupons, payments,
+stripe, …) stayed active and called `WC()` against a missing core -> fatal
+("Call to undefined function WC()") on every request. The correct version was
+already staged on the box at `wp-content/upgrade/woocommerce.10.1.2/woocommerce`.
+Fix: `cp -a` it into `plugins/woocommerce` + `chown -R www-data:www-data` (no
+external download). Live site recovered: /, apex, /shop/, /wp-login.php all 200.
+NOTE: WooCommerce may now show a "database update required" admin notice (DB was at
+the pre-10.1.2 schema); the FRONTEND works, but someone should run the WC DB update
+from wp-admin when convenient. The on-box `upgrade/woocommerce.10.1.2` copy was left
+in place as a fallback. This is a WRITE to the live Lightsail source (Pedro asked
+me to "fix it yourself before migration") — the one deliberate exception to the
+otherwise read-only Lightsail stance.
+
+**NAS staging (modamarieclaire.veloso.dev): PAUSED, data staged, not serving.**
+Pedro's call. Project `modamarieclaire-veloso-dev`: WP + dedicated MariaDB up,
+DB restored (wp_ prefix), 4.6G wp-content (uid 33), siteurl/home set to the
+staging URL, Cloudflare route created. It does NOT serve because (a) its
+wp-content was migrated BEFORE the source fix, so it has the same missing-WC-core
+500, and (b) a routing mismatch: migrate new-site publishes a host port (5054:80)
+unreachable on the host -> tunnel returns 502; the NAS's working sites use the
+shared supabase_default net + Traefik instead. To finish later: re-sync the
+now-fixed wp-content (or drop WooCommerce 10.1.2 into the staged copy) + rework
+routing onto Traefik + full wp search-replace + DNS cutover.
+
+Staged state (NAS project `modamarieclaire-veloso-dev`): WP + dedicated MariaDB
+containers up; migrated DB restored (wp_ prefix); 4.6G wp-content extracted,
+owned uid 33 (www-data); `siteurl`/`home` set to https://modamarieclaire.veloso.dev;
+Cloudflare route `modamarieclaire.veloso.dev` -> http://192.168.1.109:5054 created.
+
+Two blockers stop it serving:
+1. **WP returns 500 even in-container** (`docker exec … curl localhost:80` -> 500) —
+   the SAME 500 `www.modamarieclaire.com` throws on Lightsail. The site was already
+   broken; carried over. Needs WP_DEBUG + bisecting a ~60-plugin WooCommerce store.
+2. **Routing mismatch**: migrate new-site publishes a host port (5054:80) on a
+   standalone network, but that port is unreachable on the host (127.0.0.1:5054 ->
+   000), so the tunnel -> 192.168.1.109:5054 returns 502. Every working NAS site
+   uses the shared `supabase_default` net + Traefik via the tunnel, not host-port
+   publish. The migrate tool produces the wrong pattern for this NAS.
+
+Tool bugs hit this run (for a proper hardening pass later):
+- FIXED + committed (c9e4f45): new-site didn't pre-create ./wp-content, so compose
+  up failed the bind mount.
+- `--target-workspace <name>` is only validated on --execute (dry-run accepts bad values).
+- new-site defaults to shared MariaDB (`shared-mariadb`) which isn't running here ->
+  use `--target-db-mode container`.
+- wp-content push writes host-side as the SSH user, but the WP container owns
+  wp-content (www-data) -> permission denied. Worked around manually (tar-stream +
+  chown 33:33). The tool should push via docker exec as www-data (it has
+  push_wp_content_to_volume for exactly this).
+- new-site routing uses host-port publish, not the NAS's tunnel/Traefik pattern.
+- No DB URL search-replace when target-domain != source-domain (did siteurl/home by
+  hand; a full serialized wp search-replace still needed for a real cutover).
+
+To resume (make modamarieclaire live): debug the WP 500 -> rework routing onto
+supabase_default+Traefik -> full wp search-replace -> then DNS cutover. Logged for
+VDEV-14. Transfer tip that worked: tar-stream wp-content Lightsail->NAS directly
+(`ssh lightsail "sudo tar czf - -C <docroot> wp-content" | ssh nas "cat > f.tgz"`),
+then extract into the container's bind-mount and `chown -R 33:33`.
+
+Lightsail still NOT deletable: modamarieclaire.com (live, on Lightsail) + the
+veloso.au/veloso.com.au redirects still point there.
+
 ## 2026-10-19: redeployed velosolabs -> eb3d4e6
 
 Pedro asked to redeploy latest; main at `eb3d4e6`, running was f6b5e88.
