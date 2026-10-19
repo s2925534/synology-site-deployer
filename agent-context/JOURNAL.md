@@ -20,6 +20,15 @@ remote sessions.
 
 ---
 
+## 2026-10-19: velosolabs deploy e257590 -> 27196e9
+
+Auto-deploy loop: new commit `27196e9` on main, CI image published (:latest
+amd64 `…6f09…3270` -> `…5709…`), deployed. Running revision now
+`27196e9c0d86f0937bd1ef11e3d649a8dc795ca5` == origin/main HEAD; health 404→200
+after the blip.
+
+---
+
 ## 2026-10-19: added hourly zqx-prod deploy-check loop (like velosolabs)
 
 Pedro: "check deploys for the zqx project like velosolabs every hour." Set up a
