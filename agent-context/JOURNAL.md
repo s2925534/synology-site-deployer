@@ -20,6 +20,33 @@ remote sessions.
 
 ---
 
+## 2026-10-19: added hourly zqx-prod deploy-check loop (like velosolabs)
+
+Pedro: "check deploys for the zqx project like velosolabs every hour." Set up a
+second recurring check (session-only cron `7ae43811`, hourly at :23; velosolabs
+stays `4d437aa8` at :13,:43). Scope = the 5 zqx PRODUCTION services only; the
+`*-staging` containers already carry the Watchtower label, so they're left to
+Watchtower.
+
+Prod deploy matrix (from each repo's `.github/workflows/deploy-*.yml`, image
+`ghcr.io/zqxio/<svc>:main`, health `/health`):
+- zqx-site   -> zqx.io
+- zqx-app    -> app.zqx.io
+- zqx-api    -> api.zqx.io
+- zqx-field  -> field.zqx.io
+- zqx-portal -> portal.zqx.io   (currently runs the zqx-site image — the check
+  detects each container's actual image ref dynamically, doesn't hardcode repo)
+
+Deploy command per service (same shape as the GH Actions workflows):
+`synology-site update <domain> --health-path /health --container-name <container>`.
+Freshness uses the same token-free amd64-manifest-digest compare proven for
+velosolabs (NAS's own GHCR auth via `docker manifest inspect --verbose`), per
+service. These services already auto-deploy via their own CI on push to main, so
+this loop is a drift safety-net. First cycle (19 Oct): all 5 SKIP (current).
+Note: session-only cron, auto-expires in 7 days.
+
+---
+
 ## 2026-10-19: velosolabs deploy 74b1c3d -> e257590
 
 Auto-deploy loop: new commit `e257590` on main AND CI had published its image, so
