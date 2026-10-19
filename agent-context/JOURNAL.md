@@ -20,6 +20,11 @@ remote sessions.
 
 ---
 
+## 2026-10-19: redeployed velosolabs -> b200cbf (#58 admin fix)
+
+Pedro asked to redeploy latest; main at `b200cbf` (#58 fix/admin), running was
+8955b5b. Confirmed :latest==b200cbf by digest, deployed (rc=0), /health 200.
+
 ## 2026-10-19: fixed migrate/new-site wp-content bind-mount ordering bug (create.py)
 
 The lightsail migration (and any `wordpress` new-site) failed: `docker compose up`
