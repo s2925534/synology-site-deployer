@@ -20,6 +20,25 @@ remote sessions.
 
 ---
 
+## 2026-10-19: fixed migrate/new-site wp-content bind-mount ordering bug (create.py)
+
+The lightsail migration (and any `wordpress` new-site) failed: `docker compose up`
+in `create_site` errored `Bind mount failed: .../wp-content does not exist`. Cause:
+`_prepare_remote_project` only pre-created `./data` for flask, not `./wp-content`
+for wordpress, but `wordpress_compose.yml.j2` bind-mounts `./wp-content` — and the
+migration's `push_wp_content` only creates it AFTER the stack is up. Docker won't
+start a container whose bind-mount source is missing.
+
+Fix: create `{project}/wp-content` in `_prepare_remote_project` when
+framework == "wordpress" (same one-liner + reasoning as the existing flask `./data`
+case). Fresh new-site gets an empty dir the WP image populates; the migration fills
+it live afterwards. This unblocks `migrate-from-lightsail` for WordPress and fixes
+plain `new-site wordpress` deploys too.
+
+Found while staging modamarieclaire.com -> modamarieclaire.veloso.dev (3rd failure;
+first was a bad --target-workspace, second was shared-mariadb not running -> switched
+to --target-db-mode container). Re-running the stage after this fix.
+
 ## 2026-10-19: redeployed velosolabs -> 8955b5b (#57 paypal fix)
 
 Pedro asked to redeploy latest; main at `8955b5b` (#57 fix/paypal-reco),

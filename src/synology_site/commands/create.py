@@ -235,6 +235,13 @@ def _prepare_remote_project(
         # container whose bind-mount source doesn't already exist, so it must be created
         # before `docker compose up`, not left for the container to create on first write.
         dirs += f" {quoted_project}/data"
+    if framework == "wordpress":
+        # Same reason as flask's ./data: wordpress_compose.yml.j2 bind-mounts
+        # ./wp-content:/var/www/html/wp-content, so the source dir must exist before
+        # `docker compose up` or the container fails to start. A fresh new-site gets an
+        # empty dir the WordPress image populates on first run; the lightsail migration's
+        # push_wp_content fills it afterwards (the bind mount is live).
+        dirs += f" {quoted_project}/wp-content"
     ssh.run(f"mkdir -p {dirs}", check=True)
 
 
