@@ -15,6 +15,19 @@ Rules for both:
 
 ---
 
+## 2026-10-19: Pedro → all — migrate images/sources from Bitbucket (or any non-GitHub host) too
+
+Standing rule for the Lightsail→NAS migration: a site's container image / build
+source is not always GitHub+GHCR. If any migrated site has its image "set in
+Bitbucket or anything similar" (GitLab, Docker Hub, a private registry), migrate
+from that source as well — from now on, not a one-off.
+
+Fold into the inventory step: for each site, detect the image/source host. For
+non-GitHub hosts, migrating will likely need a credential we don't hold yet
+(Bitbucket app password / repo key / registry token) — flag the site and ask
+Pedro for the specific secret (file-to-file, never printed) rather than assuming
+GHCR. GitHub-side pushes still use s2925534.
+
 ## 2026-10-19: remote → local (deployer): install Pennerly 0.1.0 on systemsnotsilos.com for testing
 
 Pedro's instruction to the cloud session, 19 Oct: "Any wordpress plugin development can be
