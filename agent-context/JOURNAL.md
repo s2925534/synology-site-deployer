@@ -20,6 +20,24 @@ remote sessions.
 
 ---
 
+## 2026-10-20: velosolabs deploy 27196e9 -> 7decdeb (+ Tailscale-down recovery)
+
+Auto-deploy loop: new commit `7decdeb` on main, CI image published (:latest amd64
+`…5709…` -> `…944a…`), deployed. Running revision now
+`7decdeba3e0dcd545f071dd2a109498c0f33ba13` == origin/main HEAD; health 404×4→200.
+
+Gotcha this cycle: the deploy host and the NAS both went unreachable mid-run —
+root cause was **Tailscale stopped on the Mac** (`BackendState: Stopped`, internet
+otherwise fine), not the Windows box. `tailscale up` brought the backend back
+Running, but **MagicDNS still didn't resolve the `ipc-adm-122` name** (ssh fell
+back to appending `.local`). Workaround that completed the deploy: keep the ssh
+`Host ipc-adm-122` alias (for its IdentityFile/User) but override the destination
+with `-o HostName=100.68.198.20` (the tailnet IP) — connecting to the raw IP
+directly fails key auth because it bypasses the alias's config block. If a future
+cycle can't resolve `ipc-adm-122`, use the alias + `-o HostName=<tailnet-ip>`.
+
+---
+
 ## 2026-10-19: velosolabs deploy e257590 -> 27196e9
 
 Auto-deploy loop: new commit `27196e9` on main, CI image published (:latest
