@@ -20,6 +20,18 @@ remote sessions.
 
 ---
 
+## 2026-10-21: velosolabs deploy 7decdeb -> e1b2376
+
+Auto-deploy loop: new commit `e1b2376` on main, CI image published (:latest amd64
+`…944a…` -> `…a9bc…`), deployed. Running revision now
+`e1b2376f8d0e67f6cc4aaccf89ea8fb5a82f7466` == origin/main HEAD; health 404×4→200.
+Caught up after ipc-adm-122 was offline for a stretch (loops couldn't run while
+the Windows box was off the tailnet; resumed once it returned). Still reaching
+the box via the `-o HostName=100.68.198.20` override (MagicDNS name not
+resolving from the Mac).
+
+---
+
 ## 2026-10-20: velosolabs deploy 27196e9 -> 7decdeb (+ Tailscale-down recovery)
 
 Auto-deploy loop: new commit `7decdeb` on main, CI image published (:latest amd64
