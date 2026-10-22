@@ -20,6 +20,23 @@ remote sessions.
 
 ---
 
+## 2026-10-22: veloso.dev (p-veloso-dev) manual redeploy
+
+Pedro asked to redeploy veloso.dev from the Windows box. It's NOT one of the loop
+sites — manual deployer push, container `p-veloso-dev`, image
+`ghcr.io/s2925534/veloso.dev:latest`, repo `/c/Users/claude/Projects/veloso.dev`
+(compose `docker-compose.local.yml`, gitignored real config). Command (same
+shape as the docs' deployer-integration.md, `update` since it was already
+running):
+`synology-site update p.veloso.dev --compose-file ../veloso.dev/docker-compose.local.yml --container-name p-veloso-dev`
+(no --health-path arg, so no MSYS path-mangling to worry about). Pulled latest +
+recreated; container Up (healthy). Verified: veloso.dev/ and www.veloso.dev/ =
+200; p.veloso.dev/ = 301 -> veloso.dev -> 200 (p is the canonical-until-flip
+hostname that redirects to root). Traefik router on this container already serves
+Host(p.veloso.dev)||veloso.dev||www.veloso.dev; Watchtower-enabled.
+
+---
+
 ## 2026-10-22: zqx-app prod deploy
 
 zqx hourly loop (first run after an IDE restart — nothing lost, deploy state all
