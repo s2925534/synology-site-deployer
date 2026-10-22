@@ -20,6 +20,14 @@ remote sessions.
 
 ---
 
+## 2026-10-22: veloso.dev auto-redeploy on main change (third batch, +5min check)
+
+Third round of scheduled checks caught another change: origin/main
+`9e6229c` -> `e9e4eebce4da169671e1a684d0322a92ed287512`, :latest amd64
+`…93f0da41…` -> `…0c7b6f7c…`. Redeployed p-veloso-dev; running revision now
+e9e4eeb, amd64 matches :latest, healthy. Public URLs 404'd for ~15s post-recreate
+(startup blip) then 200 — veloso.dev/ + www.veloso.dev/ + p.veloso.dev all 200.
+
 ## 2026-10-22: veloso.dev auto-redeploy on main change (second batch, +5min check)
 
 Second round of scheduled veloso.dev checks caught another main-branch change
