@@ -20,6 +20,45 @@ remote sessions.
 
 ---
 
+## 2026-10-23: Lightsail migration started — gumtree.dev data-complete on NAS; modamarieclaire blocked on DNS
+
+Pedro gave the direct go-ahead to start the Lightsail->NAS migration. Inventory
+(Lightsail = nginx box 54.79.130.10): only TWO vhosts still enabled —
+**gumtree.dev** and **modamarieclaire.com**. veloso.dev + systemsnotsilos.com are
+disabled (already on NAS); risefortruth.com disabled/empty (dead).
+
+**gumtree.dev — migrated to NAS (data-complete), decision: dry-run then execute.**
+WordPress 6.2.2, custom table prefix `gd_`, no S3 (plain local media, 51M uploads).
+`migrate-from-lightsail --target-mode new-site --target-db-mode container
+--source-workspace veloso-dev --execute` restored the DB (26 gd_ tables) but FAILED
+on the wp-content upload — the tool's host-side stdin upload can't write the
+bind-mount wp-content (owned by uid 33) — same permission wall modamarieclaire hit.
+Completed wp-content manually: pulled `tar czf - -C <docroot> wp-content` from
+Lightsail -> Windows -> `upload_bytes` to the NAS project dir -> `docker cp` into
+the container -> extract as **container root** over /var/www/html/wp-content ->
+`chown -R 33:33`. Container now serves 200 in-container (9609 files: real
+plugins/themes/uploads). Same-domain migration so no URL search-replace needed.
+TOOL BUG to fix later: migrate-from-lightsail new-site can't populate wp-content
+when the container owns the bind-mount; should extract via the container (as here)
+or chown the dir writable first. Lightsail rebooted mid-transfer once (SSH blocked
+by pam_nologin ~40min); just wait + retry.
+Still pending for gumtree: public DNS cutover (gumtree.dev has NO Cloudflare DNS
+record; currently served from Lightsail).
+
+**modamarieclaire.com — staged copy ready + S3-independent, but cutover BLOCKED on
+DNS access.** Media Cloud plugin is INACTIVE and `mcloud-storage-delete-uploads`
+was off, so all 53,506 images (3.6G) are already LOCAL in wp-content/uploads
+(in-container image fetch 200); only 1 stray imgix ref in the DB. So no S3 re-fetch
+needed — it already serves local. S3 bucket found: `modamarieclaire-com`
+(ap-southeast-2) — safe to delete after a completeness check (needs AWS creds +
+explicit confirm). BLOCKER: modamarieclaire.com is on Cloudflare but in a DIFFERENT
+account (NS julio/pat vs veloso.dev's bob/melany); the veloso-nas tunnel lives in
+the veloso.dev account (c0d5c842) and a cfargotunnel CNAME only resolves in-account.
+Pedro chose: move the zone into c0d5c842 + change NS. Needs (awaiting from Pedro):
+account-scoped CF token for c0d5c842 (to add zone + records), a read token/export
+for the current modamarieclaire.com CF account (to replicate ALL records incl MX/SPF
+so email doesn't break), and the registrar NS change (explicit go-ahead).
+
 ## 2026-10-22: veloso.dev auto-redeploy on main change (third batch, +5min check)
 
 Third round of scheduled checks caught another change: origin/main
