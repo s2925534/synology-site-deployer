@@ -20,6 +20,17 @@ remote sessions.
 
 ---
 
+## 2026-10-22: veloso.dev auto-redeploy on main change (second batch, +5min check)
+
+Second round of scheduled veloso.dev checks caught another main-branch change
+from the other session: origin/main `0256fd9` -> `9e6229c5ba752f2720746803ef355f1aa76a2304`,
+`:latest` amd64 `…29478c04…` -> `…93f0da41…`. Redeployed p-veloso-dev; running
+revision now 9e6229c, amd64 matches :latest, container healthy. Right after
+recreate the public URLs briefly 404'd (startup blip, container "health:
+starting") then recovered to 200 within ~30s — veloso.dev/ + www.veloso.dev/ +
+p.veloso.dev all 200. (Retry-until-healthy matters; don't trust the first probe
+immediately post-recreate.)
+
 ## 2026-10-22: veloso.dev auto-redeploy on main change (+10min scheduled check)
 
 Pedro set up three one-shot checks (+5/+10/+15 min) to redeploy veloso.dev when
