@@ -20,6 +20,16 @@ remote sessions.
 
 ---
 
+## 2026-10-22: zqx-app prod deploy
+
+zqx hourly loop (first run after an IDE restart — nothing lost, deploy state all
+intact): `zqx-app` had a new published image (amd64 `…d109deb88bfb` ->
+`…1e2717afdfe0`). Deployed app.zqx.io; amd64 run==latest confirmed, container Up,
+`https://app.zqx.io/health` = 200. Ran with `MSYS_NO_PATHCONV=1` so --health-path
+stayed correct. site/api/field/portal unchanged (skipped).
+
+---
+
 ## 2026-10-22: zqx-site + zqx-portal prod deploy (new shared image)
 
 zqx hourly loop: `zqx-site` and `zqx-portal` both had a new published image
