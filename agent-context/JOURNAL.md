@@ -20,6 +20,16 @@ remote sessions.
 
 ---
 
+## 2026-10-22: veloso.dev auto-redeploy on main change (+10min scheduled check)
+
+Pedro set up three one-shot checks (+5/+10/+15 min) to redeploy veloso.dev when
+another session's changes to its main branch produced a new published image. The
++5 check skipped (no new image yet). The +10 check caught it: veloso.dev
+origin/main advanced `931d5b0` -> `0256fd98d7ce8560177bc36f4bb03cf04ea2299d` and
+`:latest` amd64 went `…3cf4…` -> `…29478c04…`. Redeployed p-veloso-dev
+(`synology-site update p.veloso.dev --compose-file ../veloso.dev/docker-compose.local.yml --container-name p-veloso-dev`); running revision now 0256fd9, amd64 matches
+:latest, container Up (healthy). veloso.dev/ + www.veloso.dev/ = 200.
+
 ## 2026-10-22: veloso.dev (p-veloso-dev) manual redeploy
 
 Pedro asked to redeploy veloso.dev from the Windows box. It's NOT one of the loop
