@@ -20,6 +20,23 @@ remote sessions.
 
 ---
 
+## 2026-10-22: zqx-site + zqx-portal prod deploy (new shared image)
+
+zqx hourly loop: `zqx-site` and `zqx-portal` both had a new published image
+(amd64 `…68c3a3dbf96c` -> `…9b1eae068f1f`) — same digest for both because
+zqx-portal runs the zqx-site image. Deployed both (zqx.io / portal.zqx.io);
+amd64 run==latest confirmed for each. Health: `portal.zqx.io/health` = 200;
+`zqx.io/health` = 301 -> `https://www.zqx.io/health` = 200 (apex→www redirect,
+app healthy — the deployer's own direct-container check was 200 too).
+
+This time the deployer's `--health-path /health` was NOT mangled: ran the remote
+command with `MSYS_NO_PATHCONV=1` + `MSYS2_ARG_CONV_EXCL='*'` exported, so
+git-bash passed `/health` through literally and the deployer health URL came out
+correct (`http://…:5100/health`). Keep those two env vars exported for all zqx
+loop deploys. zqx-api/app/field unchanged (skipped).
+
+---
+
 ## 2026-10-22: zqx-api prod deploy (first zqx loop deploy) + git-bash --health-path gotcha
 
 zqx hourly loop caught a genuinely new `ghcr.io/zqxio/zqx-api:main` image
