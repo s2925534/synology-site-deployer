@@ -20,6 +20,29 @@ remote sessions.
 
 ---
 
+## 2026-10-22: zqx-api prod deploy (first zqx loop deploy) + git-bash --health-path gotcha
+
+zqx hourly loop caught a genuinely new `ghcr.io/zqxio/zqx-api:main` image
+(amd64 `…09023fec076a` -> `…1c63c11cf3a3`) and deployed only zqx-api via
+`synology-site update api.zqx.io --health-path /health --container-name zqx-api`.
+Container now on the new image (verified amd64 run==latest), `Up`, and public
+`https://api.zqx.io/health` = 200. Other 4 prod services unchanged (skipped).
+
+GOTCHA for the zqx loop: the deployer reported `[ERROR] Health check failed:
+http://100.107.233.45:5105C:/Program Files/Git/health` and exited 1 — a FALSE
+failure. Running the deployer over `ssh … bash -s` on Windows git-bash,
+**MSYS path-conversion rewrote the `/health` argument into a Windows path**
+(`C:/Program Files/Git/health`), so only the deployer's own post-deploy health
+probe used a bad URL; the pull+recreate itself succeeded. The velosolabs loop
+never hit this because its command passes no leading-slash path arg
+(`--compose-file ../velosolabs/...`). Fix for future zqx deploys: prefix the
+remote command with `MSYS_NO_PATHCONV=1` (or `MSYS2_ARG_CONV_EXCL='*'`) so
+`/health` is passed through literally; then the deployer's own health check
+passes too. Confirm success out-of-band (amd64 digest match + public /health
+200), not by the deployer exit code, until that env var is in the loop command.
+
+---
+
 ## 2026-10-21: velosolabs deploy 7decdeb -> e1b2376
 
 Auto-deploy loop: new commit `e1b2376` on main, CI image published (:latest amd64
