@@ -20,6 +20,38 @@ remote sessions.
 
 ---
 
+## 2026-10-23: ipc-adm-122 reboot wiped the deployer env — full recovery + loop re-arm
+
+Pedro restarted the Windows box mid-session; it came back badly degraded and took
+~5h of flapping before stabilising. What broke and the fixes (all now resolved):
+
+- **SSH default shell flapped** across reboots: git-bash → WSL2 → cmd.exe → back to
+  git-bash. Reach it reliably with `ssh -o BatchMode=yes ipc-adm-122 bash -s < script`
+  (plain MagicDNS name → git-bash, `/c/` paths). The tailscale-IP override
+  `-o HostName=100.68.198.20` now **times out** (box's tailnet direct path changed to a
+  public IP; raw-IP route dead) — use the plain name; WSL fallback is `/mnt/c` +
+  `/mnt/c/Python314/python.exe`.
+- **Box went fully offline ~5h** (dropped off the tailnet; Tailscale "offline, last
+  seen …"). All deploy loops paused during that window. A `run_in_background` `until`
+  SSH probe was the clean way to wait + auto-resume.
+- **Python was upgraded to 3.14.7**, which **wiped the deployer's editable install**
+  (`pip show synology-site` empty, `synology-site.exe` gone, `ModuleNotFoundError`).
+  Fix: `cd /c/Users/claude/Projects/synology-site-deployer && /c/Python314/python.exe -m pip install -e .`.
+- **All git-ignored/local-only files were lost** (`.env`, `secrets/`, `infra/`,
+  `.deploy-stage`) — the checkout kept only tracked code. Restored `.env` + `secrets/`
+  (incl. veloso-dev lightsail key/creds) from the NAS backup **mounted on the Mac** at
+  `/Volumes/home/Projects/synology-site-deployer-excluded-backup/synology-site-deployer/`
+  via `tar czf - -C <backup> .env secrets | ssh ipc-adm-122 'bash -lc "cd <repo> && tar xzf -"'`.
+  (The backup is the 2026-10-19 snapshot — fine; `.env`/secrets hadn't changed since.)
+  THIS is why the NAS backup-excluded-to-nas hook matters: it's the only copy of the
+  local-only config, and a reboot can nuke it.
+
+Deployer verified end-to-end again (reaches NAS). Re-armed both loops per Pedro:
+velosolabs 30-min (`13,43 * * * *`) + zqx prod hourly (`:23`), both with route +
+self-heal (reinstall / restore-.env) notes baked into their prompts. Still pending:
+velosolabs PR #104 (hub image build fix) unmerged → `:latest` stuck on e1b2376;
+modamarieclaire.com DNS cutover tokens; gumtree.dev public DNS.
+
 ## 2026-10-23: Lightsail migration started — gumtree.dev data-complete on NAS; modamarieclaire blocked on DNS
 
 Pedro gave the direct go-ahead to start the Lightsail->NAS migration. Inventory
