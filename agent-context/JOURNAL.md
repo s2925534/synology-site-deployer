@@ -147,6 +147,9 @@ when it sees `SMTP_HOST` + a From address, and the hub `.env` had NO SMTP/Mailje
   `:latest` and sees all SMTP vars. (Reminder: the script's own verify ran 20s post-recreate
   and showed a transient 404 — re-check after ~30s, as always with this container.)
 - Final human check only: Admin → send a test email / "Email me a verification code".
+- CONFIRMED working end-to-end (2026-10-26): Pedro received the verification email and the
+  account page showed "Email verified." — Mailjet SMTP delivery from the hub is live, not just
+  configured.
 
 ## 2026-10-26: Mailjet (Sinch) email auth for velosolabs.com + reslk.com — SPF done, DKIM pending
 
