@@ -119,6 +119,40 @@ one script; the auto-mode classifier denied it as an unnamed production deploy. 
   it directly.
   **"Sign in with VelosoLabs" for Bid Scout is COMPLETE on the infra side.**
 
+## 2026-10-27: gateway deploy scripted (pending Pedro) + DMARC done — Session Bridge blocker
+
+Session Bridge sign-in (the Chrome extension `s2925534/veloso-plugins/apps/session-bridge`,
+fixed ext id `lffplbaadjmjndehdefolbglijkkeofn`, now v0.2.0 "Sign in with VelosoLabs") needs
+the **mcp-gateway** running — it isn't deployed (no gateway container on the NAS; only
+`velosolabs` hub + the usual sites). The velosolabs session merged the deploy runbook
+`docs/gateway-deploy.md` (velosolabs#130) and rebuilt images (hub image now bundles the
+`register_oidc_client.py`/`register_plugin_client.py` tools; gateway image gained
+`GATEWAY_ADMIN_HOST` so the admin API can bind 0.0.0.0 on a private network).
+
+- **DMARC DONE:** added `_dmarc` TXT = `v=DMARC1; p=none; rua=mailto:pedro@veloso.dev` to
+  velosolabs.com + reslk.com (completes SPF+DKIM+DMARC for both).
+- **Gateway deploy = Pedro's to run.** The guide reserves it for the owner (it creates new
+  prod services + a GATEWAY_MASTER_KEY whose loss makes all stored sessions/keys unreadable),
+  and the auto-mode guard blocks me from the prod writes anyway. I turned the whole 45-min
+  guide into ONE idempotent script: `<job tmp>/gateway_deploy_full.sh` (also a phase-1-only
+  `gateway_phase1.sh`). It: stands up `mcp-gateway-db` (postgres:16) + `mcp-gateway` (public,
+  Traefik `mcp.velosolabs.com`) + `mcp-gateway-admin` (private net only); generates the 5
+  secrets in the gateway image and saves them to `…/velosolabs-excluded-backup/velosolabs/
+  mcp-gateway-secrets.env` (chmod 600, for the password manager, never printed); creates the
+  2 Postgres roles (owner `mcp_gateway_owner` + non-superuser app `mcp_gateway`) and runs
+  create_all+apply_rls+grants; then **gates on admin health before touching the hub**; wires
+  the hub into `mcp-gateway-private` (awk edit of the hub compose, backed up + `compose config`
+  validated, restores on failure) with `GATEWAY_ADMIN_URL`/`GATEWAY_ADMIN_PRIVATE_KEY`;
+  pulls+recreates the hub; runs `register_plugin_client.py "Session Bridge" <ext redirect>`;
+  sets `PLUGIN_SESSION_BRIDGE_CLIENT_ID` + `PLUGIN_SESSION_BRIDGE_SOURCES=https://sam.gov`;
+  prints the client id (not secret → goes to the velosolabs session for 0.2.1). Public route
+  (`synology-site cloudflare-route mcp.velosolabs.com`, runs from the box) + `GATEWAY_BROKER_APPS`
+  (needs Bid Scout's Ed25519 pubkey) are deferred — only needed for Bid Scout's SAM.gov broker,
+  NOT for Session Bridge sign-in.
+- **Bid Scout SSO works** but the velosolabs session flagged a cleanup: its first
+  `OIDC_CLIENT_SECRET` was briefly saved as a plain *variable* in the CF Worker before being
+  re-added as a secret → re-register Bid Scout for a fresh secret + update the Worker.
+
 ## 2026-10-26: velosolabs hub email ENABLED (Mailjet SMTP) + redeployed to latest
 
 The velosolabs session flagged email was still off on the hub (login page: "sign-in codes
