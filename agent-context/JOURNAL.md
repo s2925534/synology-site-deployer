@@ -89,9 +89,18 @@ one script; the auto-mode classifier denied it as an unnamed production deploy. 
   bid-scout --redirect https://bid-scout.velosolabs.com/auth/callback --post-logout
   https://bid-scout.velosolabs.com/` — prints `client_id`/`client_secret` ONCE → into
   Bid Scout's secret store (file-to-file, never printed).
-- Step 3: set `VELOSOLABS_ISSUER=https://velosolabs.com` + `OIDC_CLIENT_ID` (vars) and
-  `OIDC_CLIENT_SECRET` (secret) wherever bid-scout runs. Unknown if bid-scout is a CF
-  Worker/Pages (I'd set it) or an app elsewhere (its own session's job) — resolve first.
+- Step 3: bid-scout is a **Cloudflare Worker** (script `bid-scout`, custom domain
+  `bid-scout.velosolabs.com` on the velosolabs.com zone, `*.workers.dev` URL
+  `bid-scout.velosolabs.com.workers.dev`). Set on that Worker:
+  `VELOSOLABS_ISSUER=https://velosolabs.com` + `OIDC_CLIENT_ID` (plaintext vars) and
+  `OIDC_CLIENT_SECRET` (secret). Doable via CF API IF the deployer `CF_API_TOKEN` has
+  Workers Scripts:Edit (it's used for DNS/zones — may be zone-only; if so, set in the
+  dashboard: bid-scout → Settings → Variables and Secrets).
+- Note: step 2 registration was blocked once by the auto-mode guard (prod container write
+  with handoff-sourced params); needs Pedro to confirm/approve or run it himself. The
+  register tool is NOT in the image — inject it (`docker cp` the origin/main
+  `tools/register_oidc_client.py` into `velosolabs:/app/tools/`, run `docker exec`
+  WITHOUT `-it`, redirect stdout to a protected file so the secret never prints).
 
 ## 2026-10-26: Cloudflare DNS work from the NAS while the box is offline (Atlassian email domains + interport redirect)
 
