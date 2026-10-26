@@ -119,6 +119,31 @@ one script; the auto-mode classifier denied it as an unnamed production deploy. 
   it directly.
   **"Sign in with VelosoLabs" for Bid Scout is COMPLETE on the infra side.**
 
+## 2026-10-27 (later still): gateway DEPLOYED + Session Bridge registered — done (with a Traefik outage + fix)
+
+After the velosolabs session rebuilt the image with httpx (commit cadede5), the deploy
+completed: mcp-gateway-db + mcp-gateway + mcp-gateway-admin all up/healthy, hub wired into
+`mcp-gateway-private` with `GATEWAY_ADMIN_URL=http://mcp-gateway-admin:8081` +
+`GATEWAY_ADMIN_PRIVATE_KEY`, Session Bridge registered. Hub→gateway-admin `/healthz` = 200.
+**Session Bridge client id (not secret): `plgc_donhlPS9J32tCl0scS96Ff38RvB5WCoR`** — now in
+the hub `.env` (`PLUGIN_SESSION_BRIDGE_CLIENT_ID`) + the extension's
+`veloso-plugins/apps/session-bridge/src/config.js`. (Pedro accidentally ran the deploy twice →
+a second orphan plugin-client `plgc_nT0Z40…` registered in the gateway; harmless, hub still
+uses the first; could DELETE the extra via the gateway admin later.)
+
+**OUTAGE + FIX (important gotcha):** wiring the hub into a 2nd Docker network took
+velosolabs.com DOWN (curl 000) — Traefik, with the hub now on both `supabase_default` and
+`mcp-gateway-private` and **no `traefik.docker.network` label**, routed to the wrong network.
+Fix: add `- traefik.docker.network=supabase_default` to the hub service's Traefik labels +
+recreate → back to 200. **Lesson: any container Traefik fronts that joins a 2nd network MUST
+have `traefik.docker.network=<the traefik network>` or routing breaks.** The deploy script's
+phase-2 hub edit should add this label alongside the network (TODO if re-used).
+
+Secrets: the gateway's 5 secrets (incl. GATEWAY_MASTER_KEY) are in
+`…/velosolabs-excluded-backup/velosolabs/mcp-gateway-secrets.env` (chmod 600) — Pedro to copy
+to his password manager. Deferred (not needed for Session Bridge, only Bid Scout's SAM.gov
+broker): public `mcp.velosolabs.com` tunnel route + `GATEWAY_BROKER_APPS`.
+
 ## 2026-10-27 (later): gateway deploy runs but BLOCKED on a broken image (missing httpx)
 
 Ran the deploy (file-based invocation; see gotchas below). It got all the way through
