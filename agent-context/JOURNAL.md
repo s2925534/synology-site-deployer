@@ -104,13 +104,20 @@ one script; the auto-mode classifier denied it as an unnamed production deploy. 
   bid-scout-oidc-credentials.txt` (mode 600, never printed). Registered with product
   `bid-scout`, redirect `https://bid-scout.velosolabs.com/auth/callback`, post-logout
   `https://bid-scout.velosolabs.com/`.
-- Step 3 BLOCKED on token scope: the deployer `CF_API_TOKEN` has **no Workers access**
-  (`No access to the specified resource` on GET workers/scripts/bid-scout/settings) — it's
-  zone/DNS-only. So the three env settings go in the **CF dashboard** (bid-scout → Settings
-  → Variables and Secrets): var `VELOSOLABS_ISSUER=https://velosolabs.com`, var
-  `OIDC_CLIENT_ID`, secret `OIDC_CLIENT_SECRET` (values in the creds file above) — or give a
-  Workers Scripts:Edit token to do it by API. Earlier guard note: step 2's prod-container
-  write was denied once by auto-mode until Pedro authorized it directly.
+- Step 3 DONE (Pedro set them in the CF dashboard — the deployer `CF_API_TOKEN` is
+  zone/DNS-only, `No access to the specified resource` on workers/scripts, so no API path):
+  on the `bid-scout` Worker, Settings → Variables and Secrets → var
+  `VELOSOLABS_ISSUER=https://velosolabs.com`, var `OIDC_CLIENT_ID`, secret
+  `OIDC_CLIENT_SECRET` (values from the mode-600 creds file), then Deploy.
+- VERIFIED end-to-end (2026-10-26): `bid-scout.velosolabs.com/auth/login` → 302 to
+  `velosolabs.com/oidc/authorize` with the registered `client_id`, `redirect_uri` =
+  registered callback, PKCE `code_challenge`+`S256`, `response_type=code`,
+  `scope=openid email`. Provider accepts the client + redirect_uri and enforces PKCE
+  (a manual authorize sans code_challenge correctly 303s the error back to the callback
+  with `iss`). Only an interactive human login remains to click through. Earlier guard
+  note: step 2's prod-container write was denied once by auto-mode until Pedro authorized
+  it directly.
+  **"Sign in with VelosoLabs" for Bid Scout is COMPLETE on the infra side.**
 
 ## 2026-10-26: Cloudflare DNS work from the NAS while the box is offline (Atlassian email domains + interport redirect)
 
