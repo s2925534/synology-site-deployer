@@ -152,6 +152,16 @@ the **mcp-gateway** running — it isn't deployed (no gateway container on the N
 - **Bid Scout SSO works** but the velosolabs session flagged a cleanup: its first
   `OIDC_CLIENT_SECRET` was briefly saved as a plain *variable* in the CF Worker before being
   re-added as a secret → re-register Bid Scout for a fresh secret + update the Worker.
+- **First gateway run (2026-10-27) failed + a secret exposure — both fixed in the script:**
+  (1) Synology Docker does NOT auto-create bind-mount source dirs, so `./pgdata` "does not
+  exist" → mcp-gateway-db wouldn't start → "role FAILED". Fix: use a **named volume**
+  (`mcp-gateway-pgdata`), not a bind mount. (2) The `echo "$PW" | sudo -S` pattern **echoed
+  the NAS sudo password** into the terminal (visible in Pedro's screenshot). Fix: the script
+  now uses **`SUDO_ASKPASS`** (password in a chmod-700 temp askpass script, never piped to a
+  command's stdin / echoed). **ACTION FOR PEDRO: rotate the NAS account password** (it was
+  exposed in a screenshot); then update `NAS_SSH_PASSWORD` in the deployer `.env` + the NAS
+  backup `.env`. Reusable gotchas: Synology bind mounts need pre-existing dirs (prefer named
+  volumes); never use `sudo -S` with a piped password on the NAS (it echoes) — use askpass.
 
 ## 2026-10-26: velosolabs hub email ENABLED (Mailjet SMTP) + redeployed to latest
 
