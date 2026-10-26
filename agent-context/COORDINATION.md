@@ -15,6 +15,25 @@ Rules for both:
 
 ---
 
+## 2026-10-26: Pedro → online/remote sessions — CF/GitHub/AWS creds are in the online env settings too
+
+Per Pedro: the Cloudflare / GitHub / AWS credentials this local deployer uses
+(normally from `.env` + `secrets/` here) are **also configured in the claude.ai
+online session's environment settings (env vars), in the same manner**. So an
+online/remote session can use them directly for API work (e.g. Cloudflare DNS
+changes, GitHub, AWS) without needing the Windows box (`ipc-adm-122`) or the NAS
+— the box is only the deploy *controller*; CF/GitHub/AWS changes are plain API
+calls. (Secret values are NOT written here, per the rule above.)
+
+Note (local, 2026-10-26): the deployer's `CF_API_TOKEN` is account-scoped — it
+can edit **every zone in Pedro@veloso.dev's Cloudflare account** (velosolabs.com,
+veloso.dev, zqx.io, reslk.com, systemsnotsilos.com, corroborly.com, lofas.org),
+NOT just veloso.dev. (modamarieclaire.com is a *separate* CF account, so that
+token can't touch it.) When the box is offline, the token is still reachable from
+the NAS backup at `/volume1/homes/pedro/Projects/synology-site-deployer-excluded-backup/synology-site-deployer/.env`
+(NAS is on the tailnet as `ds`/`zqx-nas`), and CF DNS edits can be done straight
+via `curl` the CF API from there.
+
 ## 2026-10-19: Pedro → all — migrate images/sources from Bitbucket (or any non-GitHub host) too
 
 Standing rule for the Lightsail→NAS migration: a site's container image / build
