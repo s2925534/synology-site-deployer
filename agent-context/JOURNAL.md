@@ -119,6 +119,26 @@ one script; the auto-mode classifier denied it as an unnamed production deploy. 
   it directly.
   **"Sign in with VelosoLabs" for Bid Scout is COMPLETE on the infra side.**
 
+## 2026-10-27 (later): gateway deploy runs but BLOCKED on a broken image (missing httpx)
+
+Ran the deploy (file-based invocation; see gotchas below). It got all the way through
+PHASE 1 infra — Postgres up, app role + schema/RLS/grants done, all 3 containers created —
+but **`mcp-gateway` + `mcp-gateway-admin` crash-loop** on `ModuleNotFoundError: No module
+named 'httpx'` (`gateway/connectors/__init__.py` eagerly imports `google_drive.py` which
+`import httpx`). So the published `ghcr.io/s2925534/velosolabs-mcp-gateway:latest` is missing
+the `httpx` dependency — nothing in the deploy can fix it; the **velosolabs session must add
+httpx to the gateway image deps + rebuild**. The script's admin-health gate worked: it STOPPED
+before any hub change, so velosolabs.com is untouched. Re-run the (idempotent) script after the
+image is rebuilt and it'll pull the fix, come up healthy, wire the hub + register Session Bridge.
+
+Script gotchas fixed along the way (all in `<job tmp>/gateway_deploy_full.sh`): (1) Synology
+Docker won't auto-create bind-mount dirs → use a **named volume** for pgdata; (2) `sudo -S` with
+a piped password **echoes the password** on this NAS → use **`SUDO_ASKPASS`**; (3) first-time
+Postgres init > a fixed sleep → **poll `pg_isready`**; (4) piping the script via `ssh 'bash -s'
+< file` lets the first `docker compose exec` **eat the rest of the script from stdin** → run it
+as a file instead: `ssh zqx-nas 'cat > /tmp/x && bash /tmp/x' < script`; (5) role creation must
+be **idempotent** (CREATE-if-missing then ALTER password).
+
 ## 2026-10-27: gateway deploy scripted (pending Pedro) + DMARC done — Session Bridge blocker
 
 Session Bridge sign-in (the Chrome extension `s2925534/veloso-plugins/apps/session-bridge`,
