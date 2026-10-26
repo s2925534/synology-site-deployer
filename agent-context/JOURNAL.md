@@ -131,11 +131,14 @@ Atlassian sending-domain setup earlier). Mailjet wants an apex SPF TXT + a DKIM 
   `v=spf1 include:spf.mailjet.com include:_spf.google.com ~all`. Verified live at the
   authoritative CF NS (bob.ns.cloudflare.com). Zone ids: velosolabs.com
   `3d751b83ed956fd384025f287844759c`, reslk.com `27c52bb280aeda3b5b511717d61ec662`.
-- **DKIM (PENDING):** TXT `mailjet._domainkey.<domain>` = `k=rsa; p=<2048-bit key>`, one per
-  domain. Neither exists yet. Blocked because the key value was truncated in Pedro's
-  screenshots — waiting on him to copy the full one-line value from Mailjet for each domain.
-  (DKIM public keys are not secret; fine to paste.) When they arrive: create one TXT per
-  domain, keep it on one line, verify at authoritative NS, Pedro hits Mailjet Refresh.
+- **DKIM (DONE both domains):** created TXT `mailjet._domainkey.<domain>` = `k=rsa; p=<2048-bit
+  key>` (one unique key per domain, supplied by Pedro from Mailjet). Each is ~401 chars, so
+  it exceeds the 255-char DNS string limit — Cloudflare auto-splits into chunks on the wire;
+  verified they reassemble to the full key (correct `k=rsa` prefix + `AQAB` tail) at the
+  authoritative CF NS. Keys were passed file-to-file + built via python to avoid base64
+  (`+`/`/`) shell-escaping issues. DMARC was offered by Mailjet but not requested/created
+  (optional). **Mailjet SPF+DKIM for velosolabs.com + reslk.com is COMPLETE** — Pedro hits
+  Refresh in Mailjet (it validates against authoritative, so no need to wait for 1.1.1.1).
 
 ## 2026-10-26: Cloudflare DNS work from the NAS while the box is offline (Atlassian email domains + interport redirect)
 
