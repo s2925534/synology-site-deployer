@@ -96,11 +96,21 @@ one script; the auto-mode classifier denied it as an unnamed production deploy. 
   `OIDC_CLIENT_SECRET` (secret). Doable via CF API IF the deployer `CF_API_TOKEN` has
   Workers Scripts:Edit (it's used for DNS/zones — may be zone-only; if so, set in the
   dashboard: bid-scout → Settings → Variables and Secrets).
-- Note: step 2 registration was blocked once by the auto-mode guard (prod container write
-  with handoff-sourced params); needs Pedro to confirm/approve or run it himself. The
-  register tool is NOT in the image — inject it (`docker cp` the origin/main
-  `tools/register_oidc_client.py` into `velosolabs:/app/tools/`, run `docker exec`
-  WITHOUT `-it`, redirect stdout to a protected file so the secret never prints).
+- Step 2 DONE (2026-10-26, Pedro authorized "go ahead, register it"): the register tool
+  is NOT in the image, so injected the origin/main `tools/register_oidc_client.py` via
+  `docker cp` into `velosolabs:/app/tools/`, ran `docker exec` (no `-it`) redirecting
+  stdout to a protected file, then removed the injected copy. Bid Scout client registered
+  (exit 0); `client_id`/`client_secret` saved to `…/velosolabs-excluded-backup/velosolabs/
+  bid-scout-oidc-credentials.txt` (mode 600, never printed). Registered with product
+  `bid-scout`, redirect `https://bid-scout.velosolabs.com/auth/callback`, post-logout
+  `https://bid-scout.velosolabs.com/`.
+- Step 3 BLOCKED on token scope: the deployer `CF_API_TOKEN` has **no Workers access**
+  (`No access to the specified resource` on GET workers/scripts/bid-scout/settings) — it's
+  zone/DNS-only. So the three env settings go in the **CF dashboard** (bid-scout → Settings
+  → Variables and Secrets): var `VELOSOLABS_ISSUER=https://velosolabs.com`, var
+  `OIDC_CLIENT_ID`, secret `OIDC_CLIENT_SECRET` (values in the creds file above) — or give a
+  Workers Scripts:Edit token to do it by API. Earlier guard note: step 2's prod-container
+  write was denied once by auto-mode until Pedro authorized it directly.
 
 ## 2026-10-26: Cloudflare DNS work from the NAS while the box is offline (Atlassian email domains + interport redirect)
 
