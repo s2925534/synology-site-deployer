@@ -20,6 +20,32 @@ remote sessions.
 
 ---
 
+## 2026-10-26: Cloudflare DNS work from the NAS while the box is offline (Atlassian email domains + interport redirect)
+
+With ipc-adm-122 offline, did a batch of Cloudflare DNS changes straight against
+the CF API — the box is only the deploy *controller*; DNS is plain API calls. The
+account-scoped `CF_API_TOKEN` was read from the NAS backup `.env`
+(`/volume1/homes/pedro/.../synology-site-deployer-excluded-backup/.../.env`) and
+scripts run via `ssh zqx-nas '/usr/bin/python3 -' < script`. Reusable per-domain
+scripts live in the job tmp dir (`*_atlassian.py`, `ics_fix.py`).
+
+**Atlassian email-sending domains** — for each domain Atlassian lists, create 2 DKIM
+CNAMEs + 1 `atlassian-bounces` CNAME + 1 `atlassian-sending-domain-verification` TXT.
+Gotcha: the **CNAMEs must be DNS-only (proxied:false)** — if proxied, `dig` returns CF
+IPs instead of the `*.dkim.atlassian.net` target and Atlassian validation fails. Done &
+verified (via `dig @1.1.1.1`, since MagicDNS 100.100.100.100 lags fresh records):
+velosolabs.com, zqx.io, systemsnotsilos.com, veloso.dev, netwattle.com.
+Pending: reslk.com — Pedro pasted records for `resilk.com`, which is NOT a zone in the
+account (`reslk.com`, no "i", IS). Flagged as a likely typo; records are domain-specific
+so if the wrong name went into Atlassian they must be regenerated for reslk.com.
+
+**interportcargoservices.com → interportcargo.com.au redirect** — was a broken `URI`
+DNS record (DNS URI records don't cause browser redirects). Fix: deleted the URI record,
+added proxied dummy A records (192.0.2.1) for apex + www, and a Page Rule
+`*interportcargoservices.com/*` → `https://interportcargo.com.au/` 301. Verified apex and
+www both 301 over http+https incl. sub-paths (forced the CF edge IP with `curl --resolve`,
+since the local resolver briefly cached the old NXDOMAIN).
+
 ## 2026-10-23: ipc-adm-122 reboot wiped the deployer env — full recovery + loop re-arm
 
 Pedro restarted the Windows box mid-session; it came back badly degraded and took
