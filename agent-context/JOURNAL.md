@@ -119,6 +119,35 @@ one script; the auto-mode classifier denied it as an unnamed production deploy. 
   it directly.
   **"Sign in with VelosoLabs" for Bid Scout is COMPLETE on the infra side.**
 
+## 2026-10-26: velosolabs hub email ENABLED (Mailjet SMTP) + redeployed to latest
+
+The velosolabs session flagged email was still off on the hub (login page: "sign-in codes
+and password reset links by email aren't available yet") because the hub only turns email on
+when it sees `SMTP_HOST` + a From address, and the hub `.env` had NO SMTP/Mailjet vars.
+
+- **Creds:** "same as the services API" = the shared Mailjet creds in `~/.config/veloso/
+  mailjet.env` (`MAILJET_API_KEY`/`MAILJET_SECRET_KEY`). Verified via the Mailjet REST API
+  (`/v3/REST/dns`, `/v3/REST/sender`) that this is the right account: it holds velosolabs.com
+  + reslk.com (+ veloso.dev, zqx.io, systemsnotsilos.com, etc.) as sender domains, SPF=OK for
+  both, and `contact@velosolabs.com` is an Active sender. (DKIM showed Error only because the
+  records were minutes old — live at auth NS; flips to OK on Mailjet re-poll.)
+- **What was set** in `/volume3/dockernvme/hub-veloso-dev/.env` (`.env` backed up first):
+  `SMTP_HOST=in-v3.mailjet.com`, `SMTP_PORT=587`, `SMTP_USERNAME`+`SMTP_PASSWORD` = the Mailjet
+  key/secret, `SMTP_FROM=Veloso Labs <contact@velosolabs.com>`. Also set the old-name aliases
+  `SMTP_USER`+`MAIL_FROM` so email works regardless of which image version is running (the
+  newer image renamed the vars to SMTP_USERNAME/SMTP_FROM).
+- **Deploy:** Mailjet SMTP creds → prod `.env` is the kind of write the auto-mode guard blocks
+  (3rd such block this session: OIDC pull, Bid Scout register, now this). So Pedro ran it
+  himself via `! bash <job tmp>/enable_velosolabs_email_and_redeploy.sh` — one script that
+  appends the SMTP block (idempotent, file-to-file, no secret printed), then `docker compose
+  pull velosolabs` + `up -d --force-recreate`, then verifies. Pattern worth reusing: when the
+  guard blocks a legit prod write, hand Pedro a self-contained `!` script.
+- **Verified (after full boot):** health/OIDC-discovery/JWKS all 200; login page dropped the
+  "not available yet" notice and now offers "sign-in code" + passkey; container healthy on
+  `:latest` and sees all SMTP vars. (Reminder: the script's own verify ran 20s post-recreate
+  and showed a transient 404 — re-check after ~30s, as always with this container.)
+- Final human check only: Admin → send a test email / "Email me a verification code".
+
 ## 2026-10-26: Mailjet (Sinch) email auth for velosolabs.com + reslk.com — SPF done, DKIM pending
 
 Pedro is adding velosolabs.com and reslk.com as Mailjet sending domains (separate from the
