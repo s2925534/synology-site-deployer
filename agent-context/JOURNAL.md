@@ -34,10 +34,13 @@ CNAMEs + 1 `atlassian-bounces` CNAME + 1 `atlassian-sending-domain-verification`
 Gotcha: the **CNAMEs must be DNS-only (proxied:false)** — if proxied, `dig` returns CF
 IPs instead of the `*.dkim.atlassian.net` target and Atlassian validation fails. Done &
 verified (via `dig @1.1.1.1`, since MagicDNS 100.100.100.100 lags fresh records):
-velosolabs.com, zqx.io, systemsnotsilos.com, veloso.dev, netwattle.com.
-Pending: reslk.com — Pedro pasted records for `resilk.com`, which is NOT a zone in the
-account (`reslk.com`, no "i", IS). Flagged as a likely typo; records are domain-specific
-so if the wrong name went into Atlassian they must be regenerated for reslk.com.
+velosolabs.com, zqx.io, systemsnotsilos.com, veloso.dev, netwattle.com, reslk.com.
+reslk.com gotcha: Pedro first pasted records named `.resilk.com` (extra "i") — that
+domain had been typo'd into Atlassian, and Atlassian binds the DKIM selectors + TXT token
+to the exact domain string, so they can't be grafted into the `reslk.com` zone. Fix was in
+Atlassian (remove resilk.com, add reslk.com → fresh records), then created the new
+`.reslk.com` set. Lesson: if the record *names* don't match a zone you own, the domain was
+mistyped in Atlassian — fix it there, don't try to coerce the records in CF.
 
 **interportcargoservices.com → interportcargo.com.au redirect** — was a broken `URI`
 DNS record (DNS URI records don't cause browser redirects). Fix: deleted the URI record,
