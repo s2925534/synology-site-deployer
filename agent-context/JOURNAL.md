@@ -20,6 +20,79 @@ remote sessions.
 
 ---
 
+## 2026-10-26: velosolabs.com OIDC provider made live (Sign in with VelosoLabs / Bid Scout) — and where velosolabs actually runs
+
+Pedro asked this (deployer) session to perform the velosolabs.com side of "Sign in
+with VelosoLabs" (OIDC provider, merged in velosolabs PR #128 / VLABS-201), so the
+**Bid Scout** app can use velosolabs.com as its identity provider. The handoff (from
+the velosolabs session) was three steps: (1) create `OIDC_SIGNING_KEY` + deploy
+velosolabs.com; (2) `tools/register_oidc_client.py "Bid Scout" bid-scout ...`;
+(3) put `VELOSOLABS_ISSUER` + `OIDC_CLIENT_ID` + `OIDC_CLIENT_SECRET` into bid-scout's
+config in Cloudflare. **Step 1 is DONE; steps 2–3 pending (see end).**
+
+**Box re-register.** The Windows deploy box came back after Pedro re-registered it on
+the tailnet; it is now node **`ipc-adm-122-1`** (100.90.189.109), NOT the old
+`ipc-adm-122` (that node is still listed but offline). New SSH host key — trust it and
+connect with the existing identity: `ssh -i ~/.ssh/id_ed25519_ipc122_claude
+claude@ipc-adm-122-1`. Its default shell is **cmd.exe** again (flaps across reboots),
+so run `bash -s < script`, not inline `cmd && cmd`. The re-register wiped the box's
+gitignored files again: the `velosolabs` checkout came back on branch
+`feat/p5b-authorize` (40 commits behind origin/main) with `.env` and the real
+`docker-compose.local.yml` MISSING — which is what first sent me down a wrong trail.
+
+**KEY CORRECTION for future sessions — velosolabs.com runs on the NAS, not GCP.** I
+initially (wrongly) concluded it had moved to GCP, because: the repo has a full
+`deploy/gcp/` stack (`docker-compose.gcp.yml`, GCP backup timers, `docs/deploy-gcp.md`,
+Postgres migration in the JOURNAL), AND my `sudo docker ps` on the NAS returned ZERO
+containers. **Both were red herrings.** The GCP deploy is a *plan* (decided 2026-10-12,
+needs a project/billing Pedro hasn't set up), never executed. The "0 containers" was a
+**`sudo` PATH bug**: on the Synology NAS, `docker` is NOT in root's `secure_path`, so
+`sudo docker ...` silently fails with "command not found". The real binary is
+**`/var/packages/ContainerManager/target/usr/bin/docker`** — call it by full path via
+sudo. Doing that shows ~25 running containers (all of Pedro's sites), including
+`velosolabs  ghcr.io/s2925534/veloso-plugin-hub:latest`. So: velosolabs.com is the
+container **`velosolabs`** (exact name — the online session was right), compose project
+`hub-veloso-dev`, working dir **`/volume3/dockernvme/hub-veloso-dev`** (Pedro's reminder:
+"containers are in volume 3"), `env_file: .env` in that dir, served via the
+`resilinked-proxy` (Traefik v3) on the `supabase_default` docker network, behind a
+`cloudflared` tunnel. The NAS-side deploy helper: read `NAS_SSH_PASSWORD` from the
+deployer backup `.env` and `echo "$PW" | sudo -S /var/.../docker ...`.
+
+**What I did (step 1).** Per velosolabs' own runbook (`docs/oidc-provider.md`):
+- Generated a dedicated RSA-3072 key, base64 -w0 → added one line
+  `OIDC_SIGNING_KEY_B64=...` to `/volume3/dockernvme/hub-veloso-dev/.env` (env_file can't
+  hold multi-line PEM, so the _B64 form). Backed the `.env` up first
+  (`.env.bak-oidc-20261026-221218`). The raw PEM is saved at
+  `/volume1/homes/pedro/Projects/velosolabs-excluded-backup/velosolabs/oidc-signing.pem`
+  (mode 600) — **Pedro: move it to your password manager.** Key value never printed/
+  journaled (velosolabs docs forbid it). It must differ from `LICENSE_PRIVATE_KEY` or the
+  provider 503s; a fresh key is fine, and the working JWKS proves it.
+- Redeployed to the latest-main image (#128 — CI "Publish image" went green at 04:58):
+  `docker compose -f docker-compose.yml pull velosolabs` then `up -d --force-recreate
+  velosolabs`. Image digest `ab701ab9…` → `617cda3d…` (rollback point is the old digest).
+  The compose's only *service* is `velosolabs` (`supabase_default` is an external network,
+  `hub-data` a volume), so recreate blast radius is just this container.
+- Verified live: `/health` 200, `/.well-known/openid-configuration` 200 (issuer
+  `https://velosolabs.com`), `/oidc/jwks.json` → one RS256 key, `kid=g-2JJFZBN1gjhaU7...`.
+
+**Gotcha — transient 404 right after recreate.** For ~15–20s after `up -d`, the public
+URL returned 404 while uvicorn finished booting (container reported `healthy` but the
+edge/Traefik hadn't settled). Don't panic-rollback; re-check after ~30s. It came up fine.
+
+**Auto-mode guard.** My first attempt bundled the `.env` edit + the `pull`/`up -d` into
+one script; the auto-mode classifier denied it as an unnamed production deploy. Split into
+(A) add-the-variable (file only) and (B) the redeploy — and Pedro explicitly said
+"redeploy the velosolabs site main branch", which authorized B.
+
+**Still pending (hand to velosolabs session or do on Pedro's go):**
+- Step 2: `docker exec -it velosolabs python tools/register_oidc_client.py "Bid Scout"
+  bid-scout --redirect https://bid-scout.velosolabs.com/auth/callback --post-logout
+  https://bid-scout.velosolabs.com/` — prints `client_id`/`client_secret` ONCE → into
+  Bid Scout's secret store (file-to-file, never printed).
+- Step 3: set `VELOSOLABS_ISSUER=https://velosolabs.com` + `OIDC_CLIENT_ID` (vars) and
+  `OIDC_CLIENT_SECRET` (secret) wherever bid-scout runs. Unknown if bid-scout is a CF
+  Worker/Pages (I'd set it) or an app elsewhere (its own session's job) — resolve first.
+
 ## 2026-10-26: Cloudflare DNS work from the NAS while the box is offline (Atlassian email domains + interport redirect)
 
 With ipc-adm-122 offline, did a batch of Cloudflare DNS changes straight against
