@@ -119,6 +119,18 @@ one script; the auto-mode classifier denied it as an unnamed production deploy. 
   it directly.
   **"Sign in with VelosoLabs" for Bid Scout is COMPLETE on the infra side.**
 
+## 2026-10-28: gateway + hub updated to new images + new-table migration (steps 1-3 of velosolabs follow-up)
+
+velosolabs session published new hub + gateway images (a gateway update added a table).
+Ran the update (scripted `<job tmp>/gateway_update.sh`, no re-registration): pulled
+`velosolabs-mcp-gateway:latest`, re-ran the idempotent migration (create_all+apply_rls+grants
+→ `schema ready`, creates the new table; CREATE ROLE skipped), restarted the gateway (admin
+healthy), pulled `veloso-plugin-hub:latest`, restarted the hub (velosolabs.com 200 after the
+usual ~1s boot 404). All 4 containers healthy on latest. Remaining = Pedro's browser steps:
+velosolabs.com/admin → Source sites → SAM.gov → Save; account/connectors + account/apps checks;
+tell the velosolabs session "deployed"; later test bid-scout.velosolabs.com. Session Bridge
+0.2.1 (client id plgc_donhl…) is installed unpacked at `_Projects/session-bridge`.
+
 ## 2026-10-27 (later still): gateway DEPLOYED + Session Bridge registered — done (with a Traefik outage + fix)
 
 After the velosolabs session rebuilt the image with httpx (commit cadede5), the deploy
