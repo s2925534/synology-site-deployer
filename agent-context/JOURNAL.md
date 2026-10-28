@@ -119,6 +119,24 @@ one script; the auto-mode classifier denied it as an unnamed production deploy. 
   it directly.
   **"Sign in with VelosoLabs" for Bid Scout is COMPLETE on the infra side.**
 
+## 2026-10-28: Watchtower deployed — indefinite hourly auto-redeploy of our containers
+
+Pedro: "Indefinitely, every hour, redeploy any codebase we have / any you can do securely."
+A session cron can't be indefinite (dies with the session + 7-day cap), so deployed **Watchtower**
+(the infra's intended tool — the compose files already carry its label). At
+`/volume3/dockernvme/watchtower` (`containrrr/watchtower:latest`): `WATCHTOWER_LABEL_ENABLE=true`
+(only updates containers with `com.centurylinklabs.watchtower.enable=true` — SECURE opt-in),
+`POLL_INTERVAL=3600` (hourly), `CLEANUP=true`; mounts `/var/run/docker.sock` +
+`/root/.docker/config.json:ro` (that config holds the ghcr.io auth, so it pulls our private
+images). `restart: unless-stopped` → survives reboots. First run ~1h after start.
+
+Covers the **11 already-labeled**: velosolabs, mcp-gateway(+admin), p-veloso-dev, zqx-field,
+url-shortener, ecosystem-services, and the 4 zqx-staging. Deliberately NOT covered (left
+unlabeled by prior setup): zqx PROD `zqx-site/app/portal/api` — can be added later if Pedro wants
+(edit each compose's labels). Third-party infra untouched. CAVEAT (Pedro accepted): Watchtower
+just recreates on the new image — it won't run the gateway's DB migration if a gateway update adds
+a table; handle those manually. This replaces the ad-hoc session deploy loops.
+
 ## 2026-10-28: Moda MarieClaire PayPal vars added — Buy button live
 
 Added the two PayPal vars to the hub `.env` + force-recreated (both loaded, velosolabs.com 200):
