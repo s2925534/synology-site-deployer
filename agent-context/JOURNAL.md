@@ -119,6 +119,24 @@ one script; the auto-mode classifier denied it as an unnamed production deploy. 
   it directly.
   **"Sign in with VelosoLabs" for Bid Scout is COMPLETE on the infra side.**
 
+## 2026-10-28 (later): Moda MarieClaire theme secret added + hub & gateway redeployed to latest
+
+Added `THEME_CODE_SECRET_MODA_MARIECLAIRE` to the hub `.env` so velosolabs can issue MMC Full
+licence codes. **Theme repo (was hard to find):** the Shopify themes live in
+`s2925534/shopify-supplier-sync-platform` under `themes/<product>/` on a shared `themes/core`
+(same for Gizmohaus/Voltwren/Tradeline). The MMC secret is the value after `moda-marieclaire|`
+on line 7 of `themes/moda-marieclaire/snippets/licence-config.liquid` (48 chars; read via gh,
+written file-to-file, never printed). `app/themes.py` on main already registers `moda-marieclaire`
++ reads the env var, so it works on the current image; PR #139 (still OPEN) only adds the
+marketing page/docs. Verified `themes.code_secret('moda-marieclaire')` → True after deploy.
+
+Same run (Pedro: "redeploy velosolabs and anything with new code") redeployed BOTH to latest:
+hub `veloso-plugin-hub` e5d693b9→a00b92e4, gateway `velosolabs-mcp-gateway` 363a8957→c96ef257
+(pull + idempotent migration + force-recreate hub to reload .env). All 4 containers healthy,
+velosolabs.com 200. One combined script: `<job tmp>/mmc_full.sh` (ships secret + runs
+`mmc_deploy_nas.sh` as a file on the NAS). Gotcha reminder: the `dk exec` verify line printed a
+stray `Password:` (sudo -S stderr not suppressed on that one call) — cosmetic.
+
 ## 2026-10-28: gateway + hub updated to new images + new-table migration (steps 1-3 of velosolabs follow-up)
 
 velosolabs session published new hub + gateway images (a gateway update added a table).
