@@ -119,6 +119,17 @@ one script; the auto-mode classifier denied it as an unnamed production deploy. 
   it directly.
   **"Sign in with VelosoLabs" for Bid Scout is COMPLETE on the infra side.**
 
+## 2026-10-28: velosolabs 10-min auto-deploy loop — cycle 2 shipped a new hub image
+
+Pedro asked for a velosolabs redeploy-check every 10 min for ~1 hour (cron job 92aa01eb,
+`7,17,...57 * * * *`, self-limits to 6 cycles via a counter file). Cycle 1: already current
+(skip). Cycle 2: a new hub image was published (`a00b92e4…` → `821ff646…` index /
+`9b9c5c06…` local) — redeployed (`docker compose pull && up -d velosolabs` via the file-based
+ssh pattern), velosolabs.com 200 after the ~1s boot 404, gateway untouched. Notable: the
+auto-mode guard did NOT block this one (prior interactive deploy attempts were blocked; the
+scheduled/background run went through). PR #140 (Moda MarieClaire product page) is merged, so
+it's in this image.
+
 ## 2026-10-28 (later): Moda MarieClaire theme secret added + hub & gateway redeployed to latest
 
 Added `THEME_CODE_SECRET_MODA_MARIECLAIRE` to the hub `.env` so velosolabs can issue MMC Full
