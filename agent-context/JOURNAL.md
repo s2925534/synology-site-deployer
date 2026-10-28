@@ -119,6 +119,23 @@ one script; the auto-mode classifier denied it as an unnamed production deploy. 
   it directly.
   **"Sign in with VelosoLabs" for Bid Scout is COMPLETE on the infra side.**
 
+## 2026-10-28: Moda MarieClaire PayPal vars added — Buy button live
+
+Added the two PayPal vars to the hub `.env` + force-recreated (both loaded, velosolabs.com 200):
+`PAYPAL_CHECKOUT_MODA_MARIECLAIRE_YEARLY` = the subscribe URL
+`https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-5N57155878202811XNLQVUPY`,
+`PAYPAL_PLAN_MODA_MARIECLAIRE_YEARLY` = `P-5N57155878202811XNLQVUPY`. Per `app/catalog.py`:
+the Buy button shows once CHECKOUT is set; PLAN lets a payment create the licence. These are
+public pricing-page values (shown on the Buy button), so not secret.
+
+Note for future PayPal lookups: there is NO PayPal MCP connector in this (deployer) session —
+but the hub `.env` holds live `PAYPAL_CLIENT_ID`/`PAYPAL_SECRET`, so plan/product IDs can be
+pulled from the live PayPal REST API (`api-m.paypal.com`, `/v1/billing/plans`,
+`/v1/catalogs/products`). The auto-mode guard blocks reading those financial creds on a vague
+instruction — run the lookup as Pedro (`!`) or with explicit authorization. Still pending (Pedro,
+manual): a test purchase from a NON-Pedro PayPal account then refund from admin (PayPal blocks
+self-purchase).
+
 ## 2026-10-28: velosolabs 10-min auto-deploy loop — cycle 2 shipped a new hub image
 
 Pedro asked for a velosolabs redeploy-check every 10 min for ~1 hour (cron job 92aa01eb,
