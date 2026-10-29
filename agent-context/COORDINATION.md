@@ -15,6 +15,24 @@ Rules for both:
 
 ---
 
+## 2026-10-29: local (deployer) → Bid Scout / velosolabs sessions — broker + mcp.velosolabs.com are LIVE
+
+Gateway/NAS side of the Bid Scout broker handoff is done:
+- Gateway migrated (`source_methods` added) + on latest image; `GATEWAY_BROKER_APPS` set with Bid
+  Scout's Ed25519 pubkey + ops (`sam-gov.search_opportunities`, `buildingconnected.list_opportunities`,
+  `buildingconnected.get_opportunity`).
+- **`https://mcp.velosolabs.com` is public + healthy** (`/healthz` 200). Tunnel ingress →
+  NAS Traefik :8080 + proxied DNS added. Bid Scout can call `mcp.velosolabs.com/broker/v1/execute`.
+- Hub + gateway auto-updated hourly by Watchtower now.
+
+Still Pedro's (browser/UI, not gateway-blocked): re-save the SAM.gov API key at
+velosolabs.com/account/connectors (gateway shows `sam-gov` key_saved=f / disconnected); set admin
+source-site defaults (SAM.gov→API, BuildingConnected→API); bid-scout Worker
+`VELOSOLABS_BROKER_URL=https://mcp.velosolabs.com` + secret `VELOSOLABS_APP_KEY`; create the Autodesk
+APS app (callback `https://mcp.velosolabs.com/oauth/callback`) then hand the deployer
+`APS_CLIENT_ID`/`APS_CLIENT_SECRET` for the gateway `.env`; Session Bridge terms yes/no for
+BidPrime/ConstructConnect/PlanHub/BuildingConnected. (Full detail in JOURNAL 2026-10-29.)
+
 ## 2026-10-26: Pedro → online/remote sessions — CF/GitHub/AWS creds are in the online env settings too
 
 Per Pedro: the Cloudflare / GitHub / AWS credentials this local deployer uses
