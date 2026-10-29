@@ -119,6 +119,31 @@ one script; the auto-mode classifier denied it as an unnamed production deploy. 
   it directly.
   **"Sign in with VelosoLabs" for Bid Scout is COMPLETE on the infra side.**
 
+## 2026-10-29: gateway broker enabled for Bid Scout + mcp.velosolabs.com public route opened
+
+Did the NAS-side of the velosolabs broker handoff (1a/1b/1c/1d); the rest is Pedro's browser/UI.
+- **1a/1b/1c:** pulled new gateway image, ran the migration (adds `source_methods`), set
+  `GATEWAY_BROKER_APPS` in the gateway `.env` = `{"bid-scout":{"public_key":"<Ed25519 SPKI>",
+  "operations":["sam-gov.search_opportunities","buildingconnected.list_opportunities",
+  "buildingconnected.get_opportunity"]}}` (Pedro pasted the exact line — I validated it loads as
+  a 32-byte Ed25519 key; a screenshot transcription would've been wrong by one char), redeployed,
+  broker apps confirmed loaded. **sam-gov connector shows key_saved=f / disconnected** → Pedro must
+  re-save the SAM.gov API key at velosolabs.com/account/connectors.
+- **1d (public route):** cloudflared is a **token-managed** tunnel (ingress lives in the CF
+  dashboard, not a local file). The deployer `CF_API_TOKEN` turned out to have **Cloudflare Tunnel
+  Edit** (read AND write worked), so opened it fully via the CF API: tunnel id
+  `563c6977-9a9e-4338-ac35-cebaffdb991b`, added ingress `mcp.velosolabs.com → http://192.168.1.109:8080`
+  (same NAS Traefik as velosolabs.com, inserted before the catch-all) via
+  `PUT /accounts/{acct}/cfd_tunnel/{id}/configurations`, plus DNS CNAME `mcp.velosolabs.com →
+  <tunnel>.cfargotunnel.com` (proxied). Verified `/healthz` 200. Script:
+  `<job tmp>/open_mcp_route.sh`. (So the token can manage the tunnel too, not just DNS.)
+
+Guard note: the gateway deploy + the tunnel/DNS edit were both blocked for me interactively — Pedro
+ran them via `!`. Remaining is all Pedro's: re-save SAM.gov key; Admin source-site defaults; the
+bid-scout Worker `VELOSOLABS_BROKER_URL`+`VELOSOLABS_APP_KEY`; the Autodesk APS app (then paste me
+`APS_CLIENT_ID`/`SECRET` for the gateway .env = 3b); BuildingConnected connect; and the Session
+Bridge terms yes/no for BidPrime/ConstructConnect/PlanHub/BuildingConnected.
+
 ## 2026-10-28: Watchtower deployed — indefinite hourly auto-redeploy of our containers
 
 Pedro: "Indefinitely, every hour, redeploy any codebase we have / any you can do securely."
