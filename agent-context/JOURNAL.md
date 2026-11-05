@@ -20,6 +20,46 @@ remote sessions.
 
 ---
 
+## 2026-11-05: lofas.org migrated NAS Docker → Cloudflare Worker (also fixed a live 502)
+
+Pedro: "move the lofas from nas to a cloudflare worker now." lofas.org ("A Legacy of
+Faith and Sacrifice", book site) was an **Astro SSR** app (`@astrojs/node`, port 4321,
+image `ghcr.io/s2925534/lofas:latest`, container `lofas-app` on NAS `/volume3/dockernvme/
+lofas-org`) fronted by the shared `veloso-nas` Cloudflare Tunnel. It was **down (HTTP 502)**
+when I started — the container wasn't running — so this also fixed an outage.
+
+Migration (source repo `s2925534/lofas`, Astro v7):
+- Swapped `@astrojs/node` → `@astrojs/cloudflare` (v14.4.4), kept `output:'server'`.
+- Rewrote `src/lib/posts.ts` from runtime `node:fs` reads of a NAS-mounted `CONTENT_DIR`
+  to **build-time** `import.meta.glob` (Workers have no filesystem). Posts now tracked in
+  git under `content/posts/` (were NAS-volume-only). **Zero posts** existed on NAS or in
+  the repo, so no content to migrate — news section empty as before.
+- Deploy wrinkles the adapter regenerates each build, handled in `scripts/deploy-cf.mjs`:
+  add `nodejs_compat` (gray-matter uses Buffer), drop the auto-added `SESSION` KV binding
+  (no sessions used; the account token also can't create KV namespaces), bind the
+  `lofas.org` custom domain. `npm run deploy:cf`.
+- Replaced Docker→GHCR publish workflow with a Workers deploy workflow, left
+  **manual/`workflow_dispatch`** — the auto-mode classifier correctly blocked planting the
+  account-wide CF token as a repo secret; enabling push-deploy needs Pedro to add
+  `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID`, ideally a **Workers-scoped** token.
+  Removed Dockerfile/compose/.dockerignore. Pushed to `s2925534/lofas`.
+
+Cutover (Pedro's CF account `c0d5c842ba1e9bea5a5ad662ddb22e83`, zone `6e73ac14…`):
+- Deleted the apex tunnel CNAME, bound `lofas.org` as the Worker custom domain. DNS now
+  `AAAA lofas.org -> 100::` (CF Worker record); Mailjet SPF/DKIM TXT untouched.
+- Verified live: `/`, `/news`, `/healthz`, `/rss.xml`, `/sitemap.xml`, `/api/posts.json`
+  all 200.
+
+Rollback (NAS left intact as fallback): re-create the deleted record —
+`CNAME lofas.org -> 563c6977-9a9e-4338-ac35-cebaffdb991b.cfargotunnel.com`, proxied, in
+zone `6e73ac14dd7435e09b1328f170e4b636` — and start the `lofas-app` container. The NAS
+container/image and tunnel ingress were **not** deleted.
+
+Gotchas: SFTP disabled on the Synology (use `ssh cat`); @astrojs/cloudflare's
+`@cloudflare/vite-plugin` validates `main` at build time, so a hand-rolled root
+`wrangler.jsonc` pointing at `dist/_worker.js` breaks the build — let the adapter generate
+`dist/server/wrangler.json` and patch it post-build.
+
 ## 2026-11-05: Consolidated every project credential into ~/.config/veloso/extras.env (annotated)
 
 Pedro asked to sweep all of `~/Documents/_Projects` for API keys/credentials and aggregate them
