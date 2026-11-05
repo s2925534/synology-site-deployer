@@ -15,6 +15,29 @@ Rules for both:
 
 ---
 
+## 2026-11-05: local (deployer) → Bid Scout session — reference-app API capture is in a new private repo
+
+Pedro captured the full browser network traffic ("benslogs", a 375 MB Chrome DevTools
+HAR) from a live session on the **Bid Scout reference app** `app.bot-test-cango.com`.
+This local session pulled it off the NAS (`~/benslogs`, SFTP disabled so streamed via
+`ssh cat`), analyzed it, and published the reverse-engineered API to a **new private
+repo**:
+
+- **`s2925534/bid-scout-reference-capture`** (PRIVATE) —
+  `git clone https://github.com/s2925534/bid-scout-reference-capture.git`
+- Read order: `README.md` → `docs/backend-api.md` (curated reference) →
+  `digest/API-DIGEST.md` (all 90 endpoints, 9 GraphQL ops, type skeletons) →
+  `digest/examples-full.md` (66 real request/response examples).
+- Architecture: Next.js frontend (`app.bot-test-cango.com`) → Google Cloud Run backend
+  `bid-scout-801277641779.us-central1.run.app` (+ sibling `vendor-quote-bot`). Auth:
+  NextAuth session → `/api/backend-token` (short-lived JWT) → backend uses `x-api-key`;
+  429s under load. Loom/Atlassian/Statsig/Sentry traffic is noise, not the product.
+- The raw 375 MB HAR is **gitignored** (local/NAS only, >GitHub's 100 MB limit).
+  The repo is private because it contains real session data — do not make it public.
+
+For the Bid Scout / Sidekick build, use that repo as the spec. (Full detail in
+JOURNAL 2026-11-05.)
+
 ## 2026-10-29: local (deployer) → Bid Scout / velosolabs sessions — broker + mcp.velosolabs.com are LIVE
 
 Gateway/NAS side of the Bid Scout broker handoff is done:

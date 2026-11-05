@@ -20,6 +20,46 @@ remote sessions.
 
 ---
 
+## 2026-11-05: Bid Scout reference app captured & reverse-engineered → private repo bid-scout-reference-capture
+
+Pedro had a 375 MB Chrome DevTools HAR ("benslogs", from Ben's browser) sitting in the
+NAS home (`/var/services/homes/pedro/benslogs`) — a full network capture of a live
+session on the Bid Scout reference app `app.bot-test-cango.com`. Too big to upload via
+the browser; the ask was to learn it and hand everything to the online "Bot-test-cango
+bid-scout network requests" session that's building Bid Scout + Sidekick.
+
+What this session did:
+- **Got the file off the NAS.** LAN SSH works (`pedro@192.168.1.109`, pw from `.env`
+  `NAS_SSH_PASSWORD`); the Tailscale IP `100.107.233.45` and `ds`/`zqx-nas` names were
+  timing out. **SFTP/scp is disabled on the Synology** ("subsystem request failed"), so
+  streamed it with `ssh 'cat …' > local` instead. Processed locally on the Mac, not on
+  the NAS (the overload lesson).
+- **Analyzed it** with a streaming `ijson` parser (`analyze_har.py`) — 375 MB won't fit
+  in context and `json.load` is memory-heavy. Result: 2,244 requests, 12 hosts, 90
+  endpoints, 9 GraphQL ops.
+- **Findings:** Next.js frontend (`app.bot-test-cango.com`) → Google Cloud Run backend
+  `bid-scout-801277641779.us-central1.run.app` (+ sibling `vendor-quote-bot`). Auth is
+  NextAuth session (`/api/auth/session` → accessToken) → frontend mints a short-lived
+  JWT via `/api/backend-token` → backend calls carry `x-api-key`; backend 429s under
+  load. Data model: clients, scored GCs, scope classifications, rich per-client context
+  (weekly status / ideal_job / top_scopes / top_gcs), opportunities, bid-board rows,
+  async Kanban push, admin portal-users + metrics. Loom/Atlassian/Statsig/Sentry traffic
+  is embedded-training-video + analytics noise, not the product.
+- **Published** to new **private** repo `s2925534/bid-scout-reference-capture`:
+  `README.md`, `docs/backend-api.md` (curated), `digest/API-DIGEST.md` (full digest),
+  `digest/examples-full.md` (66 concrete unredacted examples), `tools/` (the analyzers).
+
+Gotchas for next time:
+- **Private, and must stay private** — it contains real session data (live-ish auth
+  tokens, user emails, business data). Pedro was explicit: do not make it public. Raw
+  HAR is gitignored (local/NAS only); a local copy lives at the repo's `raw/benslogs.har`.
+- No tool can post into another claude.ai/code web session's chat (`RemoteTrigger` only
+  creates scheduled routines; `SendMessage` is for in-session agents). Cross-session
+  handoff is still this repo's COORDINATION.md + handing Pedro a clone prompt for the
+  other session.
+- Auto-mode classifier blocks echoing captured secrets/PII to the transcript — count/
+  inspect them without printing values.
+
 ## 2026-10-26: velosolabs.com OIDC provider made live (Sign in with VelosoLabs / Bid Scout) — and where velosolabs actually runs
 
 Pedro asked this (deployer) session to perform the velosolabs.com side of "Sign in
