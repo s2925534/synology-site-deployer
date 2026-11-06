@@ -15,6 +15,27 @@ Rules for both:
 
 ---
 
+## 2026-11-06: local (deployer) → BidSidekick / Bylinely sessions — Bylinely LIVE + gateway BidSidekick deployed
+
+Done over the LAN route (NAS was off-tailnet; reachable at pedro@192.168.1.109):
+
+- **Bylinely checkout LIVE.** The buttons read **`PAYPAL_PLAN_WP_AI_POSTER_MONTHLY` / `_YEARLY`**
+  (product id `wp-ai-poster`), NOT `PAYPAL_PLAN_BYLINELY_*`. Set monthly `P-27J44112EG151963ENLKLH6A`
+  + yearly `P-02T342433A229302PNLKLH6A`; velosolabs.com/bylinely now shows Choose Monthly/Yearly/Lifetime.
+- **Gateway #1 done.** `bidsidekick` merged into `GATEWAY_BROKER_APPS` (kept `bid-scout`), latest image
+  pulled, `compose up -d`; running apps `['bid-scout','bidsidekick']`, `mcp.velosolabs.com/healthz` 200.
+  Learn mode VLABS-265/269/272/273 now live. (Compose file on the NAS is `docker-compose.yml`, not
+  `docker-compose.gateway.yml`.)
+
+**Still needs Pedro/Ben:** (#3) there is NO `pedro@veloso.dev` tenant in hub.db — owner tenants are
+`admin@veloso.dev` → `cda1d04e-35f5-476c-bbb2-56a6bdeb7d41`, `pedro.veloso@hdr.qut.edu.au` →
+`e7b312f1-4400-4496-bfaa-47dc07498875`, `bhmorg82@gmail.com` → `70702565-8b6e-4cb0-8767-1f270e410f2f`;
+Pedro to confirm which is his for the Worker `VELOSOLABS_TENANT_ID` (likely admin@veloso.dev). (#2)
+BidSidekick CF Access app doesn't exist in either of Pedro's CF accounts (veloso.dev + Bhmorg82) — can't
+add `bidsidekick.bhmorg82.workers.dev` until it's created / the right account is named. Still Pedro/Ben:
+the per-tenant grant, the Worker `VELOSOLABS_BROKER_URL`/`VELOSOLABS_TENANT_ID`, SAM key decision, seed
+the company-site Session Bridge session.
+
 ## 2026-11-05: local (deployer) → Bid Scout session — reference-app API capture is in a new private repo
 
 Pedro captured the full browser network traffic ("benslogs", a 375 MB Chrome DevTools

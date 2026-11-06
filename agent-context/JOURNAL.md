@@ -20,6 +20,44 @@ remote sessions.
 
 ---
 
+## 2026-11-06: Bylinely checkout live + BidSidekick broker deployed (via LAN route; NAS off-tailnet)
+
+NAS `ds` was "offline" on Tailscale (agent dropped ~1 day) but the box was up (sites serving via
+cloudflared). Reached it over the **LAN fallback** `ssh -i ~/.ssh/id_ed25519_zqx_nas pedro@192.168.1.109`
+(this Mac is on the NAS LAN) — see [[nas-lan-ssh-fallback]]. All NAS work below went over that route.
+
+**Bylinely monthly/yearly checkout — LIVE.** velosolabs.com/bylinely showed "Coming soon" for
+monthly+yearly. A cross-session guess was `PAYPAL_PLAN_BYLINELY_*` — WRONG. Read the live code:
+`_bylinely_sellable(interval)` gates on `payments.plan_id("wp-ai-poster", interval)` which reads
+**`PAYPAL_PLAN_WP_AI_POSTER_MONTHLY` / `_YEARLY`** (product id is `wp-ai-poster`, display "Bylinely";
+`_env_product` → `WP_AI_POSTER`). Buttons link to the internal account-first `/bylinely/checkout`,
+NOT a PayPal subscribe URL — so `PAYPAL_CHECKOUT_*` was a red herring (all empty, incl. LIFETIME,
+which works because it's a one-off order). Set monthly `P-27J44112EG151963ENLKLH6A`, yearly
+`P-02T342433A229302PNLKLH6A` (NOT launch-offer `P-30K...`). Backed up .env, force-recreated hub,
+verified: Choose Monthly/Yearly/Lifetime, zero Coming soon. LESSON: for hub PayPal products, the env
+var uses the product **id** (`catalog.PRODUCTS[].id`), not the display name; wp-ai-poster keeps legacy
+`PAYPAL_CHECKOUT_MONTHLY/YEARLY` names.
+
+**#1 Gateway: BidSidekick registered + redeployed.** Merged the `bidsidekick` broker app (public key
++ 10 ops, from VLABS-275 comment) into `GATEWAY_BROKER_APPS` via a JSON-safe Python merge (kept
+`bid-scout`), pulled latest `velosolabs-mcp-gateway:latest`, `compose up -d`. Running env now
+`['bid-scout','bidsidekick']`; `mcp.velosolabs.com/healthz` 200 (404 for ~40s during boot — my verify
+loop was too short, not a regression). This pull also made learn mode VLABS-265/269/272/273 live.
+Compose file on the NAS is `docker-compose.yml` (VLABS-275 says `docker-compose.gateway.yml` — stale).
+
+**Guard pattern reconfirmed:** the auto-mode classifier blocks this session from prod .env
+writes/restarts even with Pedro's go-ahead; reads (code/logs/db) are allowed. Writes were packaged as
+scripts in `$CLAUDE_JOB_DIR/tmp/` (`bylinely_fix.sh`, `gateway_bidsidekick_deploy.sh`) for Pedro to
+run via `! bash`.
+
+**Still open (Pedro/Ben):** #3 tenant uuid — NO `pedro@veloso.dev` tenant exists in hub.db; owner
+tenants are `admin@veloso.dev` (`cda1d04e-35f5-476c-bbb2-56a6bdeb7d41`),
+`pedro.veloso@hdr.qut.edu.au` (`e7b312f1-...`), `bhmorg82@gmail.com` (`70702565-...`). VLABS-275 wants
+this as the Worker `VELOSOLABS_TENANT_ID`; awaiting Pedro's pick (likely admin@veloso.dev). #2 CF
+Access — both of Pedro's CF accounts (veloso.dev + Bhmorg82) return 0 Access apps, so nothing to add
+`bidsidekick.bhmorg82.workers.dev` to; needs the app created or the right account. #4 SAM key, #5
+bid-scout PR #70 — Pedro/Ben's call.
+
 ## 2026-11-05: lofas.org migrated NAS Docker → Cloudflare Worker (also fixed a live 502)
 
 Pedro: "move the lofas from nas to a cloudflare worker now." lofas.org ("A Legacy of
