@@ -62,3 +62,23 @@ admin pages, dashboards, plugins and extensions) unless the platform forbids it:
 
 Reference implementation: s2925534/velosolabs (`app/templates/_icons.html`, `app/static/tooltips.js`,
 the dialog, form and table styles in `app/static/hub.css`; VLABS-212).
+
+## Login standard (owner's rule, 2026-11-07, all of Pedro's web apps)
+
+Every web app in Pedro's ecosystem, current or new, has its **own** sign-in. It never depends on someone
+having an account with a third party (for example Cloudflare Access or a Google login). At minimum it offers:
+
+- **email (or username) and password**: a slow, salted hash (PBKDF2, scrypt or Argon2), rate limits, and a
+  lockout after repeated failures;
+- **passkeys** (WebAuthn): added from the account page, and usable without typing an email (discoverable
+  credentials);
+- **a one-time code sent by email**: short-lived, single use, with a limited number of tries.
+
+Also: forgot password (a single-use reset link), invites where an app has more than one user, change password,
+and sign out everywhere. Give the same answer whether or not an account exists. Build emailed links from a
+configured site address, never the request's Host header. Store only hashes of passwords, codes, links and
+session tokens. Use HttpOnly, SameSite session cookies and refuse cross-site form posts.
+
+Reference implementation: `Appuiaus/sprigboard` (`src/auth.ts`, `src/passkeys.ts` with
+@simplewebauthn/server, `src/mail.ts`; VLABS-277). An existing app that lacks any of the three methods gets a
+Jira ticket to add them, and new apps ship with all three from the first release.
