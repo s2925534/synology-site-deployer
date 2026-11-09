@@ -20,6 +20,35 @@ remote sessions.
 
 ---
 
+## 2026-11-09: DB data migrated to cloud — zqx→Supabase, mcp-gateway→Neon (copies done+verified; cutover pending)
+
+Moved the two Postgres data stores off the NAS into managed cloud, as data copies only
+(NAS DBs untouched, kept as fallback). Both verified source==target before any app change.
+
+- **zqx-db → Supabase (project `xmklzncqgnuhxagsfeaq`, ZQX).** 97 tables / 171 rows, exact
+  match. **Gotcha:** Supabase's *direct* host `db.<ref>.supabase.co` is **IPv6-only**, and both
+  the NAS and this Mac lack an IPv6 route → v1 restore failed with "Cannot assign requested
+  address". Fix = the **IPv4 session pooler** `aws-0-ap-northeast-1.pooler.supabase.com:5432`,
+  user `postgres.<ref>`. Region (Tokyo, ap-northeast-1) found by probing the full region list
+  (pooler returns "tenant/user not found" for the wrong region). Because the zqx apps run **on
+  the NAS**, the runtime conn MUST be the pooler too — so `.env`
+  `SUPEBASE_CLOUD_ZQX_CONNECTION_STRING` was repointed to the session pooler (old IPv6 direct
+  value backed up to `.env.bak-*`). `SUPEBASE_CLOUD_ZQX_POOLER_HOST` recorded.
+- **mcp-gateway-db → Neon (velosolabs project, `proud-boat-42777651`).** source db
+  `mcp_gateway` / role `mcp_gateway_owner`, 15 tables / 116 rows, exact match. Neon endpoints
+  are IPv4 (direct used for restore; pooled verified reachable from NAS for runtime). No region
+  dance needed.
+- **Method:** dump+restore run **on the NAS** (`docker run postgres:17 pg_restore`, matching
+  client, `--no-owner --no-privileges --clean --if-exists`); conn strings streamed to a NAS temp
+  file over stdin, never on an argv. Scripts in the session tmp dir (migrate_zqx_v2.sh,
+  migrate_gateway_to_neon.sh, verify_zqx.sh).
+- **Pending (needs Pedro — auto-mode guard blocks live prod deploys):** the two cutovers.
+  `cutover-mcp-gateway-to-neon.sh` (key `GATEWAY_DATABASE_URL` in `mcp-gateway/.env`, health
+  `mcp.velosolabs.com/healthz`) and `cutover-zqx-to-supabase.sh` (`DATABASE_URL` +
+  `APP_DATABASE_URL` in `api-zqx-io/docker-compose.yml`, health `127.0.0.1:5105/health`). Both
+  back up + keep NAS DBs running (`--no-deps`) + **auto-rollback** on health≠200. zqx staging
+  left OFF (separate `zqx_staging` DB). Decommission of NAS DBs only after cutover verified.
+
 ## 2026-11-06: Bylinely checkout live + BidSidekick broker deployed (via LAN route; NAS off-tailnet)
 
 NAS `ds` was "offline" on Tailscale (agent dropped ~1 day) but the box was up (sites serving via
