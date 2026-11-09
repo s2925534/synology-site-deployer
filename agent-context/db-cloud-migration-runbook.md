@@ -4,9 +4,9 @@ Overnight status + the exact ordered steps that still need a human (the auto-mod
 guard blocks live prod deploys, DB RBAC changes, and R2 enablement — everything
 below in **[YOU]** is waiting on you; everything in **[DONE]** is finished).
 
-All scripts referenced live in the session tmp dir:
-`/Users/pedro/.claude-account2/jobs/1439e211/tmp/`
-Run the cutovers with the `! bash <path>` prefix so they execute in-session.
+All scripts are committed durably at `agent-context/migration-2026-11/` (they read secrets
+from `.env` at runtime — no secrets in the files). Run the cutovers with the `! bash <path>`
+prefix so they execute in-session.
 
 ---
 
@@ -28,7 +28,7 @@ saved to `.env.bak-*`). Neon has no such issue (IPv4).
 ## [YOU] Step 1 — Cutover mcp-gateway → Neon (do first; simplest, clean health check)
 
 ```
-! bash /Users/pedro/.claude-account2/jobs/1439e211/tmp/cutover-mcp-gateway-to-neon.sh
+! bash /Users/pedro/Documents/_Projects/synology-site-deployer/agent-context/migration-2026-11/cutover-mcp-gateway-to-neon.sh
 ```
 - Rewrites `GATEWAY_DATABASE_URL` in `mcp-gateway/.env`, recreates `mcp-gateway` + `-admin`.
 - Keeps `mcp-gateway-db` running (`--no-deps`). Health-checks `https://mcp.velosolabs.com/healthz`.
@@ -37,7 +37,7 @@ saved to `.env.bak-*`). Neon has no such issue (IPv4).
 ## [YOU] Step 2 — Cutover zqx-api → Supabase
 
 ```
-! bash /Users/pedro/.claude-account2/jobs/1439e211/tmp/cutover-zqx-to-supabase.sh
+! bash /Users/pedro/Documents/_Projects/synology-site-deployer/agent-context/migration-2026-11/cutover-zqx-to-supabase.sh
 ```
 - Rewrites `DATABASE_URL` + `APP_DATABASE_URL` in `api-zqx-io/docker-compose.yml`, recreates `api`.
 - Keeps `zqx-db` running. Health-checks `http://127.0.0.1:5105/health`. **Auto-rolls back** on ≠ 200.
