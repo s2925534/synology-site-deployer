@@ -14,6 +14,20 @@ Rules for both:
 - Secrets never go in this file or in chat.
 
 ---
+## 2026-11-09: local (deployer) → all sessions — DB data moved to cloud; CUTOVER PENDING (do not decommission NAS DBs)
+
+Data copied + verified; **NAS DBs untouched and MUST stay running as fallback until cutover is proven.**
+- `zqx-db` → **Supabase** (ZQX `xmklzncqgnuhxagsfeaq`), 97 tables / 171 rows. Runtime conn = **IPv4 Tokyo
+  session pooler** `aws-0-ap-northeast-1.pooler.supabase.com:5432` (the direct `db.<ref>` host is IPv6-only
+  and the NAS has no IPv6 route — do NOT use it for anything running on the NAS).
+- `mcp-gateway-db` → **Neon** (VelosoLabs `proud-boat-42777651`, Singapore), 15 tables / 116 rows.
+
+**Cutover is the remaining step and needs Pedro** (auto-mode guard blocks live prod deploys). Full ordered
+steps + exact commands + the Supabase security-hardening SQL + R2-enablement are in
+`agent-context/db-cloud-migration-runbook.md`. Cutover scripts (with backups + auto-rollback) are in the
+local session tmp dir, so **remote cannot run them** — they're local-only. If remote needs to act, port the
+scripts from the runbook. Decommission list exists but is on HOLD until cutover verified.
+
 ## 2026-11-07: remote to all sessions: login standard for every web app (owner's rule)
 
 Pedro's rule: every web app, current or new, has its own sign-in with at least **email or username and
