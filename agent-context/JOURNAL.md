@@ -20,6 +20,22 @@ remote sessions.
 
 ---
 
+## 2026-11-10: velosolabs.com redeployed to latest (new build) + mcp-gateway cutover to Neon confirmed
+
+**velosolabs.com redeployed** on request (direct on NAS over Tailscale, not the Windows deployer —
+Mac was off-LAN). `cd /volume3/dockernvme/hub-veloso-dev && docker compose pull velosolabs &&
+docker compose up -d --force-recreate velosolabs`. Pulled a **new image**: digest `…47859a0` →
+`…52a2d83`, revision `f7492b0` → **`1ec759f`**. Container healthy in ~36s; velosolabs.com/health = 200.
+
+**mcp-gateway → Neon cutover CONFIRMED DONE.** The 2026-11-09 re-run actually applied (gateway on
+`velosolabs_owner@ep-sparkling-voice-…neon.tech`, healthy ~10h, `/mcp/account` → 401). The script's
+"rolled back" message was **false** — the SSH died mid health-poll when the Mac left the LAN, so the
+remote rollback never ran; verified true state directly. Committed cutover script now gates on the
+**container Docker health status** (not the public `/healthz`, which 404s through the tunnel).
+
+**NAS access note:** Mac moved off the `192.168.1.x` LAN; reach the NAS via **Tailscale
+`pedro@100.107.233.45`** (back online) instead of the LAN IP. zqx-api → Supabase cutover still pending.
+
 ## 2026-11-09: DB data migrated to cloud — zqx→Supabase, mcp-gateway→Neon (copies done+verified; cutover pending)
 
 Moved the two Postgres data stores off the NAS into managed cloud, as data copies only

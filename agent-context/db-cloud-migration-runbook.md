@@ -25,14 +25,15 @@ saved to `.env.bak-*`). Neon has no such issue (IPv4).
 
 ---
 
-## [YOU] Step 1 — Cutover mcp-gateway → Neon (do first; simplest, clean health check)
+## [DONE ✅ 2026-11-10] Step 1 — Cutover mcp-gateway → Neon
 
-```
-! bash /Users/pedro/Documents/_Projects/synology-site-deployer/agent-context/migration-2026-11/cutover-mcp-gateway-to-neon.sh
-```
-- Rewrites `GATEWAY_DATABASE_URL` in `mcp-gateway/.env`, recreates `mcp-gateway` + `-admin`.
-- Keeps `mcp-gateway-db` running (`--no-deps`). Health-checks `https://mcp.velosolabs.com/healthz`.
-- **Auto-rolls back** (restores `.env.bak-*`, recreates on NAS DB) if health ≠ 200.
+Live on Neon and verified: both `mcp-gateway` + `mcp-gateway-admin` **healthy** on
+`velosolabs_owner@ep-sparkling-voice-a12f48sd-pooler.ap-southeast-1.aws.neon.tech`, ~10h uptime,
+zero DB errors, `/mcp/account` returns a proper **401** (route + auth + DB working). NAS
+`mcp-gateway-db` left running as fallback; pre-cutover backup `mcp-gateway/.env.bak-20261110-080110`.
+**Gotcha fixed:** the original health gate used `https://mcp.velosolabs.com/healthz`, which 404s
+(that path isn't exposed through the tunnel). The committed script now gates on the **container's
+own Docker health status** (which internally hits `/healthz:8080` → 200) + a log DB-error scan.
 
 ## [YOU] Step 2 — Cutover zqx-api → Supabase
 
