@@ -82,3 +82,26 @@ session tokens. Use HttpOnly, SameSite session cookies and refuse cross-site for
 Reference implementation: `Appuiaus/sprigboard` (`src/auth.ts`, `src/passkeys.ts` with
 @simplewebauthn/server, `src/mail.ts`; VLABS-277). An existing app that lacks any of the three methods gets a
 Jira ticket to add them, and new apps ship with all three from the first release.
+
+## SOC 2 by design (owner's rule, 2026-11-10, everything we build)
+
+Everything we build, in every project, is designed to pass a SOC 2 Type II audit against the Trust Services
+Criteria (security, availability, confidentiality, processing integrity and privacy). Build these in from the
+first release, not as a later retrofit:
+
+- **Access control:** the app's own sign-in (see the login standard), least-privilege roles, passkeys or a second
+  factor for admins, sessions that expire, and sign out everywhere. No shared logins or static admin tokens.
+- **Audit trail:** an append-only log of sign-ins, admin actions, permission changes and changes to important
+  data (who, what, when, from where), kept for at least a year, and not editable by app users.
+- **Data protection:** TLS everywhere; secrets in a secret store or environment, never in git, chat, tickets or
+  journals; sensitive data encrypted at rest; collect only the personal data needed; a retention period and
+  deletion on request.
+- **Change management:** every change goes through a pull request with CI (tests, secret scan, dependency scan),
+  `main` is protected, deploys run from CI, and each change has a Jira ticket.
+- **Availability:** automated backups with a tested restore, health checks, and monitoring with alerts.
+- **Vendors:** record every third-party service that receives data (subprocessor) and what it receives.
+- **Incident response:** a short runbook per product covering key and secret rotation, revoking access and
+  telling affected users.
+- **Evidence:** each product keeps a living `docs/soc2-report.md` (template: s2925534/velosolabs
+  `docs/soc2-report.md`) listing controls in place, findings and fixes. Update it whenever a change touches any
+  of the points above, and give every gap a Jira ticket.
