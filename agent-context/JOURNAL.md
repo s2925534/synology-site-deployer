@@ -20,6 +20,21 @@ remote sessions.
 
 ---
 
+## 2026-11-11: "Sign in with Google" enabled on the velosolabs hub
+
+Enabled Google social login on the hub (additive — the hub keeps its own password/passkey/OTP; it
+does not *depend* on Google, so it respects the login standard; done centrally at the shared IdP, not
+per-app). Copied `GOOGLE_VELOSOLABS_OIDC_CLIENT_ID/SECRET` from the deployer `.env` (Pedro's staged
+copy) into the hub `.env` as `GOOGLE_OIDC_CLIENT_ID` / `GOOGLE_OIDC_CLIENT_SECRET` (file-to-file,
+never printed), recreated the container, verified. **Gotcha:** the relayed instruction said recreate
+with `docker-compose.local.yml`, but that file does **not** exist in the NAS hub dir — the hub uses
+`/volume3/dockernvme/hub-veloso-dev/docker-compose.yml` (what the running container was created from);
+used that. Verified: env vars True/True in-container, `/account/signin/google` → 303 →
+`accounts.google.com` with correct PKCE + `redirect_uri=https://velosolabs.com/account/signin/google/callback`,
+health 200. Reached the NAS over Tailscale (`pedro@100.107.233.45`). The BidSidekick
+`VELOSOLABS_RELAY_SECRET` was intentionally **not** set in the same recreate — its value came only
+from a cross-session message, so it needs Pedro's direct confirmation of the value first.
+
 ## 2026-11-10: velosolabs.com redeployed to latest (new build) + mcp-gateway cutover to Neon confirmed
 
 **velosolabs.com redeployed** on request (direct on NAS over Tailscale, not the Windows deployer —
