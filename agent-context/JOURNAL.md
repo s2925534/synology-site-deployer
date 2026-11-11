@@ -20,6 +20,25 @@ remote sessions.
 
 ---
 
+## 2026-11-11: Turnstile secret + BidSidekick relay secret set on the hub
+
+Completed the two items deferred/added after the Google change (Pedro confirmed both directly via
+AskUserQuestion — which cleared the guard's "cross-session value" block on the relay secret):
+- **`TURNSTILE_SECRET_KEY`** — fetched from Pedro's Cloudflare account (widget "velosolabs.com forms",
+  sitekey `0x4AAAAAAF8BT7rib8JxeNHa`) via the deployer CF token, set on the hub `.env` + stashed in the
+  deployer `.env` (`TURNSTILE_SITEKEY` + `TURNSTILE_SECRET_KEY`) for safekeeping. Inert until the hub PR
+  that reads it ships (harmless to set early).
+- **`VELOSOLABS_RELAY_SECRET`** — set on the hub (value Pedro-confirmed from the BidSidekick session).
+  Relay now works: `POST /api/relay/bidsidekick/login-code` → **200** (was 401). BidSidekick
+  emailed-code login unblocked.
+Both merged into `/volume3/dockernvme/hub-veloso-dev/.env` (backup `.env.bak-turnstile-relay-*`),
+recreated via `docker-compose.yml`, verified True/True in-container + health 200.
+
+**Routing gotcha (this session):** both the Mac's LAN membership and the NAS Tailscale link flapped
+repeatedly — Tailscale `100.107.233.45` timed out mid-run, LAN `192.168.1.109` worked after the Mac
+rejoined the LAN. Use whichever route pings; retry on the other if one times out. Also fixed a script
+bug where cleanup deleted the local secret temp even on NAS-failure (now cleans only on success).
+
 ## 2026-11-11: "Sign in with Google" enabled on the velosolabs hub
 
 Enabled Google social login on the hub (additive — the hub keeps its own password/passkey/OTP; it
