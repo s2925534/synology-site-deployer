@@ -12,11 +12,11 @@ TS="$(date +%Y%m%d-%H%M%S)"
 getenv() { grep -m1 -E "^$1=" "$DEPLOYER_ENV" | sed -E "s/^$1=//" | tr -d '\r'; }
 
 PW="$(getenv NAS_SSH_PASSWORD)"
-POOLED="$(getenv SUPEBASE_CLOUD_ZQX_CONNECTION_STRING)"        # IPv4 session pooler (set by migration)
-DIRECT="$(getenv SUPEBASE_CLOUD_ZQX_DIRECT_CONNECTION_STRING)"
-[ -n "$DIRECT" ] || DIRECT="$POOLED"
-[ -n "$PW" ]     || { echo "FATAL: NAS_SSH_PASSWORD missing"; exit 1; }
-[ -n "$POOLED" ] || { echo "FATAL: SUPEBASE_CLOUD_ZQX_CONNECTION_STRING missing"; exit 1; }
+APP_CONN="$(getenv SUPEBASE_VELOSOLABS_APP_CONNECTION_STRING)"   # zqx_app (RLS-enforced) -> APP_DATABASE_URL
+OWNER_CONN="$(getenv SUPEBASE_VELOSOLABS_CONNECTION_STRING)"     # zqx_owner (BYPASSRLS) -> DATABASE_URL
+[ -n "$PW" ]         || { echo "FATAL: NAS_SSH_PASSWORD missing"; exit 1; }
+[ -n "$APP_CONN" ]   || { echo "FATAL: SUPEBASE_VELOSOLABS_APP_CONNECTION_STRING missing"; exit 1; }
+[ -n "$OWNER_CONN" ] || { echo "FATAL: SUPEBASE_VELOSOLABS_CONNECTION_STRING missing"; exit 1; }
 
 DIR="api-zqx-io"; SVC="api"; PORT="5105"
 REMOTE='
@@ -50,11 +50,16 @@ PY
   echo "[verify] keys now (value redacted):"
   grep -nE "DATABASE_URL\s*:" docker-compose.yml | sed -E "s#(://[^:]*:)[^@]*@[^/\"'"'"']*#\1REDACTED@HOST#g"
   echo "$PW" | sudo -S '"$DOCKER"' compose up -d --force-recreate --no-deps '"$SVC"'
-  sleep 6
-  code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:'"$PORT"'/health || echo 000)
-  echo "[health] http://127.0.0.1:'"$PORT"'/health -> $code"
-  if [ "$code" != 200 ]; then
-    echo "[FAIL] health != 200 -- ROLLING BACK"
+  echo "[recreate] done; polling /health (up to ~100s, app connects to a Tokyo pooler)"
+  ok=0
+  for i in $(seq 1 20); do
+    sleep 5
+    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://127.0.0.1:'"$PORT"'/health || echo 000)
+    echo "  [health $i] $code"
+    if [ "$code" = 200 ]; then ok=1; break; fi
+  done
+  if [ "$ok" != 1 ]; then
+    echo "[FAIL] /health never returned 200 -- ROLLING BACK"
     cp -p "docker-compose.yml.bak-'"$TS"'" docker-compose.yml
     echo "$PW" | sudo -S '"$DOCKER"' compose up -d --force-recreate --no-deps '"$SVC"'
     echo "[rolledback] restored compose + recreated on NAS zqx-db"
@@ -63,6 +68,6 @@ PY
   echo "[ok] '"$SVC"' live on Supabase (NAS zqx-db still running as fallback)"
 '
 echo "=== zqx-api (prod) -> Supabase ==="
-printf '%s\n%s\n%s\n' "$PW" "$POOLED" "$DIRECT" | ssh -i "$SSH_KEY" -o IdentitiesOnly=yes "$NAS" "$REMOTE" 2>&1 | grep -viE "$SSH_FILTER"
+printf '%s\n%s\n%s\n' "$PW" "$APP_CONN" "$OWNER_CONN" | ssh -i "$SSH_KEY" -o IdentitiesOnly=yes "$NAS" "$REMOTE" 2>&1 | grep -viE "$SSH_FILTER"
 rc="${PIPESTATUS[1]}"
 [ "$rc" = 0 ] && echo "=== DONE. app/field/portal need no change (they reach the DB via zqx-api). ===" || { echo "ABORTED (rc=$rc)"; exit 1; }

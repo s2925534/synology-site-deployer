@@ -20,6 +20,35 @@ remote sessions.
 
 ---
 
+## 2026-11-11: zqx-api cut over to Supabase (NEW dedicated account, Sydney) — two-role RLS model
+
+zqx-api DB is now **Supabase cloud**, on a **new dedicated account** (admin@zqx.io / org "ZQX's Org"
+`qpiynrxvvkttyvdoxmdi`), project **`pocefahesgwsugicjtgw`** in **ap-southeast-2 (Sydney)**. Verified:
+`api.zqx.io/health` = 200, two-role RLS works, NAS `zqx-db` kept as fallback.
+
+How it went (several gotchas):
+- **App enforces a two-role model.** It refuses to boot if `APP_DATABASE_URL == DATABASE_URL`
+  ("...bypasses Row-Level Security"). So: `DATABASE_URL` → **`zqx_owner`** (privileged/migrations),
+  `APP_DATABASE_URL` → **`zqx_app`** (RLS-enforced, non-owner). First attempt (both = same postgres
+  conn) crash-looped → `/health` 000 → auto-rolled back. Diagnosed via a controlled log-capture cycle.
+- **RLS is FORCE'd** on the tenant tables, and the source `zqx_owner` had **`BYPASSRLS`+superuser**
+  (role attrs don't travel in a `--no-owner` dump). New `zqx_owner` saw 0 rows until
+  `ALTER ROLE zqx_owner BYPASSRLS` — matches the app's "DATABASE_URL bypasses RLS" expectation.
+- **Region change.** First built the dedicated project in **ap-south-1 (Mumbai)** — Pedro wanted a
+  better region + the Mumbai restore hung. Supabase regions are immutable, so created a **fresh
+  Sydney project via the Management API** (`sbp_` PAT) and abandoned Mumbai. Everything done
+  programmatically with the PAT: project create, `CREATE ROLE`, grants, `BYPASSRLS`, hardening.
+- **Data:** dumped on NAS, restored as `zqx_owner` via the **IPv4 session pooler**
+  `aws-0-ap-southeast-2.pooler.supabase.com:5432` (user `zqx_owner.<ref>`). public 97 tables + the
+  **`shortener` schema** (2 tables; needed `GRANT CREATE ON DATABASE` for zqx_owner) = 174 rows.
+- Hardened: revoked anon/authenticated on public (app uses direct PG, not PostgREST).
+- `.env` prefix renamed `SUPEBASE_ZQXIO_*` → **`SUPEBASE_VELOSOLABS_*`** (per Pedro; the Supabase
+  account is the VelosoLabs umbrella). Old **`SUPEBASE_CLOUD_ZQX_*`** (Tokyo `xmklzncqgnuhxagsfeaq`)
+  + the Mumbai project are now **orphaned → delete them**.
+- Also stored, for Ben's Appui ecosystem (separate accounts): `NEON_APPUI_API_KEY`,
+  `SUPEBASE_APPUI_ACCESS_TOKEN`. **Rotate all keys that came through chat** (the two `sbp_`, the
+  `napi_`, the `sb_secret_`).
+
 ## 2026-11-11: Turnstile secret + BidSidekick relay secret set on the hub
 
 Completed the two items deferred/added after the Google change (Pedro confirmed both directly via
