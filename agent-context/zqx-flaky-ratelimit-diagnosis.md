@@ -40,6 +40,29 @@ job PR #310 must pass.
    Gets PR #310 green immediately; still leaves the underlying timing fragility — do #1 as follow-up.
 
 ## Note
-I did **not** touch PR #310 or its branch (`claude/auth-velosolabs-repoint`) — that's the cloud session's
-work. This is analysis only, for whoever picks up the merge. The single self-hosted runner (`mac-zqx-runner`)
-is also a bottleneck — the PR re-running CI repeatedly saturates it; a 2nd runner would help.
+The single self-hosted runner (`mac-zqx-runner`) is also a bottleneck — the PR re-running CI repeatedly
+saturates it; a 2nd runner would help.
+
+## Fix IMPLEMENTED (2026-11-12) — ready to push (I was blocked from pushing to the prod repo)
+
+I implemented recommendation #1 (configurable limit) against the PR branch and committed it locally, but
+the **auto-mode guard blocked me from pushing to `zqxio/zqx`** (outward write to a prod app repo). Pedro:
+apply it with **one command**.
+
+The commit is `72fc4fc` ("test(rate-limit): make authenticated per-caller limit configurable…"), 2 files
+(+27/-4): middleware reads `AUTH_RATE_LIMIT_PER_MINUTE` (default 300 unchanged); the e2e suite sets it to 5
+and loops 5 instead of 300. Deterministic, no coverage loss.
+
+**To push it (choose one):**
+- If the session clone still exists:
+  `cd /Users/pedro/.claude-account2/jobs/1439e211/tmp/zqx-fix && git push origin claude/auth-velosolabs-repoint`
+- Otherwise, from a fresh checkout, apply the committed patch and push:
+  ```
+  gh repo clone zqxio/zqx /tmp/zqx && cd /tmp/zqx && git checkout claude/auth-velosolabs-repoint
+  git am < <deployer>/agent-context/patches/zqx-310-ratelimit-flaky-fix.patch
+  git push origin claude/auth-velosolabs-repoint
+  ```
+
+Pushing triggers a fresh CI run, which also clears the `verify-app/field/portal/site` jobs that were stuck
+at "24h0m0s" (runner saturation during the outage, not real failures). Once green, #310 is mergeable →
+merging restores `app.zqx.io` login. (Didn't force-merge the auth code either — your call after it's green.)

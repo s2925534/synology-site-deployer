@@ -1,0 +1,105 @@
+From 72fc4fcddf5fff2b004371d9dd5bf213d8eefbb2 Mon Sep 17 00:00:00 2001
+From: Pedro Veloso <pedro@veloso.dev>
+Date: Thu, 12 Nov 2026 21:34:42 +1000
+Subject: [PATCH] test(rate-limit): make authenticated per-caller limit
+ configurable for deterministic e2e
+
+The HTTP-wiring e2e proved enforcement by looping 300 real requests before expecting
+429. Flaky two ways: slow enough to straddle the limiter's fixed 1-minute window
+(intermittent 'Expected 429, got 200') and to flood supertest sockets (intermittent
+'Parse Error: Expected HTTP/'). Make AUTH_RATE_LIMIT_PER_MINUTE override the 300
+default (read at middleware construction), set it to 5 in the suite, loop that many.
+Production default unchanged at 300.
+---
+ .../src/authenticated-rate-limit.middleware.ts  | 14 ++++++++++++--
+ .../api/test/http/rate-limit-wiring.e2e.spec.ts | 17 +++++++++++++++--
+ 2 files changed, 27 insertions(+), 4 deletions(-)
+
+diff --git a/apps/api/src/authenticated-rate-limit.middleware.ts b/apps/api/src/authenticated-rate-limit.middleware.ts
+index ede75db..55d7021 100644
+--- a/apps/api/src/authenticated-rate-limit.middleware.ts
++++ b/apps/api/src/authenticated-rate-limit.middleware.ts
+@@ -5,7 +5,17 @@ import type { ZqxAuthenticatedRequest } from "./tenant-auth.middleware";
+ 
+ const MINUTE_MS = 60_000;
+ const SWEEP_INTERVAL_REQUESTS = 500;
+-const LIMIT_PER_MINUTE = 300;
++const DEFAULT_LIMIT_PER_MINUTE = 300;
++
++// Production default is 300/min. Overridable via AUTH_RATE_LIMIT_PER_MINUTE so the
++// HTTP-wiring e2e suite can prove enforcement with a small, deterministic number of
++// requests instead of looping 300+ (slow enough to straddle the fixed 1-minute
++// window and flood the test client). Read at construction, not import, so the test
++// can set it before the AppModule boots. Unset in production -> 300.
++function configuredLimitPerMinute(): number {
++  const raw = Number(process.env.AUTH_RATE_LIMIT_PER_MINUTE);
++  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_LIMIT_PER_MINUTE;
++}
+ 
+ // MVP P20A "Add practical scalability guardrails": ...per-tenant rate
+ // limits... -- extends the same FixedWindowRateLimiter that MVP P20A's own
+@@ -27,7 +37,7 @@ export function rateLimitKeyFor(
+ 
+ @Injectable()
+ export class AuthenticatedRateLimitMiddleware implements NestMiddleware {
+-  private readonly limiter = new FixedWindowRateLimiter(LIMIT_PER_MINUTE, MINUTE_MS);
++  private readonly limiter = new FixedWindowRateLimiter(configuredLimitPerMinute(), MINUTE_MS);
+   private requestsSinceSweep = 0;
+ 
+   use(req: ZqxAuthenticatedRequest, res: Response, next: NextFunction) {
+diff --git a/apps/api/test/http/rate-limit-wiring.e2e.spec.ts b/apps/api/test/http/rate-limit-wiring.e2e.spec.ts
+index 8f90ba5..a29b80c 100644
+--- a/apps/api/test/http/rate-limit-wiring.e2e.spec.ts
++++ b/apps/api/test/http/rate-limit-wiring.e2e.spec.ts
+@@ -29,17 +29,30 @@ jest.mock("../../src/auth/native-jwt", () => ({
+ // database needed for either case below.
+ const INTERNAL_TENANT_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+ 
++// Deterministic authenticated rate-limit wiring: the production limit is 300/min,
++// but proving enforcement over the real HTTP pipeline at 300 means 300+ sequential
++// supertest requests -- slow enough to straddle the limiter's fixed 1-minute window
++// (flaky "Expected 429, got 200" when the window rolls mid-loop) and to flood the
++// test client's sockets (flaky "Parse Error: Expected HTTP/"). Override the limit to
++// a small value so each loop is short, can't cross a window boundary, and doesn't
++// flood -- the wiring being proven (limit is enforced per resolved identity) is
++// identical. AUTH_RATE_LIMIT_PER_MINUTE is read at middleware construction, so it
++// must be set before createHttpTestApp() boots the AppModule; restored afterwards.
++const AUTH_LIMIT = 5;
++
+ describe("HTTP-layer wiring: rate limiter middleware", () => {
+   let ctx: HttpTestContext;
+   let app: INestApplication;
+ 
+   beforeAll(async () => {
++    process.env.AUTH_RATE_LIMIT_PER_MINUTE = String(AUTH_LIMIT);
+     ctx = await createHttpTestApp();
+     app = ctx.app;
+   });
+ 
+   afterAll(async () => {
+     await app.close();
++    delete process.env.AUTH_RATE_LIMIT_PER_MINUTE;
+   });
+ 
+   // tenant-access-requests carries the lowest configured limit (5/minute,
+@@ -120,7 +133,7 @@ describe("HTTP-layer wiring: rate limiter middleware", () => {
+     };
+     ctx.prisma.client.findMany.mockResolvedValue([]);
+ 
+-    for (let i = 0; i < 300; i++) {
++    for (let i = 0; i < AUTH_LIMIT; i++) {
+       ctx.resolveIdentity.mockResolvedValueOnce(identity);
+       const res = await request(app.getHttpServer())
+         .get("/clients")
+@@ -155,7 +168,7 @@ describe("HTTP-layer wiring: rate limiter middleware", () => {
+     ctx.prisma.$queryRaw.mockResolvedValue([{ relationship_type: "Shipper", tenant_id: INTERNAL_TENANT_ID }]);
+     ctx.prisma.container.findUnique.mockResolvedValue(null);
+ 
+-    for (let i = 0; i < 300; i++) {
++    for (let i = 0; i < AUTH_LIMIT; i++) {
+       ctx.resolveIdentity.mockResolvedValueOnce(identity);
+       const res = await request(app.getHttpServer())
+         .get(`/containers/${containerId}/external-detail`)
+-- 
+2.39.5 (Apple Git-154)
+
