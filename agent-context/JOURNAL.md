@@ -20,6 +20,27 @@ remote sessions.
 
 ---
 
+## 2026-11-12: NAS power-loss recovery — scrub + missing containerd symlinks (full fix recorded)
+
+Storm → power loss → NAS unclean shutdown. On reboot everything tunnel-served was **530** (Docker down).
+Chain of failure + the fix (reached NAS over **LAN** `192.168.1.109`; Tailscale was down):
+1. Unclean shutdown queued a **btrfs scrub on /volume1** → it saturated IO at boot (`btrfs scrub status
+   /volume1` → "running for 27 min, 671 GiB"). This starved ContainerManager's first start → package went
+   **`start_failed`** (`synopkg status ContainerManager` → status_code 272).
+2. Because that first start failed, the package's **binary symlinks never got (re)created** — `containerd`
+   and friends were NOT in PATH (default PATH `/usr/bin:/bin:/usr/sbin:/sbin`, and `/usr/local/bin` had no
+   docker links). So on every retry, dockerd failed fast: `failed to start containerd: exec: "containerd":
+   executable file not found in $PATH`. Not OOM (32G/24G free), not disk (vol1 49%), not corruption — the
+   binaries were intact at `/var/packages/ContainerManager/target/usr/bin/` (containerd v1.7.1 runs fine).
+3. **FIX:** `btrfs scrub cancel /volume1`; then symlink the package binaries into PATH —
+   `for f in /var/packages/ContainerManager/target/usr/bin/*; do ln -sf "$f" /usr/local/bin/; done` and the
+   same for `containerd* runc docker-init docker-proxy ctr` into `/usr/bin`; then `synopkg start
+   ContainerManager`. dockerd found containerd → started → **all 25 containers restored via restart policy.**
+- Verified back: velosolabs.com/health, api.zqx.io/health (Supabase), mcp.velosolabs.com/healthz (Neon),
+  p.veloso.dev, zqx.io — all 200/301. **The cloud-DB migrations paid off** — zqx + gateway data were never
+  on the NAS, so they returned instantly. systemsnotsilos (WP) up internally but externally slow/settling.
+- Tailscale restarted. The symlinks are a recovery workaround; a future clean boot recreates them normally.
+
 ## 2026-11-11: zqx-api cut over to Supabase (NEW dedicated account, Sydney) — two-role RLS model
 
 zqx-api DB is now **Supabase cloud**, on a **new dedicated account** (admin@zqx.io / org "ZQX's Org"
