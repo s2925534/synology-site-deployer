@@ -20,6 +20,25 @@ remote sessions.
 
 ---
 
+## 2026-11-12 (overnight): recovery holding; systemsnotsilos degraded; flaky tests diagnosed
+
+Autonomous overnight pass after the power-loss recovery:
+- **Core stable:** velosolabs, api.zqx.io (Supabase), mcp.velosolabs.com (Neon), zqx.io, p.veloso.dev all
+  200/301. **Tailscale reconnected** (NAS `100.107.233.45`). Backed off deep NAS probing — the box was
+  still settling and sudo/docker calls were returning intermittently; didn't want to risk the stable core.
+- **systemsnotsilos still degraded (external 000).** WP container serves *internally* (Apache resumed,
+  Jetpack monitor got a 200), but `curl localhost:8080/` now returns an instant **404** while the external
+  request **hangs** → cloudflared's origin routing for the site is broken after the chaotic restart (wrong
+  port/service), on top of the earlier missing bind-mounts (I restored the theme from `repo/`; the Mailjet
+  **newsletter mu-plugin is still missing** — not in the repo checkout). **Clean fix = re-run the
+  synology-site deployer for systemsnotsilos** (regenerates mu-plugins/theme + compose/ports). Not forced
+  live tonight.
+- **PR #310 (auth repoint) is blocked only by 2 pre-existing flaky rate-limit tests**, diagnosed in
+  `agent-context/zqx-flaky-ratelimit-diagnosis.md`: 300-request loops straddle the fixed-window minute
+  boundary (→ "got 200") + supertest socket flood (→ "Parse Error"). Fix: make the 300/min auth limit
+  configurable + tiny in test env (best), inject the clock, or `jest.retryTimes` to unblock. Did NOT touch
+  the cloud session's branch.
+
 ## 2026-11-12: Gateway `roles` column migration applied on Neon (not the NAS)
 
 Cross-session (velosolabs Session Bridge) asked to run s2925534/velosolabs PR #219's additive
