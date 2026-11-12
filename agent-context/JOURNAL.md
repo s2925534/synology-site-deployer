@@ -20,6 +20,16 @@ remote sessions.
 
 ---
 
+## 2026-11-12: Gateway `roles` column migration applied on Neon (not the NAS)
+
+Cross-session (velosolabs Session Bridge) asked to run s2925534/velosolabs PR #219's additive
+migration (`ALTER TABLE browser_sessions ADD COLUMN IF NOT EXISTS roles text[] NOT NULL DEFAULT
+'{source}'`). **The gateway DB is Neon now**, so it was applied there (project `proud-boat-42777651`,
+db `velosolabs`, public schema) via the Neon MCP — not the NAS `mcp-gateway-db` the request assumed.
+Verified: column present, default `'{source}'::text[]`, 0 rows (no backfill). Gateway healthy
+(`mcp.velosolabs.com/healthz` 200). Reminder for future gateway schema steps: target **Neon**, not the
+NAS DB. (Couldn't reply to the requesting session — Remote MCP not connected here.)
+
 ## 2026-11-12: NAS power-loss recovery — scrub + missing containerd symlinks (full fix recorded)
 
 Storm → power loss → NAS unclean shutdown. On reboot everything tunnel-served was **530** (Docker down).
