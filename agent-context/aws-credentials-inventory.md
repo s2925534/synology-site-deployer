@@ -21,6 +21,18 @@ deferred per "do nothing for now").
 - **`AKIA237R…`** (#5–#8, incl. a Lambda key) → a **separate account/set** — purpose not captured in the sweep
   annotations beyond "resource config"; likely an older/another project. Several keys here may be rotations.
 
+## Resolved via read-only STS + IAM (2026-11-13) — no retries on failures (per Pedro)
+| Key (masked) | Account | IAM user | Permissions | Status |
+|---|---|---|---|---|
+| `AKIAWQKZ…4ZP3` | **447401840262** | `FullUser` (grp `FullGroup`) | **AdministratorAccess** (+ Beanstalk/Amplify/AuditManager admin) | ✅ live — decom account |
+| `AKIAZI2L…UHE3` | **637423203670** | `lambda-programmatic` | valid; **scoped** (IAM self-read denied) — Interport Lambda | ✅ live (`~/.aws` default) |
+| `AKIAZPS3…TPWT` | **651952795812** | `zqx-sns-sender` | valid; **scoped** (IAM self-read denied) — likely SNS/SES send | ✅ live (new acct surfaced) |
+| `AKIA237R…WYEP/GTUC/QAX7/XOMM` | — | — | — | ❌ **expired/deleted** (InvalidClientTokenId) |
+| `AKIAZI2L…DFHW` | — | — | — | ❌ **expired** (from interport-backend_OLD) |
+| `AKIAWQKZ…KT2S` | — | — | — | ⚠️ **unknown** (no secret pair found to test) |
+
+**3 live AWS accounts:** `447401840262` (decommissioning, admin), `637423203670` (Interport, lambda-programmatic, scoped), `651952795812` (zqx SNS/SES, scoped). The `AKIA237R` family + the `_OLD` interport key are dead — safe to purge from the sweep/extras.env.
+
 ## Notes
 - The **new MySQL/MariaDB AWS account** (for the WordPress DBs) is **not in here yet** — you were mid-creating
   its `FullUser` CLI key; paste it when ready and it gets added.
