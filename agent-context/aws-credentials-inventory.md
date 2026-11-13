@@ -33,6 +33,13 @@ deferred per "do nothing for now").
 
 **3 live AWS accounts:** `447401840262` (decommissioning, admin), `637423203670` (Interport, lambda-programmatic, scoped), `651952795812` (zqx SNS/SES, scoped). The `AKIA237R` family + the `_OLD` interport key are dead — safe to purge from the sweep/extras.env.
 
+## Account owners (read-only `account get-contact-information` / `iam list-account-aliases`, 2026-11-13)
+| Account | Registered owner | Notes |
+|---|---|---|
+| **447401840262** (decom) | **Pedro Veloso** (personal; AU/QLD/Heritage Park; +61 0437835617) — no company name | admin key could read it |
+| **651952795812** (zqx-sns-sender) | **unknown** — scoped key, AccessDenied on contact-info/alias (no retry) | check that account's console → Billing → Account |
+| **637423203670** (Interport, lambda-programmatic) | **unknown** — scoped key, AccessDenied (no retry) | check that account's console |
+
 ## Notes
 - The **new MySQL/MariaDB AWS account** (for the WordPress DBs) is **not in here yet** — you were mid-creating
   its `FullUser` CLI key; paste it when ready and it gets added.
