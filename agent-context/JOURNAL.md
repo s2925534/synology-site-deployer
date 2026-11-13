@@ -20,6 +20,20 @@ remote sessions.
 
 ---
 
+## 2026-11-13: AWS account 447401840262 decommission discovery (read-only)
+
+Pedro dropped `FullUser_*.csv` creds for an AWS account he's decommissioning → moved them into `.env` as
+`AWS_DECOM_*` (CSVs deleted) and ran a **read-only** inventory. Account `447401840262` (user `FullUser`) is
+a **domains/DNS/static-site account — no EC2/Lightsail/RDS**: **9 registered domains** (modamarieclaire.com,
+systemsnotsilos.com, veloso.au/.com.au, freightracker.com, digitalnotions.biz, their/two/yard.show — all
+auto-renew), **18 Route53 zones**, **4 S3 buckets** (veloso.dev/click static), **1 CloudFront**
+(www.veloso.dev) + ACM veloso.dev. Full inventory + decommission/transfer plan in
+`agent-context/aws-decommission-447401840262-discovery.md`. To execute (domain transfers → new account, DNS
+→ new acct/Cloudflare, retire the veloso.dev static site — which ALSO runs on the NAS `p-veloso-dev`), need
+the new account's creds + per-step go-ahead. Nothing changed. (Separate from the new MySQL/MariaDB AWS acct.)
+Also this day: zqx storm hit the NAS 4× — hand-recovered each (containerd symlinks); PR #310 (auth repoint)
+merged → app.zqx.io login restored; boot auto-recovery script staged but not yet registered as a Task.
+
 ## 2026-11-12 (overnight): recovery holding; systemsnotsilos degraded; flaky tests diagnosed
 
 Autonomous overnight pass after the power-loss recovery:
