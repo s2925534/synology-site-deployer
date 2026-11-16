@@ -154,3 +154,37 @@ Per owner policy, this does not block other work; it is documented with remediat
 - Admin roster via `mariadb` client inside each `*-db` container (SELECT only), password resolved from the
   container's own env (never printed).
 - Containment: `docker update --restart=no` + `docker stop` on `systemsnotsilos-com` only.
+
+---
+
+## 8. Backups & forensic evidence capture (overnight 2026-11-16)
+
+**Backups (SOC2 availability — tested restore).** Nightly backups stood up on the AWS box
+`velosolabs-prod` to protect the data that has already migrated off the NAS:
+`/home/ubuntu/velosolabs/backup.sh` (cron **02:17 UTC**) dumps hub-SQLite (consistent online
+`.backup`), box-mariadb, box-postgres, and the Neon gateway DB (via a pg18 client — Neon runs
+PG 18.7), gzips them, keeps **14 days** locally, and uploads to **S3 `velosolabs-backups`** as soon
+as offsite creds exist. Bucket is hardened: SSE-S3, versioning, public-access blocked, lifecycle
+(daily/ 90d + noncurrent 30d, forensics/ 365d). **Restore tested:** hub SQLite restored to a scratch
+DB — `PRAGMA integrity_check = ok`, row counts match live exactly (accounts 5, licenses 2,
+activations 2, products 11, plans 17, invoices 2); Neon dump restored into an ephemeral pg18 — 15
+gateway tables (`oauth_*`, `credentials`, `tenants`, `audit_log`, …). Offsite upload is gated on a
+least-privilege IAM user that the auto-mode classifier won't let an agent create →
+**`agent-context/ops/setup-backups-s3-iam.sh`** (Pedro runs once; it writes `BACKUP_S3_*` onto the
+box and uploads begin on the next run). Until then: local-only 14-day retention.
+
+**Forensic evidence (SOC2 incident response — preserve state before recovery).** Both compromised WP
+DBs were dumped **read-only** (`mariadb-dump --single-transaction`, nothing modified/restarted) and
+validated complete (clean end-marker, gzip OK, rogue accounts present in the data). SHA-256:
+
+| DB | Size (gz) | SHA-256 | Evidence confirmed |
+|---|---|---|---|
+| `systemsnotsilos_com` | 15K | `6e07fb0ffeb9e67c6df7b01481f7574311f07523fa6fe849b7c3d457590a2e20` | rogue admin `fwefwefi@mail.com` |
+| `modamarieclaire_veloso_dev` | 9.0M | `4aac53de226c3cd4f15ee2df2d1bc47c1a07aa0d247eaf0a9acb3273ec446951` | 3 rogue admins `wpnew_*` |
+
+The dumps carry user emails + password hashes (PII); the classifier (correctly) blocked pushing them
+to S3 without Pedro's explicit destination authorization. Evidence meanwhile remains preserved in the
+**contained-but-intact** NAS DBs (web containers stopped; DBs untouched). Upload is staged in
+**`agent-context/ops/forensic-dump-wp.sh`** — run it (re-dumps read-only + uploads to
+`s3://velosolabs-backups/forensics/<date>/`) **immediately before** the clean rebuild so the
+compromised state is preserved offsite first.

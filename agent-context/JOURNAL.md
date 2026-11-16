@@ -20,6 +20,24 @@ remote sessions.
 
 ---
 
+## 2026-11-16: nightly DB backups on the AWS box (tested restore) + forensic capture of the compromised WP DBs
+
+Stood up **nightly backups** on `velosolabs-prod`: `/home/ubuntu/velosolabs/backup.sh` (cron **02:17 UTC**)
+dumps hub-SQLite (consistent online `.backup` via python in the hub container), box-mariadb, box-postgres,
+and the **Neon** gateway DB. Gotcha: Neon runs **PG 18.7**, so pg16/17 `pg_dump` refuse — the script uses a
+`postgres:18` throwaway client. 14-day local retention; uploads to **S3 `velosolabs-backups`** (new, hardened:
+SSE-S3 + versioning + public-access-blocked + lifecycle) **once `BACKUP_S3_*` creds exist**. **Restore tested**
+end-to-end: hub SQLite → integrity ok + counts match live; Neon dump → 15 tables into a scratch pg18.
+
+- **Blocked (staged for Pedro):** the least-priv IAM user `velosolabs-backup` (classifier blocks IAM creation)
+  → `agent-context/ops/setup-backups-s3-iam.sh`. Until Pedro runs it, backups are **local-only** on the box.
+- **Forensic evidence:** both compromised WP DBs dumped **read-only** + validated + SHA-256'd (see incident
+  report §8). Pushing the dumps to S3 was **classifier-blocked (PII: emails + password hashes to an un-named
+  destination)** — correct call. Evidence stays preserved in the contained-but-intact NAS DBs; offsite upload
+  staged in `agent-context/ops/forensic-dump-wp.sh` to run right before the clean rebuild.
+- SOC2: backups = availability (tested restore); forensic capture = incident-response evidence. Details in
+  `agent-context/incident-2026-11-16-wp-compromise.md` §8 (VLABS-393).
+
 ## 2026-11-16: velosolabs hub + mcp-gateway migrated to the AWS Lightsail box (staging, verified, cutover staged)
 
 Moved the **velosolabs hub** and **mcp-gateway** (+ gateway-admin) off the NAS onto `velosolabs-prod`
