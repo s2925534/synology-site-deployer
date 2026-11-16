@@ -38,6 +38,20 @@ end-to-end: hub SQLite → integrity ok + counts match live; Neon dump → 15 ta
 - SOC2: backups = availability (tested restore); forensic capture = incident-response evidence. Details in
   `agent-context/incident-2026-11-16-wp-compromise.md` §8 (VLABS-393).
 
+## 2026-11-17: velosolabs.com + mcp.velosolabs.com PRODUCTION CUTOVER to the AWS box — DONE
+
+Flipped both prod CNAMEs in the `velosolabs.com` zone from the NAS tunnel (`563c6977-…`) to the
+`velosolabs-aws` tunnel (`98135949-…`), via `agent-context/ops/cutover-velosolabs-aws.sh` (Pedro's go).
+Took a fresh consistent hub SQLite snapshot NAS→box immediately before the flip (no lost license/account
+writes), restarted the box hub. **Verified live:** `velosolabs.com/` 200, `/health` 200,
+`mcp.velosolabs.com/healthz` 200 — all now served from the Lightsail box.
+
+- **NAS hub (`velosolabs`) + gateway/admin left RUNNING as fallback.** Rollback = PATCH both CNAMEs back to
+  `563c6977-9a9e-4338-ac35-cebaffdb991b.cfargotunnel.com`.
+- **Next (after a clean soak):** stop the NAS `velosolabs` + `mcp-gateway`/`-admin`/`-db` containers. The NAS
+  hub keeps taking writes until stopped, so if the soak runs long, re-snapshot before stopping.
+- Box auto-deploy now works (maintained Watchtower fork). Tracking VLABS-392.
+
 ## 2026-11-16: velosolabs hub + mcp-gateway migrated to the AWS Lightsail box (staging, verified, cutover staged)
 
 Moved the **velosolabs hub** and **mcp-gateway** (+ gateway-admin) off the NAS onto `velosolabs-prod`
