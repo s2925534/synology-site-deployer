@@ -24,3 +24,14 @@ activity-log/*.jsonl
 
 # Verbatim journal index: machine-local transcript paths, not portable
 /agent-context/journal-verbatim/
+
+# AWS / cloud credential CSV exports (never commit)
+*credentials*.csv
+*_credentials.csv
+*accessKeys*.csv
+
+# Local .env backups (contain live secrets — never commit)
+.env.bak*
+
+# Ad-hoc log dumps dropped in the repo root
+benslogs*

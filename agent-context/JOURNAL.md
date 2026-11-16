@@ -20,6 +20,31 @@ remote sessions.
 
 ---
 
+## 2026-11-16: velosolabs hub + mcp-gateway migrated to the AWS Lightsail box (staging, verified, cutover staged)
+
+Moved the **velosolabs hub** and **mcp-gateway** (+ gateway-admin) off the NAS onto `velosolabs-prod`
+(Lightsail), served through the `velosolabs-aws` Cloudflare tunnel. **NAS containers left live and
+untouched; no production DNS flipped.**
+
+- **Hub** (`veloso-plugin-hub:latest`): env + `backup-key.json` + full `/app/data` SQLite volume copied
+  NAS→box file-to-file. Data parity verified in-container (accounts 5, licenses 2, activations 2,
+  products 11, plans 17, invoices 2). SMS env present (SENDER=VELOSOLABS, ap-southeast-2).
+- **Gateway**: DB is **Neon** (GATEWAY_DATABASE_URL) — the local `mcp-gateway-db` was vestigial, dropped.
+  gateway-admin on 8081 (added 8081 healthcheck override — image default probes 8080).
+- Staging verified: `hub-staging.velosolabs.com/health` 200 + real page; `mcp-staging.velosolabs.com/healthz`
+  200 (Neon reachable).
+- **Gotcha / incidental fix:** `containrrr/watchtower` is abandoned and **crash-looped on Docker 29's API**
+  (auto-deploy-on-push was silently broken). Switched to the maintained `nicholas-fedor/watchtower` fork →
+  healthy; auto-deploy now actually works for the migrated services.
+- **Cutover (NOT run — awaits Pedro's go):** a 2-record DNS flip in the `velosolabs.com` zone, repoint
+  `velosolabs.com` + `mcp.velosolabs.com` CNAMEs NAS tunnel → `98135949-…cfargotunnel.com`. Ready script
+  (re-copies hub SQLite at flip time to avoid divergence + verifies + rollback note):
+  `agent-context/ops/cutover-velosolabs-aws.sh`. Tracking **VLABS-392**.
+
+Also staged this session (not run): `agent-context/ops/zqx-vercel-staging-setup.md` — zqx 4-frontend Vercel
+staging is blocked on a **Vercel Pro** upgrade for team `zqx2` (private org repo) + a deployed staging
+`apps/api` URL (the frontends call `apps/api` via `ZQX_API_URL`, not Supabase directly).
+
 ## 2026-11-16: WordPress compromise audit — systemsnotsilos contained + 2nd (older) hit found on modamarieclaire
 
 Read-only audit of **all three** NAS WordPress installs after systemsnotsilos.com was found compromised.
