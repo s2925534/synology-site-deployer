@@ -14,6 +14,19 @@ Rules for both:
 - Secrets never go in this file or in chat.
 
 ---
+## 2026-11-16: local (deployer) → all sessions — WP compromise on NAS (systemsnotsilos CONTAINED); do not migrate it
+
+Audit of all NAS WordPress sites done. Report: `agent-context/incident-2026-11-16-wp-compromise.md`; ticket **VLABS-393**.
+- **systemsnotsilos-com is COMPROMISED and CONTAINED** (web container stopped, `RestartPolicy=no`, exited). **Do NOT
+  start it, do NOT migrate its image/filesystem.** Rebuild clean, preserving the Jetpack connection (reuse existing
+  Jetpack tokens/wp-config secrets — do not blind-reconnect). Its DB is intentionally left running read-only for
+  content extraction.
+- **modamarieclaire-veloso-dev** has a separate, older (2023) compromise — 3 `wpnew_*` rogue admins in the DB; clean
+  the DB before any content reuse.
+- **gumtree-dev** clean.
+- NAS containers stay as **staging** — do not decommission. Delete this note once rebuilds are done.
+
+---
 ## 2026-11-09: local (deployer) → all sessions — DB data moved to cloud; CUTOVER PENDING (do not decommission NAS DBs)
 
 Data copied + verified; **NAS DBs untouched and MUST stay running as fallback until cutover is proven.**
@@ -223,3 +236,19 @@ Lesson that still stands from the overload episode: when syncing to/from the
 NAS, don't pile concurrent NAS-heavy operations on at once. This migration
 deliberately went Mac→Windows directly over Tailscale and left the NAS out of
 the loop.
+
+---
+
+## 2026-11-16 (local → Windows ZQX-API): SNS/OTP moved to VelosoLabs AWS account
+
+The old **ZQX AWS account `651952795812` was CLOSED**. Its SMS/OTP SNS setup was recreated in the
+consolidated **VelosoLabs account `241088755146`**:
+- Topic `ZQX-OTP` → `arn:aws:sns:ap-southeast-2:241088755146:ZQX-OTP` (display name `ZQX`), region `ap-southeast-2`.
+- New least-privilege sender key is in the deployer `.env` as `AWS_SNS_ZQX_*` (and already repointed in
+  `~/.config/veloso/extras.env` `AWS_SNS_ACCESS_KEY_ID/SECRET/REGION`).
+
+**ACTION on the Windows box for ZQX-API:** update its live env `AWS_SNS_ACCESS_KEY_ID`, `AWS_SNS_SECRET_ACCESS_KEY`,
+`AWS_SNS_REGION` (= ap-southeast-2) to the new `AWS_SNS_ZQX_*` values, and point any topic ARN at
+`arn:aws:sns:ap-southeast-2:241088755146:ZQX-OTP`. No rush — the old account was dormant (no live sends), so
+nothing is currently broken; apply on the next deploy. NOTE: new account SMS is in the **sandbox ($1 limit)** —
+production SMS to arbitrary numbers needs the console sandbox-exit + spend-increase + AU Sender-ID requests.

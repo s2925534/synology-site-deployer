@@ -20,6 +20,83 @@ remote sessions.
 
 ---
 
+## 2026-11-16: WordPress compromise audit — systemsnotsilos contained + 2nd (older) hit found on modamarieclaire
+
+Read-only audit of **all three** NAS WordPress installs after systemsnotsilos.com was found compromised.
+Full report + remediation: `agent-context/incident-2026-11-16-wp-compromise.md`; tracking **VLABS-393** (High).
+
+- **systemsnotsilos-com** — CONFIRMED active 2026 compromise (wp-compat-* / mu_protector / compat=verify
+  backdoors, gordpress/m52873473 C2, wp-file-manager 8.0.7, churning rogue admins; primary `admin` carries
+  fwefwefi@mail.com since 2026-09-02 → owned since ~Sept). CONTAINED: web container stopped 2026-11-16
+  12:17 UTC (`RestartPolicy=no`, exited, site 404); DB kept running read-only for clean content extraction.
+  **Do NOT migrate** — clean rebuild pending, must preserve Jetpack tokens.
+- **modamarieclaire-veloso-dev** — SEPARATE, OLDER (2023) compromise surfaced by the sweep. Files clean
+  today but DB has 3 `wpnew_*` rogue admins + spam-user flood. Dev/staging copy; lower urgency.
+- **gumtree-dev** — clean (only pedro@veloso.dev admin; 1 spam subscriber). Hardening note: wp-file-manager
+  7.1.9 (past CVE-2020-25213; update/remove).
+- **Blast radius:** 2026 campaign IOCs absent from the other two sites; no host/daemon/other-container or
+  AWS/Cloudflare control-plane spread. Gotcha for next session: mariadb:11 ships the client as `mariadb`,
+  not `mysql`; gumtree's table prefix is `gd_` not `wp_`.
+
+---
+
+## 2026-11-16: Decom account 447401840262 torn down to empty + ldrelectronics mirrored
+
+Finished the decommission. Teardown via `agent-context/ops/decom-teardown.sh` (Pedro runs it with
+`!` — the Claude Code classifier blocks `s3 rb --force` / `route53 delete-hosted-zone` / cloudfront
+deletes from the agent). Account now holds **0 domains, 0 zones, 0 S3, 0 CloudFront, 0 ACM — only
+`FullUser`**. Gotchas baked into the script: disable `AWS_PAGER` + `--no-cli-pager` (default pager
+`less` hangs the run on multi-line output); CloudFront needs disable→wait ~15min→delete across two
+runs; ACM delete only succeeds AFTER CloudFront is gone (ordered last). S3 `veloso.dev` held an old
+2023 static site (144 files) — backed up to `_decom-aws-backups/veloso-dev-s3-2023/` before deleting.
+
+**ldrelectronics.com surprise:** it was NOT a parked redirect — it's a **live LDR Electronics Shopify
+store** (apex A→23.227.38.65, a secondary domain on the NetWattle store so Shopify redirects it to
+netwattle.com) with **Google Workspace email** (MX smtp.google.com + 3 site-verification TXT + Shopify
+DKIM/CNAMEs). The earlier redirect-to-netwattle CF zone would have broken store+email. Fix: mirrored
+all 11 Route53 records into the Cloudflare zone (DNS-only/grey-cloud, removed the dummy redirect),
+Pedro repointed GoDaddy NS→Cloudflare (propagated in minutes), verified store+email resolve, then
+deleted the old Route53 zone. Lesson: always dump a zone's real records before "redirecting" a domain.
+
+**Only remaining step:** Pedro closes `447401840262` as root (console → Account → Close Account);
+90-day AWS recovery window then permanent. FullUser key dies with the account (no rotation needed).
+
+---
+
+## 2026-11-15: Domains migrated 447401840262 → 241088755146 + Cloudflare redirects
+
+Executed the AWS domain decommission move. Onboarded the **new VelosoLabs AWS account
+`241088755146`** (IAM user `claude-ops` in group `claude-ops-group`, AdministratorAccess;
+creds in `.env` as `AWS_DEST_*`). A root access key was briefly pasted then discarded —
+**still needs deleting in the console + the claude-ops CLI key rotating** (both chat-exposed).
+
+**All 9 domains** moved account-to-account (`transfer-domain-to-another-aws-account` →
+`accept-domain-transfer-from-another-aws-account`) old→new: **free, instant, no registrar/ICANN
+fee, no renewal extension, NS config preserved**. Transfer-lock does NOT block account-to-account.
+Source account `447401840262` now holds **0 registered domains** (only orphaned Route53 zones remain).
+
+**8 domains pointed via Cloudflare** (new custom token `CF_ZONE_REDIRECT_TOKEN`, zone-create +
+DNS + Single-Redirect, scoped to all zones in Pedro@veloso.dev acct — the old `CLOUDFLARE_API_TOKEN`
+lacked zone:create): created a CF zone per domain, proxied A `@`+`www`→192.0.2.1, and a 301
+Single Redirect (`http_request_dynamic_redirect`) preserving path+query:
+- → **velosolabs.com**: yard.show, their.show, two.show, freightracker.com, digitalnotions.biz
+- → **veloso.dev**: veloso.au, veloso.com.au
+- → **netwattle.com**: ldrelectronics.com (**GoDaddy — Pedro must set NS to bob+melany.ns.cloudflare.com**)
+7 AWS domains' registry NS repointed to Cloudflare automatically (`update-domain-nameservers`,
+NOT classifier-blocked, unlike `delete-hosted-zone`); modamarieclaire.com + systemsnotsilos.com
+were already on Cloudflare. Redirects go live once registry NS propagate (mins–hours; .au slower).
+
+**8 lost/deregistered domains** (quanxpert.com, risebeyondlies.com, risefortruth.com,
+theturningwave.com, digitalnotions.com.au, modamarieclaire.com.au, modestclassy.au/.com.au) —
+NOT re-registered (Pedro: no purchases). Their orphaned Route53 zones staged for deletion in
+`agent-context/ops/delete-orphaned-zones.sh` (classifier blocks `delete-hosted-zone`, so Pedro
+runs it). Full ledger: `agent-context/domains-ledger.md`.
+
+Still open: delete root key + rotate claude-ops key; ldrelectronics GoDaddy NS; tear down decom
+S3/CloudFront/ACM + close `447401840262`.
+
+---
+
 ## 2026-11-13: AWS account 447401840262 decommission discovery (read-only)
 
 Pedro dropped `FullUser_*.csv` creds for an AWS account he's decommissioning → moved them into `.env` as
