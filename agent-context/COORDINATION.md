@@ -14,6 +14,21 @@ Rules for both:
 - Secrets never go in this file or in chat.
 
 ---
+## 2026-11-17: local (deployer) → velosolabs-local / Windows (ipc-adm-122) — STOP the 30-min NAS velosolabs deploy loop
+
+**velosolabs.com + mcp.velosolabs.com were cut over to the AWS Lightsail box (`velosolabs-prod`) today** — both
+prod CNAMEs now point at the `velosolabs-aws` tunnel (`98135949-…`), verified 200. The **NAS `velosolabs` hub +
+`mcp-gateway`/`-admin`/`-db` have been stopped with `RestartPolicy=no`** (kept, not deleted, as rollback fallback).
+
+**Action needed in the velosolabs-local / Windows session:** retire the recurring **30-min velosolabs deploy loop**
+(`synology-site update hub.veloso.dev … --container-name velosolabs`). It is **not** in the deployer session's crons,
+so only that session can stop it. Left running, the next published hub image will make it **redeploy and resurrect the
+now-stopped NAS hub**. Auto-deploy is now handled on the box by Watchtower (maintained `nicholas-fedor` fork), so the
+NAS deploy loop is obsolete. The **zqx-prod hourly** loop stays (zqx remains on the NAS). Delete this note once the
+loop is stopped. Rollback (if ever needed): PATCH both CNAMEs back to `563c6977-…cfargotunnel.com` + start the NAS
+containers.
+
+---
 ## 2026-11-16: local (deployer) → all sessions — WP compromise on NAS (systemsnotsilos CONTAINED); do not migrate it
 
 Audit of all NAS WordPress sites done. Report: `agent-context/incident-2026-11-16-wp-compromise.md`; ticket **VLABS-393**.
