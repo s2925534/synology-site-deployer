@@ -20,6 +20,34 @@ remote sessions.
 
 ---
 
+## 2026-11-18: ecosystem-services decommissioned — folded into the velosolabs hub + a track Worker
+
+Retired the NAS `ecosystem-services` multi-tenant backend (`services.systemsnotsilos.com`) by redistributing
+every function and keeping all callers working. Done across repos:
+- **Hub (velosolabs, FastAPI):** new `/api/contact` + `/api/recaptcha-config` + `/api/subject-options`,
+  `/api/resume` (+download, **Python reimplement** of the Node pdfkit/OpenAI engine), and full `/api/tradeline/*`
+  (15 kits + installer + back-in-stock/booking) — all at the SAME `/api/...` paths (drop-in). PR #231, merged
+  by Pedro, auto-deployed. Per-site publishable-key auth + per-site reCAPTCHA ported (`app/service_auth.py`).
+- **Track Worker** (`s2925534/track-worker`): the public parcel-tracking relay → free Cloudflare Worker.
+- **Shared toolkit** `@s2925534/service-toolkit` (GitHub Packages): carrier-detection/rate-limit/cors/recaptcha,
+  adopted by resilinked (PR #34); zqx skipped (no clean fit).
+- **Compat proxy** (`services-compat-proxy` Worker) on `services.systemsnotsilos.com` + `track.` via **Cloudflare
+  Worker ROUTES** (edge intercept, no DNS change → instant rollback). Flip script:
+  `agent-context/ops/flip-services-to-proxy.sh` (ROLLBACK=1 to revert). Pedro ran the flip.
+- **NAS `ecosystem-services` stopped** (restart=no, kept not deleted). Verified post-stop: services/track/kits/
+  recaptcha all still 200 (served by hub/worker), proving NAS is out of the path.
+
+**Gotchas for next time:**
+- The hub's `env_file` on the box is **`hub.env`, not `.env`** — and **Watchtower does NOT reload env on
+  redeploy** (it copies the old container's env + swaps the image). New env vars need `docker compose up -d` to
+  take effect, not just a Watchtower pull. (First deploy looked healthy but endpoints were non-functional until
+  the env landed in hub.env + a compose recreate.)
+- `Server: cloudflare` is identical for a NAS-tunnel origin and a Worker, so it does NOT prove a flip — use a
+  path the proxy 404s but the origin serves (e.g. `/` → proxy 404 vs NAS HTML 200) as the definitive check.
+- veloso.dev's live site is still on the NAS (`p-veloso-dev`), not yet cut to Pages; it works via the proxy, so
+  its `consts.ts` repoint (PR) is forward-looking, effective on next rebuild. nas-sso-gateway's authentik is
+  stopped, so its repoint is dormant.
+
 ## 2026-11-16: nightly DB backups on the AWS box (tested restore) + forensic capture of the compromised WP DBs
 
 Stood up **nightly backups** on `velosolabs-prod`: `/home/ubuntu/velosolabs/backup.sh` (cron **02:17 UTC**)
