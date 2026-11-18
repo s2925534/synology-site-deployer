@@ -1,82 +1,61 @@
-# NetWattle / LDR mail-harvest email check — handoff
+# NetWattle / LDR routine — "netwattle" email check + email-dependency fix — handoff
 
 Prepared 2026-11-19. Pedro asked: "check my emails for emails with title containing **netwattle**
 (those related to routines we created) and find what's not working / failing due to misconfiguration,
-missing configuration, missing actions from my side, missing setups." He then had to close the laptop,
-so this is the durable handoff for an online session to continue.
+missing configuration, missing actions from my side, missing setups." He is continuing from his phone,
+so this is the durable, no-assumptions handoff.
 
-## The routine in question
-- **LeaderCSV / NetWattle Shopify importer** = repo `shopify-supplier-sync-platform`
-  (local source was `shopify-python-prototype`, MOVED TO WINDOWS). Runs on the **NAS `/volume3` via root
-  crontab 2×/day**; the OpenAI key is named **"NetWattle"** (that's why Pedro calls it the netwattle routine).
-- **What it does:** harvests the supplier stock feed email, downloads the CSV attachment, and syncs stock into
-  the `ldrelectronics.com` Shopify store (`digitalnotions.myshopify.com`, "Leader Electronics").
-- **Feed email it looks for:** FROM `sales@leadersystems.com.au`, SUBJECT contains `Leader Stock Data Feed`,
-  attachment `*.csv` with name containing `STOCK`, last 7 days, unread-only, marks read after.
+## ⚠️ Rule from Pedro: LEARN THE ROUTINE IN FULL BEFORE ANY ASSUMPTION
+Do NOT reason from the old prototype config. The **live** routine **directly downloads** the Leader feed —
+it does **not** read Pedro's email to get the feed. (An earlier draft of this doc wrongly assumed an IMAP
+"mail-harvest" of the feed; that was a stale `shopify-python-prototype` variant, not the live routine.)
 
-## Two inboxes are configured (Gmail / Google Workspace — MX confirmed `aspmx.l.google.com` / `smtp.google.com`)
-- `pedro@veloso.dev`  (mail-harvest "2" variant → TARGET_TO pedro@veloso.dev)
-- `contact@ldrelectronics.com`  (primary variant → TARGET_TO contact@ldrelectronics.com)
-- Creds live in `~/.config/veloso/extras.env` under PROJECT "Shopify supplier-sync / mail-harvest prototype"
-  (EMAIL_USERNAME / EMAIL_PASSWORD app-passwords) and in the live routine `.env` on the NAS
-  `/volume3/dockernvme/shopify-sync/.env`. **Do NOT paste the app passwords into git or chat.**
+**Step 0 (mandatory first action): read the actual code.** Clone/read the live repo
+`s2925534/shopify-supplier-sync-platform` (private) and understand, from the code + README + config, exactly:
+- how it **downloads** the Leader "stock data feed" (URL/SFTP/portal + what credential),
+- what it does with the CSV (Shopify Admin API sync; OpenAI "NetWattle" enrichment),
+- **whether and how it SENDS email** (the "netwattle"-titled emails in Pedro's inbox are almost certainly this
+  routine's own **run-report / alert** emails) — find the mailer code + current transport,
+- where it runs (NAS `/volume3` root crontab 2×/day per project memory; source was "MOVED TO WINDOWS" — confirm
+  the authoritative deployment) and where its **logs/output** land.
+Only after that, diagnose. Report findings against the actual code, not this doc's guesses.
 
-## FINDING (the actual failure)
-Attempted IMAP login (imap.gmail.com:993) to **both** inboxes with the app passwords stored in `extras.env`:
+## What "check my netwattle emails" really means (given the correction)
+The feed is downloaded directly, so the netwattle-titled emails are the routine's **outbound run reports**.
+Two ways to answer Pedro's question WITHOUT depending on reading his Google inbox (his stated preference):
+1. Read the routine's **own logs/output** (on the NAS/Windows box where it runs) for the last runs — that is
+   the authoritative record of success/failure, no inbox needed.
+2. If the report emails themselves must be read, do it against a **dedicated** inbox, never pedro@veloso.dev.
 
-```
-pedro@veloso.dev            -> [AUTHENTICATIONFAILED] Invalid credentials (Failure)
-contact@ldrelectronics.com  -> [AUTHENTICATIONFAILED] Invalid credentials (Failure)
-```
+## THE FIX (Pedro's rule: Mailjet where it fits; don't depend on reading my Google inbox)
+- **Outbound reports/alerts (SEND only) → Mailjet SMTP.** Switch the routine's mailer to Mailjet
+  (`in-v3.mailjet.com:587`, STARTTLS; user = Mailjet API key, pass = secret key; senders
+  `no-reply@zqx.io` / `admin@zqx.io`). No Google password, no inbox dependency. This is the main fix.
+- **Reading the feed:** nothing to do — it's a direct download, not email. (If the code turns out to still
+  harvest *anything* from email, replace that with **Cloudflare Email Routing + an Email Worker** on a
+  dedicated address, free — never Pedro's personal inbox. Confirm from the code before building this.)
+- **Diagnosis source = logs, not inbox.** Pull the last-run logs/output and report every failure
+  (download auth, Shopify API, OpenAI key, cron not firing, host down).
 
-Both Gmail app passwords are **dead**. Most likely cause: the credential sweep / Google account security
-changes during the systemsnotsilos incident invalidated them (turning 2-Step Verification off, or regenerating,
-revokes all app passwords). **Consequence:** the harvest step cannot log in, so the CSV is never downloaded and
-the Shopify stock sync has been running against a stale/absent feed — i.e. the routine is silently broken.
+## Known broken signal (prototype only — verify relevance against live code)
+The OLD prototype's Gmail IMAP app passwords (pedro@veloso.dev and contact@ldrelectronics.com) now fail
+`[AUTHENTICATIONFAILED]`. If the LIVE routine does not use IMAP, this is irrelevant to the feed and only
+matters if we still want to read the report emails from an inbox (we're moving away from that).
 
-## THE FIX (Pedro's rule: use Mailjet where it fits; don't depend on reading my Google inbox)
-Split every email touchpoint into two categories and treat them differently:
+## Creds (live source of truth — DO NOT commit to git; pass to the online session file-to-file)
+- `~/.config/veloso/extras.env` → PROJECT "Shopify supplier-sync / mail-harvest prototype" (Shopify shop/
+  client id+secret, OpenAI "NetWattle" key, site URLs) — **may be stale**; the live `.env` wins.
+- Live routine `.env`: NAS `/volume3/dockernvme/shopify-sync/.env` (OpenAI key updated here 2026-11-18).
+- Mailjet: `~/.config/veloso/mailjet.env` (global).
+- NAS reach: LAN `ssh -i ~/.ssh/id_ed25519_zqx_nas -o IdentitiesOnly=yes pedro@192.168.1.109`
+  (fallback Tailscale pedro@100.107.233.45); docker at `/var/packages/ContainerManager/target/usr/bin/docker`.
+- A remote cloud session CANNOT reach the NAS or Pedro's local files — it CAN clone the GitHub repo (needs a
+  token) and reach Shopify/OpenAI/Mailjet/Cloudflare over the internet. State clearly what it cannot reach.
 
-### A) Routines that only SEND (reports, alerts, notifications) → **Mailjet SMTP, drop Google entirely**
-- The importer's own run-report / failure-alert emails must go out via **Mailjet** (creds in
-  `~/.config/veloso/mailjet.env`; senders `no-reply@zqx.io` / `admin@zqx.io`), not Gmail SMTP and not an
-  app password. Point SMTP at `in-v3.mailjet.com:587` (STARTTLS), user = Mailjet API key, pass = secret key.
-- Nothing here needs to read an inbox, so no Google password is involved at all. This is the preferred path
-  for ANY ecosystem routine that merely notifies.
-
-### B) Routines that genuinely must READ an incoming email (the supplier **feed harvest**) → remove the
-### dependency on my personal Google inbox. Mailjet is send-only and can't receive, so instead:
-- **Recommended (free, Cloudflare, no Google creds): Cloudflare Email Routing + an Email Worker.**
-  Point a dedicated address — e.g. `feed@ldrelectronics.com` or `leaderfeed@<subdomain>.zqx.io` — at
-  Cloudflare Email Routing (set the zone's MX to Cloudflare, free). An **Email Worker** receives each message,
-  pulls the `*STOCK*.csv` attachment, and either writes it to **R2** or POSTs it to the sync — no IMAP, no
-  app password, no reading Pedro's mailbox. Then ask Leader Systems to send/CC the "Leader Stock Data Feed"
-  to that dedicated address (or forward-rule it in). This matches the "free resources / Cloudflare only" rule.
-- **Interim (works today, least change): one dedicated Gmail app password** scoped only to the harvest
-  mailbox (`contact@ldrelectronics.com`, which is already a purpose-built inbox — keep it off `pedro@veloso.dev`
-  so Pedro's personal inbox is never the dependency). Regenerate at https://myaccount.google.com/apppasswords
-  (needs 2-Step Verification ON; confirm IMAP enabled), hand it over file-to-file, update `extras.env` + the
-  live NAS `/volume3/dockernvme/shopify-sync/.env`. Use this only until (B-recommended) is in place.
-
-### What Pedro must do (minimal)
-1. Decide: Cloudflare Email Routing (preferred) **or** a dedicated `contact@ldrelectronics.com` app password
-   for the interim. For the quick unblock, generate the one app password and hand it over file-to-file.
-2. The online/phone session then: switches the importer's outbound mail to Mailjet (category A), applies the
-   chosen read-side fix (category B), updates the live config, re-runs the IMAP search for
-   `SUBJECT "netwattle"` and `SUBJECT "Leader Stock Data Feed"`, reads the matching run-report bodies, and
-   reports any remaining failures (missing CSV, Shopify API errors, OpenAI errors) from those emails + the
-   NAS `logs/` / `output/` dirs.
-
-## For the online session — exact steps once new app passwords exist
-- IMAP search both inboxes: `(SUBJECT "netwattle")` AND `(SUBJECT "Leader Stock Data Feed")`, last ~14 days.
-- For each hit: dump Date/From/Subject + body; the routine emails a run report — look in it for
-  "error/failed/0 rows/exception/quota/rate limit/invalid".
-- Cross-check the live routine on the NAS (`/volume3/dockernvme/shopify-sync/`): `.env` correctness,
-  `logs/` + `output/*.json` for the last run outcome, and whether the root crontab entry still fires.
-  (NAS reachable via LAN `ssh -i ~/.ssh/id_ed25519_zqx_nas -o IdentitiesOnly=yes pedro@192.168.1.109`,
-  docker at `/var/packages/ContainerManager/target/usr/bin/docker`.)
-- Report: what the netwattle-titled emails say, what's broken, and any remaining Pedro actions.
+## Minimal ask of Pedro (from phone)
+1. Confirm the authoritative deployment (NAS `/volume3` vs Windows) of `shopify-supplier-sync-platform`.
+2. After the session has LEARNED the routine from the code, it will report the real failures + the exact
+   secrets/actions still needed. Provide those file-to-file.
 
 ## Status
-- ⛔ BLOCKED on fresh Gmail app passwords (Pedro). Everything else (provider confirmed, inboxes identified,
-  live config locations known) is ready.
+- ✅ pushed. ⚠️ No assumptions: the online session must read `s2925534/shopify-supplier-sync-platform` first.
