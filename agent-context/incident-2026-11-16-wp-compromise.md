@@ -188,3 +188,50 @@ to S3 without Pedro's explicit destination authorization. Evidence meanwhile rem
 **`agent-context/ops/forensic-dump-wp.sh`** — run it (re-dumps read-only + uploads to
 `s3://velosolabs-backups/forensics/<date>/`) **immediately before** the clean rebuild so the
 compromised state is preserved offsite first.
+
+---
+
+## 2026-11-18 — systemsnotsilos.com clean rebuild (remediation)
+
+Fresh forensic snapshot taken first: `/volume1/docker/systemsnotsilos-com/forensics-20261118-1003/`
+(`db-all.sql.gz`, `wp-content.tgz`, `mu-plugins.tgz`, `theme.tgz` + `SHA256SUMS`).
+
+**Findings:**
+- **No legitimate admin existed.** All 3 users were rogue admins: `admin`/`fwefwefi@mail.com`
+  (registered **2026-09-02** — the compromise is ~2.5 months old, not days), `pepufpap`
+  (2026-11-16 01:42), `admin_401107nkh0` (2026-11-16 08:50). A fresh `pedro@veloso.dev` admin must be created.
+- Only `wp-file-manager` was in `active_plugins` (attacker deactivated the legit plugins).
+- **`wp-ai-poster` is Pedro's own plugin** ("WP AI Poster" v0.9.0, Author: Pedro Veloso) — the social/AI
+  poster to preserve. Its config lives in `wpaip_settings` / `wpaip_env_config_ver` / `wpaip_owner_config_ver`
+  (all preserved). `mu-plugins/sso-loader.php` is legit (systemsnotsilos SSO). The custom theme is clean.
+- Content is clean: 0 posts contain injected `<script>`/C2 strings. (Content is also GitHub-synced from
+  `s2925534/systemsnotsilos`.)
+
+**Actions taken (2026-11-18):**
+- Removed malicious filesystem items: `plugins/{aGt, wp-compat-U9S7wrHxzH9j5NG7, wp-file-manager}` +
+  `mu-plugins/{wp-compat-layer.php, site-compat-layer.php}`. Only `wp-ai-poster` + `sso-loader.php` remain.
+- Set `active_plugins` to empty (neutralizes the removed RCE plugin). Site remains contained (web container down).
+
+**Remaining finish steps (bring-up):** recreate the web container on **fresh WP core** (discard the current
+`/var/www/html` anon volume `db14abc0…`) keeping the cleaned `wp-content`/`mu-plugins`/theme + the DB;
+via wp-cli create a `pedro@veloso.dev` admin, reassign any rogue-authored content to it, delete the 3 rogue
+users, reactivate `wp-ai-poster`; rotate the MariaDB password + WP salts; verify site + wp-ai-poster config/
+connections; then restore service.
+
+## Secrets inventory — EVERYTHING the compromised WP could read (treat all as burned → revoke/reissue)
+
+| Secret (name) | Service | Where | Shared? | Action |
+|---|---|---|---|---|
+| `WORDPRESS_DB_PASSWORD` / MariaDB user+root | MariaDB (`systemsnotsilos-com-db`) | container env | no (per-site) | rotate in rebuild |
+| `MAILJET_API_KEY` + `MAILJET_SECRET_KEY` | **Mailjet** (email) | container env | ⚠️ **SHARED** (global Mailjet, many projects) | revoke+reissue at Mailjet; update all consumers |
+| `RECAPTCHA_SITE_KEY` + `RECAPTCHA_SECRET_KEY` | **Google reCAPTCHA v3** | container env | ⚠️ **SHARED** (same key as velosolabs hub systemsnotsilos tenant) | reissue at Google; update hub + site |
+| `GITHUB_SYNC_TOKEN` (`github_pat_…`) | **GitHub** fine-grained PAT (`s2925534/systemsnotsilos`) | container env | no | revoke on GitHub, reissue |
+| `GITHUB_SYNC_WEBHOOK_SECRET` | GitHub webhook HMAC | container env | no | rotate (GitHub + site) |
+| `mailserver_login`/`mailserver_pass`/`url`/`port` | WP Post-by-Email mailbox | `wp_options` | no | rotate if used |
+| `sso_token` | systemsnotsilos **SSO** (↔ nas-sso-gateway) | `wp_options` | ⚠️ **SHARED** with SSO gateway | rotate both sides |
+| `wpaip_settings` provider keys | **wp-ai-poster** → OpenAI, Anthropic, SerpAPI, Scopus, Google CSE, Semantic Scholar + plugin **license** | `wp_options` | per-provider | revoke+reissue each with its provider (confirm exact set in the plugin's settings) |
+| WP salts (`AUTH_KEY`, `SECURE_AUTH_KEY`, `LOGGED_IN_KEY`, `NONCE_KEY` + salts) | WordPress sessions/cookies | wp-config | no | rotate in rebuild |
+
+Rotatable in the rebuild by us: MariaDB password, WP salts. **The rest are external services — Pedro must
+revoke/reissue**, prioritizing the ⚠️ SHARED ones (Mailjet, reCAPTCHA, SSO token) whose rotation also
+affects the hub / other projects.
