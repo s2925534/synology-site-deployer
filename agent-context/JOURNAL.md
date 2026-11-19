@@ -20,6 +20,34 @@ remote sessions.
 
 ---
 
+## 2026-11-19: NetWattle / LeaderCSV Shopify routine — email-alert diagnosis (config only, no code changes)
+
+Pedro asked to check his inbox for "netwattle"-titled emails tied to our routines and find missing
+config/setup. Learned the live routine from the code (`s2925534/shopify-supplier-sync-platform`) — **no code
+was changed, no PR opened** (Pedro: "do not mess up my routines… not a change of code").
+
+Findings (full handoff in `agent-context/ops/netwattle-email-check-handoff.md`):
+- **Feed = direct download**, not an email harvest (corrects the old memory). `app.py` `leader_feed_fetch()` +
+  `--api=leader-feed-connect/leader-feed-download` pulls Leader's partner datafeed from
+  `partner.leadersystems.com.au` via a URL stored in a Shopify metafield (`leader.feed_url`). The legacy Gmail
+  `mail-harvest` path (`sync_latest_supplier.sh DOWNLOAD_EMAIL=true` → `python -m email_attachment_downloader`)
+  is dead — the module isn't even in the repo; cron must pass `--no-download-email`.
+- **Only live email is OUTBOUND alerts** via `scripts/notify.py` (smtp.gmail.com:587, logs in with the Gmail
+  app password `EMAIL_USERNAME`/`EMAIL_PASSWORD`, sends only if `ALERT_TO` set). **CONFIRMED broken:** both
+  Gmail app passwords (pedro@veloso.dev + contact@ldrelectronics.com) now fail `[AUTHENTICATIONFAILED]`, so the
+  "NetWattle" alert emails stopped silently (notify.py catches + returns, never raises).
+- Fix (config, no code): regenerate the Gmail app password + update the live `.env`; or move alerts to Mailjet
+  (needs a small notify.py tweak — it reuses one value for both SMTP login user and From, and Mailjet needs the
+  API key as login but a verified From like no-reply@zqx.io — so NOT pure-config). Flagged, not done.
+- Verify-list still OPEN (blocked — NAS unreachable on LAN + Tailscale :22 this session): `ALERT_TO` set?,
+  cron uses `--no-download-email`?, `leader.feed_url` metafield set? Read real run outcomes from
+  `logs/sync_runs/<id>/sync.log`, not the inbox.
+
+Gotcha: two attempts to spin a remote/online subagent failed in this env (internal error, then a git-worktree
+error) — continuation is via the pushed handoff doc, not a live session link.
+
+---
+
 ## 2026-11-18: ecosystem-services decommissioned — folded into the velosolabs hub + a track Worker
 
 Retired the NAS `ecosystem-services` multi-tenant backend (`services.systemsnotsilos.com`) by redistributing
