@@ -1,61 +1,61 @@
-# NetWattle / LDR routine — "netwattle" email check + email-dependency fix — handoff
+# NetWattle / LDR routine — "netwattle" email check — FINDINGS + fix (code-grounded)
 
-Prepared 2026-11-19. Pedro asked: "check my emails for emails with title containing **netwattle**
-(those related to routines we created) and find what's not working / failing due to misconfiguration,
-missing configuration, missing actions from my side, missing setups." He is continuing from his phone,
-so this is the durable, no-assumptions handoff.
+Prepared 2026-11-19. Pedro: "check my emails titled **netwattle** (our routines) for anything failing due to
+misconfiguration / missing config / missing action / missing setup." Learned from the actual code of
+`s2925534/shopify-supplier-sync-platform` (no assumptions).
 
-## ⚠️ Rule from Pedro: LEARN THE ROUTINE IN FULL BEFORE ANY ASSUMPTION
-Do NOT reason from the old prototype config. The **live** routine **directly downloads** the Leader feed —
-it does **not** read Pedro's email to get the feed. (An earlier draft of this doc wrongly assumed an IMAP
-"mail-harvest" of the feed; that was a stale `shopify-python-prototype` variant, not the live routine.)
+## The routine (what it really is)
+`shopify-supplier-sync-platform` (Python, `app.py`): syncs the **Leader Systems** supplier feed into the
+**NetWattle / ldrelectronics.com Shopify store** (`digitalnotions.myshopify.com`), with OpenAI enrichment,
+eBay two-way sync, and social posting (Instagram/Pinterest @netwattle). Runs scheduled via
+`sync_latest_supplier.sh` (NAS `/volume3` root crontab 2×/day per memory).
 
-**Step 0 (mandatory first action): read the actual code.** Clone/read the live repo
-`s2925534/shopify-supplier-sync-platform` (private) and understand, from the code + README + config, exactly:
-- how it **downloads** the Leader "stock data feed" (URL/SFTP/portal + what credential),
-- what it does with the CSV (Shopify Admin API sync; OpenAI "NetWattle" enrichment),
-- **whether and how it SENDS email** (the "netwattle"-titled emails in Pedro's inbox are almost certainly this
-  routine's own **run-report / alert** emails) — find the mailer code + current transport,
-- where it runs (NAS `/volume3` root crontab 2×/day per project memory; source was "MOVED TO WINDOWS" — confirm
-  the authoritative deployment) and where its **logs/output** land.
-Only after that, diagnose. Report findings against the actual code, not this doc's guesses.
+## Feed acquisition = DIRECT DOWNLOAD (Pedro was right — NOT an email read)
+- `app.py` `leader_feed_fetch()` + `--api=leader-feed-download` / `leader-feed-connect`: downloads Leader's
+  **partner datafeed** from `https://partner.leadersystems.com.au/...` (customer-code URL). The URL is stored
+  once in a **Shopify metafield** `namespace="leader" key="feed_url"` (set via `--api=leader-feed-connect
+  --leader-feed-url "<link>"`; the link is never printed). No inbox, no Google involved.
+- LEGACY only: `sync_latest_supplier.sh` still defaults `DOWNLOAD_EMAIL=true` → `python -m
+  email_attachment_downloader` (Gmail harvest). **That module is NOT in the repo** → dead/unused path. The
+  scheduled run should use the direct path (`--no-download-email`) with the `leader.feed_url` metafield set.
 
-## What "check my netwattle emails" really means (given the correction)
-The feed is downloaded directly, so the netwattle-titled emails are the routine's **outbound run reports**.
-Two ways to answer Pedro's question WITHOUT depending on reading his Google inbox (his stated preference):
-1. Read the routine's **own logs/output** (on the NAS/Windows box where it runs) for the last runs — that is
-   the authoritative record of success/failure, no inbox needed.
-2. If the report emails themselves must be read, do it against a **dedicated** inbox, never pedro@veloso.dev.
+## The actual failure (answers "check my netwattle emails")
+- The **only live email in the routine is OUTBOUND**: `scripts/notify.py` sends failure/anomaly alerts
+  (subject passed by the caller — these are the "netwattle" emails). It logs in via **smtp.gmail.com:587 with
+  EMAIL_USERNAME / EMAIL_PASSWORD** (the harvester Gmail **app password**).
+- That Gmail app password is **DEAD** (confirmed `[AUTHENTICATIONFAILED]` for both pedro@veloso.dev and
+  contact@ldrelectronics.com). notify.py catches the send error, prints it, and returns without raising →
+  **alerts fail silently**. That is why the netwattle alert emails stopped. (Also: if `ALERT_TO` is empty,
+  notify.py is a deliberate no-op, so no alerts at all — verify `ALERT_TO` in the live root `.env`.)
+- The feed sync itself is unaffected **as long as** the scheduled run uses the direct download path and the
+  `leader.feed_url` metafield is set. If cron still runs with `DOWNLOAD_EMAIL=true`, the dead harvest step
+  trips on every run — flip it off.
 
-## THE FIX (Pedro's rule: Mailjet where it fits; don't depend on reading my Google inbox)
-- **Outbound reports/alerts (SEND only) → Mailjet SMTP.** Switch the routine's mailer to Mailjet
-  (`in-v3.mailjet.com:587`, STARTTLS; user = Mailjet API key, pass = secret key; senders
-  `no-reply@zqx.io` / `admin@zqx.io`). No Google password, no inbox dependency. This is the main fix.
-- **Reading the feed:** nothing to do — it's a direct download, not email. (If the code turns out to still
-  harvest *anything* from email, replace that with **Cloudflare Email Routing + an Email Worker** on a
-  dedicated address, free — never Pedro's personal inbox. Confirm from the code before building this.)
-- **Diagnosis source = logs, not inbox.** Pull the last-run logs/output and report every failure
-  (download auth, Shopify API, OpenAI key, cron not firing, host down).
+## MISSING CONFIG / SETUP (diagnosis only — NO code changes; verify each in the live root `.env`)
+1. **Dead Gmail app password** — `EMAIL_USERNAME` / `EMAIL_PASSWORD` (the Gmail account `notify.py` logs into
+   to SEND alerts) no longer authenticate. FIX (no code): regenerate the Gmail app password and update those
+   two values in the live `.env`. (Optional later, Pedro's Mailjet rule: pointing alerts at Mailjet would need
+   a tiny code tweak in notify.py — it reuses one value for both the SMTP login user and the From header, and
+   Mailjet needs the API key as login but a verified From like no-reply@zqx.io — so that one is NOT pure-config.
+   Flagged as a recommendation only; not done.)
+2. **`ALERT_TO` may be empty** → notify.py is a deliberate no-op, so you get NO alerts at all. Set it to your
+   address in the live `.env`.
+3. **`DOWNLOAD_EMAIL` default is `true`** in `sync_latest_supplier.sh` → the scheduled run tries the dead
+   legacy mail-harvest unless the cron passes `--no-download-email`. Confirm the cron uses the DIRECT path.
+4. **`leader.feed_url` Shopify metafield must be set** (via `--api=leader-feed-connect --leader-feed-url`) for
+   the direct download to work. Verify it exists.
+5. **`KUMA_PUSH_URL` optional** dead-man's-switch heartbeat — if empty, no uptime alerting on missed runs.
+6. Verify live **Shopify** creds + **OpenAI "NetWattle"** key are current in the live `.env`.
 
-## Known broken signal (prototype only — verify relevance against live code)
-The OLD prototype's Gmail IMAP app passwords (pedro@veloso.dev and contact@ldrelectronics.com) now fail
-`[AUTHENTICATIONFAILED]`. If the LIVE routine does not use IMAP, this is irrelevant to the feed and only
-matters if we still want to read the report emails from an inbox (we're moving away from that).
+## Where to read real run outcomes (no inbox needed)
+`logs/sync_runs/<RUN_ID>/sync.log` + `metadata.json` and `output/*.json` on the box where cron runs
+(NAS `/volume3/dockernvme/shopify-sync/`).
 
-## Creds (live source of truth — DO NOT commit to git; pass to the online session file-to-file)
-- `~/.config/veloso/extras.env` → PROJECT "Shopify supplier-sync / mail-harvest prototype" (Shopify shop/
-  client id+secret, OpenAI "NetWattle" key, site URLs) — **may be stale**; the live `.env` wins.
-- Live routine `.env`: NAS `/volume3/dockernvme/shopify-sync/.env` (OpenAI key updated here 2026-11-18).
-- Mailjet: `~/.config/veloso/mailjet.env` (global).
-- NAS reach: LAN `ssh -i ~/.ssh/id_ed25519_zqx_nas -o IdentitiesOnly=yes pedro@192.168.1.109`
-  (fallback Tailscale pedro@100.107.233.45); docker at `/var/packages/ContainerManager/target/usr/bin/docker`.
-- A remote cloud session CANNOT reach the NAS or Pedro's local files — it CAN clone the GitHub repo (needs a
-  token) and reach Shopify/OpenAI/Mailjet/Cloudflare over the internet. State clearly what it cannot reach.
-
-## Minimal ask of Pedro (from phone)
-1. Confirm the authoritative deployment (NAS `/volume3` vs Windows) of `shopify-supplier-sync-platform`.
-2. After the session has LEARNED the routine from the code, it will report the real failures + the exact
-   secrets/actions still needed. Provide those file-to-file.
-
-## Status
-- ✅ pushed. ⚠️ No assumptions: the online session must read `s2925534/shopify-supplier-sync-platform` first.
+## Online session status (honest)
+- Attempts to spin a **remote** online session FAILED in this env (internal error, then a git-worktree error)
+  — no session name/link exists; none was fabricated. Continuation path = this pushed handoff: open Claude on
+  the repo from your phone and say "continue the netwattle fix per
+  agent-context/ops/netwattle-email-check-handoff.md". The `shopify-supplier-sync-platform` repo is private
+  but readable by `s2925534`.
+- Creds: Mailjet in `~/.config/veloso/mailjet.env`; Shopify/OpenAI(NetWattle) in `~/.config/veloso/extras.env`
+  (project "Shopify supplier-sync") and the live NAS `.env`. Never commit secrets.
