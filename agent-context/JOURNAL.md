@@ -20,6 +20,34 @@ remote sessions.
 
 ---
 
+## 2026-11-24: Disabled DSM auto-install on the NAS (protect the unsupported NVMe /volume3 volume)
+
+Pedro got a legit DSM "scheduled update" email and worried an unattended update+reboot would break his setup —
+specifically the **unsupported NVMe pool hosting containers at `/volume3/dockernvme`** (NVMe used as a storage
+volume via CLI hack, not Synology-sanctioned cache). Real risk: a DSM update re-runs hardware/compat checks on
+boot and can fail to assemble/mount the unsupported NVMe volume (esp. a major-version jump), taking down
+everything hosted there; plus this NAS already fails to bring Container Manager back cleanly after reboots
+(needs `nas-docker-autorecover.sh`), and DSM updates can wipe the `/usr/local/bin` docker symlinks.
+
+Action (NAS reachable via LAN this session; DS1525+, DSM **7.4.1-90080** built 2026/11/20):
+- Disabled the scheduled task **"DSM Auto Update"** (`/usr/syno/etc/synoschedule.d/root/1.task`, id=1 — was
+  daily 06:00 running `/usr/syno/sbin/synoupgrade --autoupdate`): `state=enabled`→`disabled`, then
+  `synoschedtask --sync`. Verified disabled in both the file and the scheduler DB (`synoschedtask --get`).
+- Set `smart_nano_enabled: true`→`false` in `/usr/syno/etc/update.conf` (stops the smart small-update
+  auto-apply path). Left `autoupdate_type` as-is (moot with the task disabled); `auto_download` stays true —
+  that only pre-downloads, never installs/reboots.
+- Backed up both files first: `*.bak-preautooff-20261124`. Fully reversible (flip state back + sync, or
+  re-enable in DSM UI).
+
+Method note: used the DSM-sanctioned path — inspected via `synowebapi SYNO.Core.Upgrade.Setting` (returns
+`auto_download` + `upgrade_type`, NOT an auto-install flag → confirming the scheduled TASK is the install
+trigger, not an API toggle). `no_update` in the UI JS is a check-STATUS constant, not an `upgrade_type` value.
+Pending/related: finish moving NVMe/NAS containers (NetWattle shopify-sync on /volume3, systemsnotsilos on
+/volume1) to the AWS box — then DSM updates / NVMe-volume drops stop mattering. Also still open: NetWattle
+notify.py dead Gmail app pw + verify-list; SSO rotation.
+
+---
+
 ## 2026-11-19: NetWattle / LeaderCSV Shopify routine — email-alert diagnosis (config only, no code changes)
 
 Pedro asked to check his inbox for "netwattle"-titled emails tied to our routines and find missing
