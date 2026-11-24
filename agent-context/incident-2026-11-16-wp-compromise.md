@@ -1,8 +1,14 @@
 # Incident report — WordPress compromise (NAS), 2026-11-16
 
-**Status:** systemsnotsilos.com CONTAINED (web container stopped 2026-11-16 12:17 UTC, `RestartPolicy=no`).
-Clean rebuild pending (preserve Jetpack). A **separate, older** compromise found on
-modamarieclaire-veloso-dev (dormant, 2023-era rogue admins). gumtree-dev essentially clean.
+**Status:** **REMEDIATED 2026-11-24.** systemsnotsilos.com was rebuilt clean and is LIVE on the AWS box
+(fresh wordpress:latest + separate `velosolabs-mariadb-1` DB; not the NAS). Content recovered from the Oct-4
+deployer DB backup (the live NAS DB had been wiped to WP defaults on ~2026-09-02) + images from the NVMe copy:
+62 posts, 2 drafts, 5 pages, 70 categories, 2,397 tags, 115 media. Fresh core+plugins (no compromised PHP
+carried), sanitized (spam post + header-inject scripts removed, wp_wpfm_backup dropped), hardened (uploads
+deny-PHP, DISALLOW_FILE_EDIT, single admin pedro@veloso.dev), DNS flipped NAS→box. NAS copy + Oct-4 backup kept
+as rollback. See the 2026-11-24 JOURNAL entry. Originally: CONTAINED 2026-11-16 (web container stopped).
+modamarieclaire-veloso-dev (separate, older 2023-era compromise) turned down 2026-11-24 (restart=no, kept).
+gumtree-dev essentially clean.
 
 **Classification:** Unauthorized access + web-shell/backdoor (systemsnotsilos); historical admin-account
 compromise (modamarieclaire). No evidence either reached the NAS host, other containers, or the AWS/Cloudflare
