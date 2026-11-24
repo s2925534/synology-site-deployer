@@ -20,6 +20,30 @@ remote sessions.
 
 ---
 
+## 2026-11-24: zqx migrated Supabase → Neon (ZQX org, Sydney) — live, RLS-safe (VLABS-430)
+
+Moved zqx prod off Supabase `pocefah` (Sydney) onto **Neon `zqx-prod`** (ZQX org `org-spring-boat-04900904`,
+ap-southeast-2, db `zqx`). `api.zqx.io/health`=200, Nest started clean, `zqx-api` env → Neon pooler. Supabase
+`pocefah` kept intact as rollback → delete after soak (needs a fresh Supabase token; `sbp_fc9657` is dead).
+
+**Critical gotcha — Neon + RLS (zqx has 76 tenant-isolation policies using `current_setting('app.tenant_id')`):**
+- Neon's **API-created roles AND `neondb_owner` have `BYPASSRLS=true`**, and you **cannot `ALTER … NOBYPASSRLS`
+  without superuser** (Neon doesn't grant it). An app role that bypasses RLS = **cross-tenant data leak**.
+- Fix: create the app role via **raw SQL** `CREATE ROLE zqx_app LOGIN NOBYPASSRLS PASSWORD …` — this **keeps
+  NOBYPASSRLS** (proven: `bypass=false`). Neon's **control plane intercepts SQL-created LOGIN roles** (enforces
+  a strong-password policy, and registers them so **pooler auth works**). Weak (hex-only) passwords are rejected
+  — use upper+lower+digit+special.
+- Verified isolation via the pooler: `zqx_app` with no `app.tenant_id` → 0 rows; with a tenant → that tenant's
+  rows. `DATABASE_URL`=`neondb_owner` (migrations/admin, bypass), `APP_DATABASE_URL`=`zqx_app` (RLS-enforced).
+- zqx uses **plain Postgres** (no `@supabase` SDK, no `auth.*`); the Supabase schemas/`supabase_vault` were just
+  boilerplate. Clean `pg_dump --schema=public` → restore (pre-create `uuid-ossp`+`pgcrypto`). No drift at flip.
+
+Cutover scripts/role-conn kept on the box (`gateway.env`/`docker-compose.yml` `.bak-*`; `.zqx_app_neon.conn`).
+Remaining DB work: hub SQLite→Neon; Supabase teardown (fresh token + delete `xmklz`/`pocefah`); delete empty
+Neon `red-dew` + `velosolabs-gateway-SG-RETIRED` (Pedro, classifier-gated).
+
+---
+
 ## 2026-11-24: DB account mapping + cleanup — Supabase→Neon consolidation started (VLABS-430)
 
 Mapped every Neon + Supabase account/project (Pedro suspected multiple). Findings + cleanup:
