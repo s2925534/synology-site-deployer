@@ -20,6 +20,49 @@ remote sessions.
 
 ---
 
+## 2026-11-24: systemsnotsilos.com REBUILT clean off-NAS (content recovered) + Bylinely/Pennerly founder licenses — VLABS-393 remediated
+
+Full clean rebuild of the compromised systemsnotsilos.com WordPress site (incident
+`agent-context/incident-2026-11-16-wp-compromise.md`, VLABS-393), per Pedro's "NAS = dev only" policy.
+
+- **Content was WIPED from the live NAS DB** (only WP defaults, dated 2026-09-02 = the compromise date). Real
+  content recovered from the **deployer's Oct-4 DB backup** (`/volume1/docker/systemsnotsilos-com/backups/
+  systemsnotsilos_com-20261004T030519Z.sql.gz`, 7 MB) and **images from the NVMe copy**
+  (`/volume3/dockernvme/systemsnotsilos-com/wp-content/uploads`, 192 MB). Recovered: **62 posts + 2 drafts,
+  5 pages, 70 categories, 2,397 tags, 115 media (726 files)**, blogname "Systems, Not Silos!", custom theme.
+- **Rebuilt on the AWS box** (not NAS): new `systemsnotsilos` WP container (wordpress:latest) on
+  `velosolabs_default`, DB in the EXISTING separate `velosolabs-mariadb-1` (db `systemsnotsilos_com`, user
+  `sns_user`). Fresh WP core + plugins reinstalled from wp.org (zero compromised PHP carried). Theme scanned
+  clean. Sanitized: dropped `wp_wpfm_backup`, deleted the injected pharma-spam post, cleared `ihaf_insert_header`
+  + `slim_seo` header-inject `<script>`, uploads scanned (stripped `wp-file-manager-pro`, `.php`, `.htaccess`).
+  Hardened: uploads deny-PHP htaccess, DISALLOW_FILE_EDIT, no wp-file-manager, single clean admin
+  (admin / **pedro@veloso.dev**, new strong pw).
+- **DNS flipped** NAS→box: appended `systemsnotsilos.com` + `www` to the box tunnel (98135949) ingress
+  (preserved all 13 prod rules) + repointed the CNAMEs. Live: https://systemsnotsilos.com = 200. NAS copy +
+  Oct-4 backup kept as rollback.
+- **Plugins reinstalled from the repo** (`s2925534/bylinely` → **renamed `veloso-wp-plugins`**): bylinely +
+  bylinely-pro + pennerly + pennerly-pro. **Founder licenses applied** (set key in `wpaip_settings.license` /
+  `pennerly_pro_license`, triggered the hub daily-check cron to validate): bylinely-pro = existing founder
+  `WPAIP-VFWE-ZQ84-T7EC` (wp-ai-poster, accepted as same product); pennerly-pro = **newly issued** owner/
+  lifetime license `PNLY-BFGU-KRRD-MF3Q` (INSERTed into the hub `licenses` table). Both active/lifetime.
+- **Creds saved**: `~/.config/veloso/systemsnotsilos.env` (admin + DB + both license keys).
+
+**Gotchas for next time:**
+- `wp eval-file` echoed source instead of running in the wordpress:cli image — use `wp option patch
+  insert/update` + `wp cron event run <hook>` instead.
+- docker-compose eats `$` in `WORDPRESS_CONFIG_EXTRA` — escape PHP `$_SERVER` as `$$_SERVER`; and the
+  entrypoint only generates wp-config.php if ABSENT (rm it to re-apply changed config).
+- The wp-cli container needs the DB env vars passed (`--env-file db.env -e WORDPRESS_DB_*`) and files to
+  eval must be on the shared volume (`--volumes-from` shares `/var/www/html`, not `/tmp`).
+- NAS SSH has no sftp subsystem (scp fails) — stream files with `ssh nas "cat f" | boxssh "cat > f"`.
+- bylinely/pennerly license lives in `wpaip_settings` (nested) vs `pennerly_pro_license` (flat); both validate
+  against velosolabs.com by default and accept product aliases (bylinely-pro=bylinely=wp-ai-poster).
+
+Also this session: **corroborly NAS deployment retired** (restart=no; no data, source safe on GitHub);
+**modamarieclaire** WP+db containers turned down (restart=no, kept) to honor NAS-dev-only; **env-tier policy**
+set (prod=box+CF+Neon/Sydney, staging=CF Pages previews+box *-staging+Supabase, dev=NAS only; Vercel =
+non-commercial scratchpad only).
+
 ## 2026-11-24: ResiLinked repo recovered + SG Neon project deleted + 19 Neon domain-verify TXT + NAS migration-state audit
 
 Grab-bag of cleanup/recovery while reconciling what is and isn't still on the NAS.
