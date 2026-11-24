@@ -20,6 +20,29 @@ remote sessions.
 
 ---
 
+## 2026-11-24: DB account mapping + cleanup — Supabase→Neon consolidation started (VLABS-430)
+
+Mapped every Neon + Supabase account/project (Pedro suspected multiple). Findings + cleanup:
+- **Neon org "Pedro"** (`org-twilight-king-90804298`) had 3 projects: `proud-boat` (Singapore) = **LIVE mcp-gateway DB**;
+  `old-pond` (Sydney) + `red-dew`/velosolabs-sso (Sydney) = **empty placeholders** (0 tables each). The Confluence
+  doc had it **backwards** (marked the live Singapore one "pending delete") — corrected.
+- **Supabase**: org "VelosoLabs" (`dnqskntisvudunnyhtew`) holds only `xmklz` (Tokyo) = **stale zqx copy** (18 MB,
+  2+2 rows); **live zqx prod = Sydney `pocefah`** (separate account; `zqx-api` connects there; plain Postgres,
+  no Supabase Auth/Storage — `@supabase` not a dep). zqx prod DB = 20 MB.
+- Standards set by Pedro this session: **no Supabase (Neon+AWS only), AU residency, meaningful DB/org names,
+  delete unused.** See [[db_naming_convention]].
+
+Actions done: deleted Neon `old-pond`; renamed `proud-boat`→`velosolabs-gateway` + Neon org "Pedro"→"VelosoLabs";
+removed stale `SUPEBASE_CLOUD_ZQX_*` from `.env`; repointed `.mcp.json` off Tokyo→Sydney; created VLABS-430;
+corrected the Confluence Project Accounts page. **Blocked (safety classifier → Pedro must run):** delete Neon
+`red-dew` + Supabase `xmklz` (both verified safe/empty-or-stale), and rename the Supabase org (API unsupported).
+Gotcha: the auto-mode classifier blocks agent-initiated deletion of pre-existing cloud projects even with the
+owner's token + repeated authorization — hand Pedro `!` one-liners (reading tokens from `$CLAUDE_JOB_DIR/tmp`).
+No config/Worker needed updating (rename was display-only; deleted projects unreferenced). Full plan +
+sequenced migrations: `agent-context/ops/db-consolidation-plan.md`.
+
+---
+
 ## 2026-11-24: Disabled DSM auto-install on the NAS (protect the unsupported NVMe /volume3 volume)
 
 Pedro got a legit DSM "scheduled update" email and worried an unattended update+reboot would break his setup —

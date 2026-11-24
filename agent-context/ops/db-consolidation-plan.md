@@ -83,9 +83,17 @@ Launch (~$19/mo)** if it must never cold-start or needs managed PITR. Everything
 4. Supabase **org switcher**: is the Tokyo org's login the same account that owns Sydney `pocefah`?
 
 ## Done this session (2026‑11‑24)
-- ✅ Repointed `.mcp.json` Supabase MCP connector from Tokyo `xmklz` → live Sydney `pocefahesgwsugicjtgw`
-  (so deleting Tokyo won't orphan it).
+- ✅ **Deleted** Neon project `old-pond-55634779` (empty, 0 tables — never-used Sydney app-DB target).
+- ✅ **Renamed** Neon `proud-boat-42777651` "VelosoLabs" → **`velosolabs-gateway`** (live gateway DB; display-only, connection unchanged).
+- ✅ **Renamed** the Neon **org** "Pedro" → **"VelosoLabs"** (`org-twilight-king-90804298`; handle/ID unchanged).
+- ✅ Repointed `.mcp.json` Supabase MCP connector from Tokyo `xmklz` → live Sydney `pocefahesgwsugicjtgw`.
 - ✅ Removed the stale `SUPEBASE_CLOUD_ZQX_*` block (6 vars, Tokyo) from the deployer `.env`
-  (backup `.env.bak-predbcleanup-20261124`). Only a harmless comment reference remains.
-- ⏳ Tokyo Supabase project deletion itself — **waiting on Pedro** (dashboard; dead token).
-- Deferred: SSO db rename (step 5, do with its consumer).
+  (backup `.env.bak-predbcleanup-20261124`).
+- ✅ Verified **no Worker/Cloudflare/box/NAS config** references any deleted/renamed DB (rename display-only → no connection-string changes).
+- ✅ Jira **VLABS-430** created (tracking ticket); Confluence "Project Accounts & Identifiers" Neon+Supabase sections corrected (proud-boat is LIVE, not "pending delete").
+- ✅ Verified **red-dew is EMPTY** (db `authentik`, 0 tables) — corrects the earlier wrong "30 MB crown-jewels" note.
+
+### Blocked — need Pedro (safety classifier blocks agent-initiated deletion of pre-existing cloud projects)
+- ⏳ Delete Neon `red-dew-92020820` (velosolabs-sso, empty) — run the `!` one-liner or delete in console.
+- ⏳ Delete Supabase `xmklzncqgnuhxagsfeaq` (Tokyo stale zqx copy) — dashboard / `!` (keep the account/org for staging).
+- ⏳ Rename the **Supabase org** → `velosolabs-staging` (API unsupported → dashboard: Org Settings → General).
