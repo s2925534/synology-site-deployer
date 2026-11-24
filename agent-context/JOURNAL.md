@@ -20,6 +20,29 @@ remote sessions.
 
 ---
 
+## 2026-11-24: hub migrated SQLite → Neon (VelosoLabs org, Sydney) — ALL prod DBs now on Neon/AU (VLABS-430)
+
+Migrated the velosolabs hub off local SQLite onto **Neon `velosolabs-hub/hub`** (VelosoLabs org, Sydney).
+Crucially this **restored the 5 real accounts / 3 tenants / 2 licenses** that were stranded on the NAS
+`hub.db` (the AWS box hub had been running on a fresh 0-account SQLite since the Nov-16 move). `velosolabs.com`
+healthy, "Application startup complete", no schema errors (the hub app's create_all/_add_column_if_missing
+reconciled the imported schema).
+
+**SQLite→Postgres method (pgloader + Neon SSL workaround):** pgloader can't verify Neon's cert
+(`X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY`; `--no-ssl-cert-verification` didn't help in dimitri/pgloader
+3.6.7~devel). **Two-hop fix:** pgloader `sqlite:///hub.db` → a throwaway **local** `postgres:18` container
+(no SSL) → `pg_dump --no-owner --no-acl` → `psql` into Neon (psql handles Neon SSL fine). 52 tables / 415 rows,
+verified on Neon (accounts=5). Source was the NAS `hub.db` copied to the box (base64 over SSH; **use
+`base64 -w0` + don't filter the stdout stream — a line-filtered copy corrupted the file; verify size +
+`pragma integrity_check`**).
+
+**All three production DBs are now on Neon (Sydney/AU):** `velosolabs-gateway`, `zqx-prod`, `velosolabs-hub`.
+Nothing prod on SQLite or Supabase. Rollback artifacts on the box: `hub.env.bak-presqlite-20261124` (+ the
+SQLite file untouched). Remaining: staging→Supabase (zqx→zqx Supabase acct, needs fresh token); Supabase
+teardown (delete `pocefah` after soak + `xmklz`); delete empty Neon `red-dew` + `velosolabs-gateway-SG-RETIRED`.
+
+---
+
 ## 2026-11-24: zqx migrated Supabase → Neon (ZQX org, Sydney) — live, RLS-safe (VLABS-430)
 
 Moved zqx prod off Supabase `pocefah` (Sydney) onto **Neon `zqx-prod`** (ZQX org `org-spring-boat-04900904`,
