@@ -20,6 +20,57 @@ remote sessions.
 
 ---
 
+## 2026-11-24: ResiLinked repo recovered + SG Neon project deleted + 19 Neon domain-verify TXT + NAS migration-state audit
+
+Grab-bag of cleanup/recovery while reconciling what is and isn't still on the NAS.
+
+- **ResiLinked repo recovered.** The GitHub repo `s2925534/resilinked` had been lost in the 2026-11-24
+  org-deletion incident (only local clones survived). Recreated it (private, via Mac `gh`, account s2925534)
+  and pushed from the **Windows** clone `/c/Users/claude/Projects/resilinked` over SSH (clean — avoids the
+  Mac iCloud `git` hang). Pushed 3 usable branches: `main` (7501631, 2026-07-18, default), `close-ui-gaps`
+  (08fee04), `worktree-unblock-decisions` (57ec597). **Skipped** 4 stale `dependabot/*` branches; no tags.
+  Mac clone (`_Projects/Resilinked`) and Windows clone are identical at `7501631` — last real dev was mid-July
+  2026. Code was never lost, only the remote.
+- **SG Neon project deleted.** `velosolabs-gateway-SG-RETIRED` (proud-boat-42777651, ap-southeast-1, logical
+  size 0) deleted — verified unused first: live gateway on the box points at the Sydney project
+  `ep-cool-art-bkyp184t` (small-wave, ap-southeast-2); the only references were reference-only `.env` vars +
+  dated `.env.bak` files, no running consumer. Neutralized the dead `NEON_VELOSOLABS_*` block in `.env`
+  (commented, annotated: data now in `velosolabs-hub`/`velosolabs-gateway` Sydney; credential npg_KyVvWXhS6e7H
+  defunct). Remaining VelosoLabs-org projects: velosolabs-hub, velosolabs-gateway, velosolabs-sso.
+- **19 Neon domain-verification TXT records** added to Cloudflare (all Pedro's non-zqx apex domains:
+  velosolabs.com, veloso.dev/.au/.com.au, reslk.com, corroborly.com, systemsnotsilos.com, lofas.org,
+  gumtree.dev, ldrelectronics.com, netwattle.com, digitalnotions.biz, interportcargoservices.com,
+  freightracker.com, inkweave.app, cathovia.com, their.show, two.show, yard.show). TTL 300, resolving.
+- **NAS migration-state audit.** Determined status by *actual DNS target* (NAS tunnel 563c6977 vs AWS-box
+  tunnel 98135949 vs Pages/Worker), not the legacy NAS tunnel ingress (which is full of dormant rules).
+  Migrated OFF NAS: zqx core, velosolabs hub+MCP+gateway (AWS box + Neon), veloso.dev (CF Pages), lofas (CF
+  Worker), ecosystem-services services+track (hub + track Worker via `services-compat-proxy` Worker ROUTES —
+  why `track`=200 and `services`=404 despite the NAS container being stopped). Still LIVE on NAS:
+  modamarieclaire.veloso.dev, (+ track served by Worker). Stopped on purpose (NOT abandoned):
+  systemsnotsilos.com WP (compromised, quarantined, VLABS-393), sso.systemsnotsilos.com (authentik stopped).
+  Genuinely down + not migrated (backlog): corroborly (stopped ~2026-09-03 during NAS work, code intact),
+  reslk/ResiLinked (standalone; down; repo now recovered), au-address engine (storefront/admin folded into the
+  hub `/address-api*` + `/admin/address-clients`, but the G-NAF/OpenSearch engine still standalone + offline),
+  url-shortener, publisher, connect/control/status.zqx.io.
+- **ResiLinked → Workers+Neon feasibility (assessment only, Pedro parked it):** DB moves clean to Neon (Prisma
+  → Postgres, 32 models). Web+admin (Next.js) fit Workers/Pages. **API does NOT** — NestJS/Express + `sharp`
+  (native), `pdfkit`, `ws`, `@nestjs/schedule` (cron) → belongs on the AWS box, not a Worker. Auth: Supabase
+  Auth (`@supabase/ssr`) in use → replace with hub OIDC or self-contained passkey+password+OTP. So it's a
+  hybrid, not all-Workers.
+- **ResiLinked Neon org + prod project created.** Pedro created a standalone Neon org **ResiLinked**
+  (`org-cold-snow-01781055`, free) and provided an org-scoped key. Created project **`resilinked-prod`**
+  (`long-mouse-98010247`) in **Sydney/ap-southeast-2**, pg17, db `resilinked`, role `resilinked_owner`
+  (conn saved locally in `neon_resilinked_create.json`). Empty — the actual data migration is still parked
+  pending Pedro's hybrid-vs-other decision. ResiLinked org token is scoped to ResiLinked only (can't see
+  VelosoLabs), as expected.
+- **corroborly: NAS deployment RETIRED.** corroborly (`corroborly.com`/`app`/`folio`) was never migrated and
+  had been stopped since ~2026-09-03. Inspected: file-based, single-user, local-first, **no DB** (postgres/
+  mariadb services behind a disabled `db-backends` profile), and **workspaces dir empty** (no data). Hosting it
+  on the AWS box would mean editing the shared PROD tunnel (zqx/velosolabs) or new infra — unjustified for an
+  idle, empty, private tool whose source is safe on GitHub (`s2925534/corroborly`, actively developed). Pedro
+  said retire → set `corroborly-api` + `corroborly-site` to `restart=no` and stopped (both `exited restart=no`).
+  Repo + corroborly.com DNS left intact (still points at NAS tunnel = 502, his active product, may redeploy).
+
 ## 2026-11-24: hub migrated SQLite → Neon (VelosoLabs org, Sydney) — ALL prod DBs now on Neon/AU (VLABS-430)
 
 Migrated the velosolabs hub off local SQLite onto **Neon `velosolabs-hub/hub`** (VelosoLabs org, Sydney).
