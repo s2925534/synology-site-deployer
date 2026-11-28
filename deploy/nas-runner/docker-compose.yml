@@ -1,0 +1,127 @@
+# VDEV-33 — NAS self-hosted GitHub Actions runners (ephemeral) + isolated dind.
+#
+# Three ephemeral runners, each with its OWN Docker-in-Docker sidecar (TLS) so
+# builds never touch the NAS's Docker socket. Isolation: a dedicated bridge
+# network, NO NAS shared folders mounted (only named volumes + the App key
+# read-only), per-container CPU/RAM caps, and no published ports (outbound only).
+#
+# Scope is set in .env (GH_SCOPE / GH_TARGET / APP_INSTALLATION_ID). This instance
+# is configured for the zqxio org (covers zqx + zqx-node). Copy the stack with a
+# different .env to serve another org/repo. Runners stay IDLE until a workflow's
+# CI_RUNNER variable is set to 'nas' — nothing routes here before the flip.
+#
+# Deploy on the NAS:  docker compose --env-file .env up -d --build
+# Autostart: add this project in Container Manager (starts with the Docker package).
+
+x-dind: &dind
+  image: docker:27-dind
+  privileged: true            # required for dind; contained to the sidecar only
+  restart: always
+  environment:
+    DOCKER_TLS_CERTDIR: /certs
+  cpus: 2.0
+  mem_limit: 3g
+  networks: [ci-runners]
+
+x-runner-build: &runner-build
+  build:
+    context: .
+    dockerfile: Dockerfile
+  restart: always
+  cpus: 2.0
+  mem_limit: 4g
+  networks: [ci-runners]
+
+services:
+  dind-1:
+    <<: *dind
+    volumes: ["certs-1:/certs", "dindcache-1:/var/lib/docker"]
+  dind-2:
+    <<: *dind
+    volumes: ["certs-2:/certs", "dindcache-2:/var/lib/docker"]
+  dind-3:
+    <<: *dind
+    volumes: ["certs-3:/certs", "dindcache-3:/var/lib/docker"]
+
+  runner-1:
+    <<: *runner-build
+    depends_on: [dind-1]
+    volumes:
+      - ${APP_PRIVATE_KEY_HOST_PATH}:/secrets/app.pem:ro
+      - certs-1:/certs:ro
+    environment:
+      APP_ID: ${APP_ID}
+      APP_INSTALLATION_ID: ${APP_INSTALLATION_ID}
+      APP_PRIVATE_KEY_FILE: /secrets/app.pem
+      GH_SCOPE: ${GH_SCOPE}
+      GH_TARGET: ${GH_TARGET}
+      RUNNER_GROUP: ${RUNNER_GROUP:-Default}
+      RUNNER_LABELS: ${RUNNER_LABELS:-self-hosted,nas}
+      RUNNER_NAME: nas-${GH_TARGET}-1
+      DOCKER_HOST: tcp://dind-1:2376
+      DOCKER_TLS_VERIFY: "1"
+      DOCKER_CERT_PATH: /certs/client
+
+  runner-2:
+    <<: *runner-build
+    depends_on: [dind-2]
+    volumes:
+      - ${APP_PRIVATE_KEY_HOST_PATH}:/secrets/app.pem:ro
+      - certs-2:/certs:ro
+    environment:
+      APP_ID: ${APP_ID}
+      APP_INSTALLATION_ID: ${APP_INSTALLATION_ID}
+      APP_PRIVATE_KEY_FILE: /secrets/app.pem
+      GH_SCOPE: ${GH_SCOPE}
+      GH_TARGET: ${GH_TARGET}
+      RUNNER_GROUP: ${RUNNER_GROUP:-Default}
+      RUNNER_LABELS: ${RUNNER_LABELS:-self-hosted,nas}
+      RUNNER_NAME: nas-${GH_TARGET}-2
+      DOCKER_HOST: tcp://dind-2:2376
+      DOCKER_TLS_VERIFY: "1"
+      DOCKER_CERT_PATH: /certs/client
+
+  runner-3:
+    <<: *runner-build
+    depends_on: [dind-3]
+    volumes:
+      - ${APP_PRIVATE_KEY_HOST_PATH}:/secrets/app.pem:ro
+      - certs-3:/certs:ro
+    environment:
+      APP_ID: ${APP_ID}
+      APP_INSTALLATION_ID: ${APP_INSTALLATION_ID}
+      APP_PRIVATE_KEY_FILE: /secrets/app.pem
+      GH_SCOPE: ${GH_SCOPE}
+      GH_TARGET: ${GH_TARGET}
+      RUNNER_GROUP: ${RUNNER_GROUP:-Default}
+      RUNNER_LABELS: ${RUNNER_LABELS:-self-hosted,nas}
+      RUNNER_NAME: nas-${GH_TARGET}-3
+      DOCKER_HOST: tcp://dind-3:2376
+      DOCKER_TLS_VERIFY: "1"
+      DOCKER_CERT_PATH: /certs/client
+
+  # Heartbeat → Cloudflare watchdog. Starts emitting once WATCHDOG_URL is set in
+  # .env (after the Worker is deployed). Harmless (logs failures) until then.
+  heartbeat:
+    image: alpine:3.20
+    restart: always
+    networks: [ci-runners]
+    volumes:
+      - ./heartbeat.sh:/heartbeat.sh:ro
+    environment:
+      WATCHDOG_URL: ${WATCHDOG_URL:-}
+      HEARTBEAT_HMAC_SECRET: ${HEARTBEAT_HMAC_SECRET:-}
+      HOST_ID: ${HEARTBEAT_HOST_ID:-nas}
+    command: ["sh", "-c", "apk add --no-cache bash curl openssl >/dev/null && exec bash /heartbeat.sh"]
+
+networks:
+  ci-runners:
+    driver: bridge
+
+volumes:
+  certs-1: {}
+  certs-2: {}
+  certs-3: {}
+  dindcache-1: {}
+  dindcache-2: {}
+  dindcache-3: {}
