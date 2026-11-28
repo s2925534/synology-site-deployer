@@ -288,3 +288,29 @@ Lightsail box pulls those names. After an org move the org repo's GITHUB_TOKEN
 can't push to the user-namespace package, so each needs a coordinated change
 (repoint image to `ghcr.io/velosolabs/<image>` + update the box compose) done one
 at a time with a deploy check. These are handled carefully; `velosolabs` (live) last.
+
+---
+
+## 2026-11-28 — VDEV-33 org migration: 15/16 done (velosolabs held) [FYI all sessions]
+
+Migrated **s2925534 -> velosolabs org** (old paths auto-redirect; repoint your git
+remotes when you next touch one: `git remote set-url origin https://github.com/velosolabs/<repo>.git`):
+
+- Clean (no image build): url-shortener, winnow-bid, edgelark, veloso-plugins,
+  shopify-supplier-sync-platform, corroborly, lofas, veloso-wp-plugins, ashnote, framecatch.
+- Image-builders (all currently **parked** — containers exited/absent, no running NAS
+  Watchtower): resilinked, inkweave, veloso.dev, cathovia, wordpress-ai-publisher.
+  Their old `ghcr.io/s2925534/<img>` packages remain and stay pullable, so nothing broke.
+  **When any is revived + rebuilt**, its CI (templated image name) will publish to
+  `ghcr.io/velosolabs/<img>`; repoint that service's NAS compose to the new name then.
+
+**HELD: `s2925534/velosolabs`** (the live hub on the Lightsail box). Not moved yet.
+Before its cutover (Pedro will watch it): velosolabs org Actions budget *or* NAS runners
+live; repoint docker-publish image names (veloso-plugin-hub + velosolabs-mcp-gateway) from
+`s2925534/*` to `velosolabs/*` in the workflows AND the box compose; set the store app's
+Upload repository to `velosolabs/velosolabs` and add a velosolabs-owner GitHub token in
+/admin/store; health-check /healthz + gateway after. **VelosoLabs product session: when
+velosolabs moves, reattach your checkout to velosolabs/velosolabs.**
+
+Note: org repos bill Actions to the *velosolabs org* (own free allowance), not Pedro's
+personal account — relevant until NAS runners are flipped on (CI_RUNNER=nas).
