@@ -267,3 +267,24 @@ consolidated **VelosoLabs account `241088755146`**:
 `arn:aws:sns:ap-southeast-2:241088755146:ZQX-OTP`. No rush — the old account was dormant (no live sends), so
 nothing is currently broken; apply on the next deploy. NOTE: new account SMS is in the **sandbox ($1 limit)** —
 production SMS to arbitrary numbers needs the console sandbox-exit + spend-increase + AU Sender-ID requests.
+
+---
+
+## 2026-11-28 — VDEV-33: s2925534 product repos migrating to the `velosolabs` org (FYI all sessions)
+
+Per Pedro, the active product repos are moving from the `s2925534` user into the
+**`velosolabs` org** so the NAS self-hosted runners (org runner group) can serve
+them. GitHub auto-redirects the old `s2925534/<repo>` path, so references keep
+working, but **please update your git remotes** (`git remote set-url origin
+https://github.com/velosolabs/<repo>.git`) when you next touch one.
+
+Done so far:
+- `s2925534/url-shortener` -> **`velosolabs/url-shortener`** (Cloudflare Worker; no GHCR; local remote updated).
+
+GHCR caveat (applies to the image-building repos still to move — velosolabs,
+resilinked, inkweave, cathovia, veloso.dev, wordpress-ai-publisher, zqx-node):
+their workflows push to `ghcr.io/s2925534/<image>` (pinned) and Watchtower on the
+Lightsail box pulls those names. After an org move the org repo's GITHUB_TOKEN
+can't push to the user-namespace package, so each needs a coordinated change
+(repoint image to `ghcr.io/velosolabs/<image>` + update the box compose) done one
+at a time with a deploy check. These are handled carefully; `velosolabs` (live) last.
